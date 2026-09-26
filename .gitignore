@@ -1,0 +1,19 @@
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+.venv/
+env/
+
+# Build output
+build/
+dist/
+*.egg-info/
+
+# Test cache
+.pytest_cache/
+
+# xoot state never lives in the repo
+*.sqlite
+*.db

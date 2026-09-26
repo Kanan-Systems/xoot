@@ -1,0 +1,35 @@
+[project]
+name = "xoot"
+version = "0.0.0"
+description = "Local-only tracker for goals, batches and subtasks across Claude sessions."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "isort>=9.0.1,<10",
+    "black>=26.5.1,<27",
+    "pylint>=4.0.9,<5",
+    "pytest>=9.1.1,<10",
+    "pre-commit>=4.6.2,<5",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.8,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.isort]
+profile = "black"
+extend_skip = ["env"]
+
+[tool.black]
+target-version = ["py312"]
+
+[tool.pylint.main]
+py-version = "3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
