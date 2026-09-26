@@ -6,7 +6,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = []
+dependencies = [
+    "pydantic>=2.13.5,<3",
+]
 
 [dependency-groups]
 dev = [
@@ -30,6 +32,7 @@ target-version = ["py312"]
 
 [tool.pylint.main]
 py-version = "3.12"
+fail-under = 10
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,22 @@
+"""A stored project row."""
+
+from pydantic import BaseModel, ConfigDict
+
+from xoot.models.fields import Id, Slug, Timestamp, Title
+
+
+class Project(BaseModel):
+    """
+    A registered project: its key prefix, number counters and active
+    workflow. Item and decision keys are derived from key_prefix.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: Id
+    key_prefix: Slug
+    name: Title
+    next_item_number: Id
+    next_decision_number: Id
+    active_workflow_id: Id | None
+    created_at: Timestamp

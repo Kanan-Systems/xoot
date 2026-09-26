@@ -1,7 +1,10 @@
 """
 xoot: local-only tracker for goals, batches and subtasks across Claude sessions.
 
-Package root. Only exposes the version string until the data model lands.
+Package root. The version is read from the installed distribution metadata so
+that pyproject.toml stays its only source.
 """
 
-__version__ = "0.0.0"
+from importlib.metadata import version
+
+__version__ = version("xoot")

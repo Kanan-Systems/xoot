@@ -4,7 +4,15 @@ Local-only tracker for goals, batches and subtasks across Claude sessions.
 
 ## Status
 
-Pre-alpha. Nothing is usable yet; the package contains only a version string.
+Pre-alpha. The storage layer and domain services exist, but there is no CLI,
+MCP server or entry point yet, so nothing is usable end to end.
+
+## Data
+
+State lives in a local SQLite database at `$XDG_DATA_HOME/xoot/xoot.db`
+(default `~/.local/share/xoot/xoot.db`). A newly created directory gets mode
+0700 and a new database file 0600; existing ones are left as they are. The
+database never lives in this repository.
 
 ## Development
 

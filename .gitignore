@@ -16,4 +16,8 @@ dist/
 
 # xoot state never lives in the repo
 *.sqlite
+*.sqlite3
 *.db
+*-wal
+*-shm
+*-journal

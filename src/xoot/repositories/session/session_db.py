@@ -1,0 +1,82 @@
+"""SQL access for the session table."""
+
+import sqlite3
+
+from xoot.models.session.new_session import NewSession
+from xoot.models.session.session import Session
+
+_COLUMNS = (
+    "id, project_id, number, client, title, status, summary, started_at, closed_at"
+)
+
+
+def insert(conn: sqlite3.Connection, new: NewSession) -> Session:
+    """
+    Insert an open session.
+
+    Args:
+        - conn (sqlite3.Connection): connection inside a write transaction.
+        - new (NewSession): the validated row values.
+
+    Returns:
+        - session (Session): the stored row.
+    """
+    row = conn.execute(
+        "INSERT INTO session (project_id, number, client, title, status, started_at) "
+        "VALUES (:project_id, :number, :client, :title, 'open', :started_at) "
+        f"RETURNING {_COLUMNS}",
+        new.model_dump(mode="json"),
+    ).fetchone()
+    return Session.model_validate(dict(row))
+
+
+def get(conn: sqlite3.Connection, session_id: int) -> Session | None:
+    """
+    Fetch a session by id.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - session_id (int): session id.
+
+    Returns:
+        - session (Session | None): the row, or None.
+    """
+    row = conn.execute(
+        f"SELECT {_COLUMNS} FROM session WHERE id = ?", (session_id,)
+    ).fetchone()
+    return None if row is None else Session.model_validate(dict(row))
+
+
+def next_number(conn: sqlite3.Connection, project_id: int) -> int:
+    """
+    Return the next session number of a project.
+
+    Safe only inside a write transaction, which serializes allocators.
+
+    Args:
+        - conn (sqlite3.Connection): connection inside a write transaction.
+        - project_id (int): project id.
+
+    Returns:
+        - number (int): one past the highest session number.
+    """
+    row = conn.execute(
+        "SELECT coalesce(max(number), 0) + 1 FROM session WHERE project_id = ?",
+        (project_id,),
+    ).fetchone()
+    return int(row[0])
+
+
+def update(conn: sqlite3.Connection, session: Session) -> None:
+    """
+    Write a session's mutable columns (status, summary, closed_at).
+
+    Args:
+        - conn (sqlite3.Connection): connection inside a write transaction.
+        - session (Session): the new row values.
+    """
+    conn.execute(
+        "UPDATE session SET status = :status, summary = :summary, "
+        "closed_at = :closed_at WHERE id = :id",
+        session.model_dump(mode="json"),
+    )
