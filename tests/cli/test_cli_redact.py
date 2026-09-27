@@ -8,14 +8,20 @@ from typing import Any
 
 import pytest
 
+from xoot.cli.render.results import render_redaction
+from xoot.models.event.actor import Actor
 from xoot.models.event.entity_type import EntityType
+from xoot.models.event.redactable_field import RedactableField
+from xoot.models.event.redaction_result import RedactionResult
 from xoot.models.item.item import Item
+from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
+from xoot.models.project.project_registration import ProjectRegistration
 from xoot.models.session.session import Session
 from xoot.repositories.event import event_db
 from xoot.services.confirm_service import issue_token
 from xoot.services.item_service import get_item
-from xoot.services.project_service import get_project
+from xoot.services.project_service import get_project, register_project
 from xoot.services.redaction_service import REDACTED
 from xoot.store.store import Store
 
@@ -46,7 +52,7 @@ def test_redact_item_field(
     assert run.code == 0, run.err
     assert run.out == (
         f"redacted {field} of item {secret_item.key}, now version 2; "
-        "1 events rewritten\n"
+        "1 event rewritten\n"
     )
     assert getattr(get_item(store, secret_item.id), field) == REDACTED
     with store.read() as conn:
@@ -105,3 +111,61 @@ def test_refused_before_any_prompt(
     run = xoot("redact", *argv, answer="y")
     assert (run.code, run.out, run.err) == (1, "", error)
     assert row_counts() == before
+
+
+@pytest.fixture(name="lookalike")
+def fixture_lookalike(
+    store: Store, user: Actor, make_item: Callable[..., Item]
+) -> tuple[Project, Item, Project]:
+    """L11: project ab with item 12, and project cd whose alias is "ab-12"."""
+    ab = register_project(store, ProjectRegistration(key_prefix="ab", name="ab"), user)
+    cd = register_project(
+        store,
+        ProjectRegistration(key_prefix="cd", name="cd", aliases=("ab-12",)),
+        user,
+    )
+    items = [make_item(ab, ItemKind.GOAL, title=f"t{n}") for n in range(1, 13)]
+    return ab, items[-1], cd
+
+
+@pytest.mark.parametrize(
+    "case",
+    [("ab-12", "title", "item"), ("ab", "name", "ab"), ("cd", "name", "cd")],
+    ids=["item-key", "prefix-ab", "prefix-cd"],
+)
+def test_key_with_a_dash_is_an_entity_key(
+    xoot: Any,
+    store: Store,
+    lookalike: tuple[Project, Item, Project],
+    case: tuple[str, str, str],
+) -> None:
+    """L11: each KEY redacts exactly the entity it names, never the alias owner."""
+    key, field, target = case
+    ab, item, cd = lookalike
+    run = xoot("redact", key, field, "--yes")
+    assert run.code == 0, run.err
+    redacted = {
+        "item": get_item(store, item.id).title == REDACTED,
+        "ab": get_project(store, ab.id).name == REDACTED,
+        "cd": get_project(store, cd.id).name == REDACTED,
+    }
+    assert redacted == {name: name == target for name in redacted}
+    assert get_item(store, item.id - 1).title == "t11"
+
+
+@pytest.mark.parametrize(
+    ("event_ids", "count"), [((), "0 events"), ((7,), "1 event"), ((7, 8), "2 events")]
+)
+def test_event_count_is_pluralized(event_ids: tuple[int, ...], count: str) -> None:
+    """One event is "1 event"; every other count is "N events"."""
+    result = RedactionResult(
+        entity_type=EntityType.PROJECT,
+        entity_id=1,
+        field=RedactableField.NAME,
+        version=None,
+        redacted_event_ids=event_ids,
+        purged=True,
+    )
+    assert render_redaction(result, "ab") == (
+        f"redacted name of project ab; {count} rewritten"
+    )

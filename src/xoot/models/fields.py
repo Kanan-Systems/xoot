@@ -152,6 +152,9 @@ Body = Annotated[
     str, StringConstraints(max_length=BODY_MAX), AfterValidator(reject_nul)
 ]
 Slug = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]{1,31}$")]
+# No dash, unlike an alias: every key splits on its first dash into the
+# prefix and the rest, so "ab-12" can only ever be item 12 of project ab.
+KeyPrefix = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9]{1,31}$")]
 StateName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_-]{0,31}$")]
 Sha256Hex = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 ToolName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z_]{0,63}$")]

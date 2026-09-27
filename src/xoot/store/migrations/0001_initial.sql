@@ -16,7 +16,8 @@ CREATE TABLE project (
     key_prefix TEXT NOT NULL UNIQUE CHECK (
         length(key_prefix) BETWEEN 2 AND 32
         AND key_prefix GLOB '[a-z]*'
-        AND key_prefix NOT GLOB '*[^a-z0-9-]*'
+        -- No dash: keys split on their first dash, so a prefix cannot hold one.
+        AND key_prefix NOT GLOB '*[^a-z0-9]*'
     ),
     name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 200),
     next_item_number INTEGER NOT NULL DEFAULT 1 CHECK (next_item_number >= 1),

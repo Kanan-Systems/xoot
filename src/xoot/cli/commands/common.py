@@ -3,9 +3,12 @@
 import argparse
 import os
 
+from pydantic import validate_call
+
 from xoot.models.event.actor import Actor
 from xoot.models.event.actor_kind import ActorKind
 from xoot.models.event.write_context import WriteContext
+from xoot.models.fields import ProjectDir
 from xoot.models.project.project import Project
 from xoot.models.session.client import Client
 from xoot.server.schemas.literals import ResolvedBy
@@ -26,14 +29,13 @@ def project_of(args: argparse.Namespace, store: Store) -> tuple[Project, Resolve
         - store (Store): the database.
 
     Returns:
-        - resolved (tuple[Project, ResolvedBy]): the project, and "alias" or
-          "cwd" for how it was found.
+        - resolved (tuple[Project, ResolvedBy]): the project, and "prefix",
+          "alias" or "cwd" for how it was found.
 
     Raises:
         - ProjectResolutionError: nothing matched.
     """
-    project = resolve_project(store, args.project, working_directory())
-    return project, "cwd" if args.project is None else "alias"
+    return resolve_project(store, args.project, working_directory())
 
 
 def working_directory() -> str:
@@ -62,3 +64,25 @@ def absolute(path: str) -> str:
         - path (str): an absolute, normalized path.
     """
     return os.path.abspath(path)
+
+
+@validate_call
+def project_dir(path: ProjectDir) -> str:
+    """
+    Validate a command's directory argument as a project directory.
+
+    Validating here rather than inside the service labels a refusal "path"
+    in the error line, the name the user knows the argument by.
+
+    Args:
+        - path (ProjectDir): an absolute path; pass it by keyword, so a
+          refusal is located at "path".
+
+    Returns:
+        - path (str): the normalized path.
+
+    Raises:
+        - pydantic.ValidationError: the path is not absolute, too long, or
+          is "/" once normalized.
+    """
+    return path

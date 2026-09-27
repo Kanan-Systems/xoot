@@ -2,12 +2,14 @@
 Finding the project for a working directory, an alias or a key prefix.
 
 Prefixes and aliases share one namespace, so a name resolves to at most one
-project. Path resolution picks the longest registered path that is the
+project; a name match also says whether the prefix or an alias matched. Path
+resolution picks the longest registered path that is the
 directory itself or one of its ancestors, compared on whole path segments.
 """
 
 import posixpath
 import sqlite3
+from typing import Literal
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -20,6 +22,9 @@ from xoot.store.store import Store
 
 _SLUG = TypeAdapter(Slug)
 _PATH = TypeAdapter(AbsolutePath)
+
+NameMatch = Literal["prefix", "alias"]
+"""Which kind of name found a project."""
 
 
 def resolve_by_path(store: Store, path: str) -> Project | None:
@@ -57,10 +62,13 @@ def resolve_by_alias(store: Store, alias: str) -> Project | None:
     """
     alias = _SLUG.validate_python(alias)
     with store.read() as conn:
-        return by_name(conn, alias)
+        found = by_name(conn, alias)
+    return None if found is None else found[0]
 
 
-def resolve_project(store: Store, name: str | None, cwd: str) -> Project:
+def resolve_project(
+    store: Store, name: str | None, cwd: str
+) -> tuple[Project, NameMatch | Literal["cwd"]]:
     """
     Find a project by name, or else by the directory a command runs in.
 
@@ -71,7 +79,8 @@ def resolve_project(store: Store, name: str | None, cwd: str) -> Project:
         - cwd (str): an absolute directory.
 
     Returns:
-        - project (Project): the project.
+        - resolved (tuple[Project, str]): the project, and "prefix", "alias"
+          or "cwd" for how it was found.
 
     Raises:
         - ProjectResolutionError: nothing matched; lists every known name.
@@ -79,19 +88,24 @@ def resolve_project(store: Store, name: str | None, cwd: str) -> Project:
     with store.read() as conn:
         if name is not None:
             found = by_name(conn, name)
+            if found is not None:
+                return found
         else:
             try:
-                found = by_paths(conn, ancestors(_PATH.validate_python(cwd)))
+                project = by_paths(conn, ancestors(_PATH.validate_python(cwd)))
             except ValidationError:
-                found = None
-        if found is None:
-            raise ProjectResolutionError(tuple(known_names(conn)))
-        return found
+                project = None
+            if project is not None:
+                return project, "cwd"
+        raise ProjectResolutionError(tuple(known_names(conn)))
 
 
-def by_name(conn: sqlite3.Connection, name: str) -> Project | None:
+def by_name(conn: sqlite3.Connection, name: str) -> tuple[Project, NameMatch] | None:
     """
-    Look a project up by alias, then by key prefix.
+    Look a project up by key prefix, then by alias.
+
+    The prefix goes first so an alias repeating its own project's prefix
+    still reports "prefix"; the namespace rule makes the project the same.
 
     Args:
         - conn (sqlite3.Connection): a connection inside a transaction.
@@ -99,16 +113,20 @@ def by_name(conn: sqlite3.Connection, name: str) -> Project | None:
           nothing.
 
     Returns:
-        - project (Project | None): the project, or None.
+        - found (tuple[Project, NameMatch] | None): the project and which
+          kind of name matched, or None.
     """
     try:
         slug = _SLUG.validate_python(name)
     except ValidationError:
         return None
+    project = project_db.get_by_prefix(conn, slug)
+    if project is not None:
+        return project, "prefix"
     alias = project_alias_db.get(conn, slug)
     if alias is not None:
-        return require_project(conn, alias.project_id)
-    return project_db.get_by_prefix(conn, slug)
+        return require_project(conn, alias.project_id), "alias"
+    return None
 
 
 def by_paths(conn: sqlite3.Connection, candidates: list[str]) -> Project | None:

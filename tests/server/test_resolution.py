@@ -44,7 +44,10 @@ def _found(output: dict[str, Any]) -> tuple[str, str]:
 
 
 def test_alias_beats_roots_and_roots_beat_cwd(cwd_dir: Path, harness: Any) -> None:
-    """With all three available, an alias wins, and without one the roots win."""
+    """With all three available, a name wins, and without one the roots win.
+
+    Each alias repeats its own prefix, so the name is reported as "prefix".
+    """
 
     async def scenario(client: ClientSession) -> list[tuple[str, str]]:
         return [
@@ -57,7 +60,7 @@ def test_alias_beats_roots_and_roots_beat_cwd(cwd_dir: Path, harness: Any) -> No
         ]
 
     found = harness.run(scenario, cwd=cwd_dir, roots=["file:///x/proj"])
-    assert found == [("aliasp", "alias")] + [("rootp", "roots")] * 5
+    assert found == [("aliasp", "prefix")] + [("rootp", "roots")] * 5
 
 
 def test_cwd_when_the_client_has_no_roots(cwd_dir: Path, harness: Any) -> None:

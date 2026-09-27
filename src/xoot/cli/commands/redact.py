@@ -21,8 +21,9 @@ def run_redact(args: argparse.Namespace, store: Store, console: Console) -> int:
     """
     Redact FIELD of the record KEY names, after confirmation.
 
-    KEY is an item, decision or session key, or a project prefix. The
-    prompt names the key and the field, never the content.
+    KEY with a dash is an item, decision or session key; without one it is
+    a project prefix. The prompt names the key and the field, never the
+    content.
 
     Args:
         - args (argparse.Namespace): the key, the field and --yes.

@@ -65,18 +65,22 @@ def test_unknown_keys_do_not_echo_input(store: Store, key: str, ref: str) -> Non
     assert caught.value.ref == ref
 
 
-def test_a_record_key_wins_over_a_look_alike_prefix(
+def test_a_dash_makes_a_record_key_and_an_alias_is_never_a_key(
     store: Store, project: Project, ctx: WriteContext, make_item: Callable[..., Item]
 ) -> None:
-    """A prefix shaped like an item key resolves only when no item matches."""
-    lookalike = register_project(
-        store, ProjectRegistration(key_prefix="xoot-1", name="n"), ctx.actor
+    """L11: "xoot-1" is item 1 of xoot even when another project has that alias."""
+    other = register_project(
+        store,
+        ProjectRegistration(key_prefix="other", name="n", aliases=("xoot-1",)),
+        ctx.actor,
     )
     with store.read() as conn:
-        assert key_resolver.entity_by_key(conn, "xoot-1") == (
-            EntityType.PROJECT,
-            lookalike.id,
-        )
+        with pytest.raises(NotFoundError) as caught:
+            key_resolver.entity_by_key(conn, "xoot-1")
+    assert caught.value.ref == "xoot-1"
     item = make_item(project, ItemKind.GOAL)
     with store.read() as conn:
-        assert key_resolver.entity_by_key(conn, "xoot-1") == (EntityType.ITEM, item.id)
+        resolved = [
+            key_resolver.entity_by_key(conn, key) for key in ("xoot-1", "other")
+        ]
+    assert resolved == [(EntityType.ITEM, item.id), (EntityType.PROJECT, other.id)]

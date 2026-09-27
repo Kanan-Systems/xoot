@@ -24,7 +24,8 @@ from xoot.server.schemas.client_info_entry import ClientInfoEntry
     ("pattern", "text", "expected"),
     [
         (ITEM_KEY, "xoot-12", ("xoot", 12)),
-        (ITEM_KEY, "ab-c1-7", ("ab-c1", 7)),
+        (ITEM_KEY, "ab-12", ("ab", 12)),
+        (ITEM_KEY, "ab-c1-7", None),
         (DECISION_KEY, "xoot-D3", ("xoot", 3)),
         (SESSION_KEY, "xoot-S4", ("xoot", 4)),
         (ITEM_KEY, "xoot-D3", None),

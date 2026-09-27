@@ -2,16 +2,17 @@
 Public key grammar: projects <prefix>, items <prefix>-<n>, decisions
 <prefix>-D<n>, sessions <prefix>-S<n>.
 
-Key prefixes are lowercase, so the uppercase D and S cannot be mistaken for
-part of a prefix. Parsing is strict: anything that does not match, or whose
-number does not fit a stored id, is not a key.
+Key prefixes are lowercase and hold no dash, so a key splits on its first
+dash and the uppercase D and S cannot be mistaken for part of a prefix.
+Parsing is strict: anything that does not match, or whose number does not fit
+a stored id, is not a key.
 """
 
 import re
 
 from xoot.models.fields import SQLITE_INT_MAX
 
-_PREFIX = r"[a-z][a-z0-9-]{1,31}"
+_PREFIX = r"[a-z][a-z0-9]{1,31}"
 _NUMBER = r"[1-9][0-9]{0,18}"
 
 PREFIX_KEY = re.compile(rf"^{_PREFIX}$")

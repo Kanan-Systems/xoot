@@ -51,21 +51,30 @@ def test_own_prefix_alias_is_accepted(xoot: Any) -> None:
 )
 @pytest.mark.usefixtures("project")
 def test_root_is_refused(xoot: Any, row_counts: Any, argv: list[str]) -> None:
-    """ "/" is never a project path, however it is spelled."""
+    """ "/" is never a project path, however it is spelled; the error names path."""
     before = row_counts()
     run = xoot(*argv)
-    assert run.code == 1 and "root directory" in run.err
+    assert run.code == 1 and run.err == (
+        "error: ValidationError: path: Value error, "
+        "a project directory cannot be the root directory\n"
+    )
     assert row_counts() == before
 
 
 @pytest.mark.usefixtures("project", "other_project")
 @pytest.mark.parametrize(
-    ("name", "prefix"), [("xoot", "xoot"), ("xo", "xoot"), ("nova", "nova")]
+    ("name", "prefix", "resolved_by"),
+    [("xoot", "xoot", "prefix"), ("xo", "xoot", "alias"), ("nova", "nova", "prefix")],
 )
-def test_resolution_by_prefix_or_alias(xoot: Any, name: str, prefix: str) -> None:
-    """--project takes a prefix (even with no alias) or an alias."""
+def test_resolution_by_prefix_or_alias(
+    xoot: Any, name: str, prefix: str, resolved_by: str
+) -> None:
+    """--project takes a prefix (even with no alias) or an alias, and says which."""
     brief = xoot("brief", "--project", name, "--json").json()
-    assert (brief["project"]["key_prefix"], brief["resolved_by"]) == (prefix, "alias")
+    assert (brief["project"]["key_prefix"], brief["resolved_by"]) == (
+        prefix,
+        resolved_by,
+    )
 
 
 def test_resolution_by_working_directory(

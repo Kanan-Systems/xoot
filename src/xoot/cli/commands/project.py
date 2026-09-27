@@ -3,7 +3,7 @@
 import argparse
 
 from xoot.cli import exit_codes
-from xoot.cli.commands.common import WRITE, absolute, project_of
+from xoot.cli.commands.common import WRITE, absolute, project_dir, project_of
 from xoot.cli.console import Console
 from xoot.cli.render.projects import render_project, render_project_list
 from xoot.exceptions.not_found_error import NotFoundError
@@ -117,7 +117,8 @@ def run_add_path(args: argparse.Namespace, store: Store, console: Console) -> in
         - DuplicateError: the path is taken.
     """
     project, _ = project_of(args, store)
-    project_service.add_path(store, project.id, absolute(args.path), WRITE)
+    path = project_dir(path=absolute(args.path))
+    project_service.add_path(store, project.id, path, WRITE)
     return _show(store, project.id, console)
 
 

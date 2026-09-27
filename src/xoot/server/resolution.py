@@ -140,7 +140,7 @@ def resolve_project(
 
     Returns:
         - resolved (tuple[Project, ResolvedBy]): the project and the step
-          that found it.
+          that found it: "prefix", "alias", "roots" or "cwd".
 
     Raises:
         - ToolError: nothing matched; the message lists the known prefixes
@@ -150,7 +150,7 @@ def resolve_project(
         if alias is not None:
             found = by_name(conn, alias)
             if found is not None:
-                return found, "alias"
+                return found
             raise ToolError(_unresolved(conn))
         steps: list[tuple[list[str], ResolvedBy]] = [
             (root_paths, "roots"),

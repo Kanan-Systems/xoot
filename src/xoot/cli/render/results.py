@@ -72,7 +72,9 @@ def render_redaction(result: RedactionResult, key: str) -> str:
         - text (str): what was redacted and how many events were rewritten.
     """
     version = "" if result.version is None else f", now version {result.version}"
+    count = len(result.redacted_event_ids)
+    events = "1 event" if count == 1 else f"{count} events"
     return (
         f"redacted {result.field} of {result.entity_type} {key}{version}; "
-        f"{len(result.redacted_event_ids)} events rewritten"
+        f"{events} rewritten"
     )

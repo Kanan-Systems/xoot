@@ -57,6 +57,63 @@ def test_registration_refuses_a_name_of_another_project(
     assert row_counts() == before
 
 
+@pytest.mark.parametrize(
+    ("prefix", "aliases", "message"),
+    [
+        ("xo", (), "'xo' is already registered as an alias of project xoot"),
+        ("xoot", (), "'xoot' is already registered as the prefix of project xoot"),
+        (
+            "new",
+            ("xoot",),
+            "'xoot' is already registered as the prefix of project xoot",
+        ),
+        ("new", ("xo",), "'xo' is already registered as an alias of project xoot"),
+    ],
+)
+@pytest.mark.usefixtures("project")
+def test_clash_message_names_the_holder(
+    store: Store, user: Actor, prefix: str, aliases: tuple[str, ...], message: str
+) -> None:
+    """U3: a clash says whether the name is a prefix or an alias, and of which project."""
+    with pytest.raises(DuplicateError) as caught:
+        _register(store, user, prefix, aliases=aliases)
+    assert str(caught.value) == message
+
+
+def test_add_alias_clash_names_the_holder(
+    store: Store, project: Project, other_project: Project, ctx: WriteContext
+) -> None:
+    """U3 through add_alias: another project's prefix, then its alias."""
+    with pytest.raises(DuplicateError) as prefix_clash:
+        add_alias(store, other_project.id, project.key_prefix, ctx)
+    with pytest.raises(DuplicateError) as alias_clash:
+        add_alias(store, other_project.id, "xo", ctx)
+    assert str(prefix_clash.value) == (
+        "'xoot' is already registered as the prefix of project xoot"
+    )
+    assert str(alias_clash.value) == (
+        "'xo' is already registered as an alias of project xoot"
+    )
+
+
+def test_a_dash_is_refused_in_a_prefix_and_accepted_in_an_alias(
+    store: Store, user: Actor, project: Project, ctx: WriteContext
+) -> None:
+    """U1: "ab-12" cannot be a prefix, in the model or in SQL, but is an alias."""
+    with pytest.raises(ValidationError):
+        ProjectRegistration(key_prefix="ab-12", name="n")
+    with pytest.raises(IntegrityViolationError):
+        with store.write() as conn:
+            conn.execute(
+                "INSERT INTO project (key_prefix, name, created_at) "
+                "VALUES ('ab-12', 'n', '2026-01-01T00:00:00.000000Z')"
+            )
+    registered = _register(store, user, "ab", aliases=("ab-12",))
+    add_alias(store, project.id, "ab-13", ctx)
+    assert get_overview(store, registered.id).aliases == ("ab-12",)
+    assert get_overview(store, project.id).aliases == ("ab-13", "xo")
+
+
 def test_add_alias_refuses_another_projects_prefix(
     store: Store, project: Project, other_project: Project, ctx: WriteContext
 ) -> None:

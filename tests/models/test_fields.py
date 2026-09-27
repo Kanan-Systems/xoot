@@ -9,6 +9,7 @@ from xoot.models.fields import (
     AbsolutePath,
     Body,
     Id,
+    KeyPrefix,
     Slug,
     StateName,
     Timestamp,
@@ -65,6 +66,7 @@ def test_limits_count_characters_not_bytes() -> None:
     [
         ("xo", True),
         ("kroot-2", True),
+        ("ab-12", True),
         ("a" * 32, True),
         ("a", False),
         ("a" * 33, False),
@@ -76,8 +78,29 @@ def test_limits_count_characters_not_bytes() -> None:
     ],
 )
 def test_slug_limits(value: str, ok: bool) -> None:
-    """Aliases and key prefixes match ^[a-z][a-z0-9-]{1,31}$ exactly."""
+    """Aliases match ^[a-z][a-z0-9-]{1,31}$ exactly."""
     assert _accepts(Slug, value) is ok
+
+
+@pytest.mark.parametrize(
+    ("value", "ok"),
+    [
+        ("xo", True),
+        ("kroot2", True),
+        ("a" * 32, True),
+        ("ab-12", False),
+        ("ab-", False),
+        ("a", False),
+        ("a" * 33, False),
+        ("1abc", False),
+        ("Abc", False),
+        ("a_b", False),
+        ("ab\n", False),
+    ],
+)
+def test_key_prefix_limits(value: str, ok: bool) -> None:
+    """Key prefixes match ^[a-z][a-z0-9]{1,31}$ exactly: no dash."""
+    assert _accepts(KeyPrefix, value) is ok
 
 
 @pytest.mark.parametrize(

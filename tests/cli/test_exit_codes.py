@@ -98,7 +98,10 @@ def test_help_is_not_an_error(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_duplicate_is_reported_by_value(xoot: Any, project: Project) -> None:
-    """A refused duplicate names the field and value, nothing from SQLite."""
+    """A refused duplicate names the value and its holder, nothing from SQLite."""
     run = xoot("init", "/work/other", "--prefix", project.key_prefix)
     assert run.code == 1
-    assert run.err == "error: DuplicateError: key_prefix 'xoot' is already registered\n"
+    assert run.err == (
+        "error: DuplicateError: 'xoot' is already registered as the prefix of "
+        "project xoot\n"
+    )

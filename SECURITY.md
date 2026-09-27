@@ -28,8 +28,9 @@ cryptography and the SDK's HTTP client. xoot only ever starts the stdio
 transport: that stack is installed and partly imported, but no server is
 started, no port is opened, and xoot makes no network request.
 
-Every write is recorded with actor `claude`; no tool accepts an actor or a
-client. A session's client (`code` or `chat`) comes from the name the MCP
+Every MCP write is recorded with actor `claude`; no tool accepts an actor or
+a client. Every CLI write is recorded with actor `user` and client `cli`.
+A session's client (`code` or `chat`) comes from the name the MCP
 client reports at initialization. That name is unauthenticated: it labels
 the session and grants nothing.
 

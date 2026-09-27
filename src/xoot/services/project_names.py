@@ -11,6 +11,7 @@ import sqlite3
 
 from xoot.exceptions.duplicate_error import DuplicateError
 from xoot.repositories.project import project_alias_db, project_db, project_path_db
+from xoot.services.lookups import require_project
 
 
 def require_free_prefix(conn: sqlite3.Connection, prefix: str) -> None:
@@ -22,12 +23,10 @@ def require_free_prefix(conn: sqlite3.Connection, prefix: str) -> None:
         - prefix (str): the validated prefix.
 
     Raises:
-        - DuplicateError: a project has this prefix or this alias.
+        - DuplicateError: a project has this prefix or this alias; the
+          message names that project.
     """
-    if project_db.get_by_prefix(conn, prefix) is not None:
-        raise DuplicateError("key_prefix", prefix)
-    if project_alias_db.get(conn, prefix) is not None:
-        raise DuplicateError("key_prefix", prefix)
+    _refuse_taken(conn, "key_prefix", prefix, None)
 
 
 def require_free_alias(
@@ -43,13 +42,10 @@ def require_free_alias(
           that project is being registered and has no row yet.
 
     Raises:
-        - DuplicateError: the alias is taken, or is another project's prefix.
+        - DuplicateError: the alias is taken, or is another project's prefix;
+          the message names that project.
     """
-    if project_alias_db.get(conn, alias) is not None:
-        raise DuplicateError("alias", alias)
-    owner = project_db.get_by_prefix(conn, alias)
-    if owner is not None and owner.id != project_id:
-        raise DuplicateError("alias", alias)
+    _refuse_taken(conn, "alias", alias, project_id)
 
 
 def require_free_path(conn: sqlite3.Connection, path: str) -> None:
@@ -65,3 +61,16 @@ def require_free_path(conn: sqlite3.Connection, path: str) -> None:
     """
     if project_path_db.get(conn, path) is not None:
         raise DuplicateError("path", path)
+
+
+def _refuse_taken(
+    conn: sqlite3.Connection, field: str, name: str, own_project_id: int | None
+) -> None:
+    """Raise DuplicateError naming the project a name already belongs to."""
+    owner = project_db.get_by_prefix(conn, name)
+    if owner is not None and owner.id != own_project_id:
+        raise DuplicateError(field, name, f"the prefix of project {owner.key_prefix}")
+    alias = project_alias_db.get(conn, name)
+    if alias is not None:
+        holder = require_project(conn, alias.project_id).key_prefix
+        raise DuplicateError(field, name, f"an alias of project {holder}")

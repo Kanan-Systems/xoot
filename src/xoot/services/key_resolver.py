@@ -7,6 +7,7 @@ nothing but [a-z0-9-] and digits, while other text is arbitrary input.
 """
 
 import sqlite3
+from collections.abc import Callable
 
 from xoot.exceptions.not_found_error import NotFoundError
 from xoot.models.decision.decision import Decision
@@ -28,6 +29,8 @@ from xoot.utils.keys import (
 )
 
 MALFORMED = "malformed key"
+
+type Row = Item | Decision | Session | Project
 
 
 def item_by_key(conn: sqlite3.Connection, key: str) -> Item:
@@ -125,8 +128,8 @@ def entity_by_key(conn: sqlite3.Connection, key: str) -> tuple[EntityType, int]:
     """
     Resolve any public key: an item, decision or session key, or a prefix.
 
-    A prefix may itself look like an item key ("ab-12"), so a record key is
-    tried first and the prefix only when no record matches.
+    A prefix holds no dash, so text with a dash is only ever a record key and
+    text without one only a prefix; an alias is never a key.
 
     Args:
         - conn (sqlite3.Connection): a connection inside a transaction.
@@ -138,12 +141,15 @@ def entity_by_key(conn: sqlite3.Connection, key: str) -> tuple[EntityType, int]:
     Raises:
         - NotFoundError: the key names nothing.
     """
-    lookups = (
-        (EntityType.ITEM, item_by_key),
-        (EntityType.DECISION, decision_by_key),
-        (EntityType.SESSION, session_by_key),
-        (EntityType.PROJECT, project_by_key),
-    )
+    lookups: tuple[tuple[EntityType, Callable[[sqlite3.Connection, str], Row]], ...]
+    if "-" in key:
+        lookups = (
+            (EntityType.ITEM, item_by_key),
+            (EntityType.DECISION, decision_by_key),
+            (EntityType.SESSION, session_by_key),
+        )
+    else:
+        lookups = ((EntityType.PROJECT, project_by_key),)
     for entity_type, lookup in lookups:
         try:
             return entity_type, lookup(conn, key).id

@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from xoot.models.fields import Id, Slug, Timestamp, Title
+from xoot.models.fields import Id, KeyPrefix, Timestamp, Title
 
 
 class Project(BaseModel):
@@ -15,7 +15,7 @@ class Project(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: Id
-    key_prefix: Slug
+    key_prefix: KeyPrefix
     name: Title
     next_item_number: Id
     next_decision_number: Id
