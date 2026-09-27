@@ -1,4 +1,4 @@
-"""F5: a write's session must be open and in the project; items get linked once."""
+"""A write's session must be open and in the project; items get linked once."""
 
 from collections.abc import Callable
 

@@ -1,5 +1,5 @@
 """
-X2: every service entry point refuses a non-int or bool id or version before
+Every service entry point refuses a non-int or bool id or version before
 any SQL runs, so nothing can be selected or written through type affinity.
 """
 

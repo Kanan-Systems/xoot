@@ -1,4 +1,4 @@
-"""S3: project resolution by alias, then client roots, then the server's cwd."""
+"""Project resolution by alias, then client roots, then the server's cwd."""
 
 from pathlib import Path
 from typing import Any

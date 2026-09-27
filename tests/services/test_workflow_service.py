@@ -1,4 +1,4 @@
-"""T6 (service side): workflow changes remap items or are refused whole."""
+"""Service side: workflow changes remap items or are refused whole."""
 
 from collections.abc import Callable
 from typing import Any
@@ -104,7 +104,7 @@ def test_leaving_backlogged_category_clears_session_backlog(
     user: Actor,
     ctx: WriteContext,
 ) -> None:
-    """A remap out of the backlogged category keeps F4 true."""
+    """A remap out of the backlogged category clears the session backlog too."""
     item = capture(store, make_session(project).id, ItemDraft(title="idea"), user)
     default = WorkflowDefinition.default().for_kind(ItemKind.SUBTASK)
     states = [
@@ -136,3 +136,18 @@ def test_transitions_apply_to_user_moves(
         update_item(store, goal.id, 1, ItemUpdate(state="active"), ctx).state
         == "active"
     )
+
+
+def test_identical_definition_is_a_no_op(
+    store: Store,
+    project: Project,
+    ctx: WriteContext,
+    row_counts: Callable[[], dict[str, int]],
+) -> None:
+    """Setting the active definition again adds no version and no event."""
+    active = get_active_workflow(store, project.id)
+    before = row_counts()
+    change = WorkflowChange(definition=WorkflowDefinition.default())
+    assert set_workflow(store, project.id, change, ctx) == active
+    assert row_counts() == before
+    assert get_project(store, project.id).active_workflow_id == active.id

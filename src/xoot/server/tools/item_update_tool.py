@@ -6,6 +6,10 @@ children through the subtree drop. On an item with children both are
 two-phase, since they move or change the whole subtree. Anything else is a
 direct update. A parent change or a subtree drop must come alone: combining
 it with other fields would need two transactions.
+
+The path is chosen from a read snapshot, so a path that skips the preview
+re-checks under the write lock that the item still has no children to drop
+or carry; if it has, nothing is written and the caller must preview.
 """
 
 import sqlite3
@@ -47,13 +51,14 @@ from xoot.server.schemas.literals import Phase, UpdateMode
 from xoot.server.schemas.subtree_output import SubtreeOutput
 from xoot.server.tool_meta import DESTRUCTIVE, describe
 from xoot.services.confirm_service import issue_token
-from xoot.services.item_service import update_item
+from xoot.services.item_service import update_item_in
 from xoot.services.subtree_service import (
-    apply_drop,
-    apply_reparent,
+    apply_drop_in,
+    apply_reparent_in,
     preview_drop,
     preview_reparent,
 )
+from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
 
 TOOL = "item_update"
@@ -61,6 +66,7 @@ ALONE = (
     "{} must be the only field in changes; send the other changes in a "
     "separate item_update call"
 )
+PREVIEW_REQUIRED = "preview required: the item now has children"
 
 
 # One parameter per tool argument: the SDK derives the input schema from it.
@@ -105,7 +111,7 @@ async def item_update(  # pylint: disable=too-many-arguments
                 conn, item, changes, expected_version, write
             )
         if isinstance(request, ItemUpdate):
-            updated = update_item(store, item.id, expected_version, request, write)
+            updated = _direct_update(store, item, expected_version, request, write)
             with store.read() as conn:
                 detail = item_detail(KeyBook(conn), updated)
             return ItemUpdateOutput(
@@ -116,7 +122,8 @@ async def item_update(  # pylint: disable=too-many-arguments
                 plan=None,
             )
         if not has_children:
-            return _plan_output(store, request, "applied", None, request.apply(store))
+            plan = _direct_subtree(store, item, request)
+            return _plan_output(store, request, "applied", None, plan)
         if confirm_token is None:
             plan = request.preview(store)
             token = issue_token(store, found.id, TOOL, digest, plan.plan_sha256)
@@ -159,7 +166,8 @@ class _SubtreeChange(BaseModel):
 
     def apply(self, store: Store, claim: Confirmation | None = None) -> SubtreePlan:
         """
-        Write the change, consuming the token when one is given.
+        Write the change in its own transaction, consuming the token when one
+        is given.
 
         Args:
             - store (Store): the database.
@@ -168,23 +176,66 @@ class _SubtreeChange(BaseModel):
         Returns:
             - plan (SubtreePlan): the changes written.
         """
+        with store.write() as conn:
+            return self.apply_in(WriteScope(conn, self.write), claim)
+
+    def apply_in(
+        self, scope: WriteScope, claim: Confirmation | None = None
+    ) -> SubtreePlan:
+        """
+        Write the change; the caller owns the transaction.
+
+        Args:
+            - scope (WriteScope): the open write scope.
+            - claim (Confirmation | None): the preview's token claim.
+
+        Returns:
+            - plan (SubtreePlan): the changes written.
+        """
         if self.mode == "drop":
-            return apply_drop(
-                store,
-                self.item_id,
-                self.expected_version,
-                self.write,
-                claim,
-                state=self.state,
+            return apply_drop_in(
+                scope, self.item_id, self.expected_version, claim, state=self.state
             )
-        return apply_reparent(
-            store,
+        return apply_reparent_in(
+            scope,
             self.item_id,
             self.new_parent_id,
             self.expected_version,
-            self.write,
             confirm=claim,
         )
+
+
+def _has_children(conn: sqlite3.Connection, item: Item) -> bool:
+    return bool(item_db.list_children(conn, item.project_id, [item.id]))
+
+
+def _drops(conn: sqlite3.Connection, item: Item, state: str | None) -> bool:
+    """Whether moving the item to state puts it in the dropped category."""
+    return state is not None and KeyBook(conn).category(item, state) is Category.DROPPED
+
+
+def _direct_update(
+    store: Store,
+    item: Item,
+    expected_version: int,
+    request: ItemUpdate,
+    write: WriteContext,
+) -> Item:
+    """Apply an update chosen without a preview, unless it now drops a parent."""
+    with store.write() as conn:
+        state = request.provided().get("state")
+        if _drops(conn, item, state) and _has_children(conn, item):
+            raise ToolError(PREVIEW_REQUIRED)
+        scope = WriteScope(conn, write)
+        return update_item_in(scope, item.id, expected_version, request)
+
+
+def _direct_subtree(store: Store, item: Item, request: _SubtreeChange) -> SubtreePlan:
+    """Apply a subtree change chosen as childless, unless it now has children."""
+    with store.write() as conn:
+        if _has_children(conn, item):
+            raise ToolError(PREVIEW_REQUIRED)
+        return request.apply_in(WriteScope(conn, request.write))
 
 
 def _request(
@@ -196,17 +247,13 @@ def _request(
 ) -> tuple[ItemUpdate | _SubtreeChange, bool]:
     """Pick the path and resolve its keys; the bool says whether the item has children."""
     provided = changes.model_fields_set
-    has_children = bool(item_db.list_children(conn, item.project_id, [item.id]))
+    has_children = _has_children(conn, item)
     mode: UpdateMode = "update"
     if "parent" in provided:
         if provided != {"parent"}:
             raise ToolError(ALONE.format("parent"))
         mode = "reparent"
-    elif (
-        has_children
-        and changes.state is not None
-        and KeyBook(conn).category(item, changes.state) is Category.DROPPED
-    ):
+    elif has_children and _drops(conn, item, changes.state):
         if provided != {"state"}:
             raise ToolError(ALONE.format("a drop of an item with children"))
         mode = "drop"

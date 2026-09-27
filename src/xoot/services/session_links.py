@@ -43,6 +43,24 @@ def open_session_for(
     return session
 
 
+def scope_session_id(scope: WriteScope) -> int:
+    """
+    Return the session a scope is attributed to, for writes that need one.
+
+    Args:
+        - scope (WriteScope): the current write scope.
+
+    Returns:
+        - session_id (int): the scope's session id.
+
+    Raises:
+        - SessionStateError: the scope carries no session.
+    """
+    if scope.ctx.session_id is None:
+        raise SessionStateError("this write needs a session")
+    return scope.ctx.session_id
+
+
 def link_items(
     scope: WriteScope, session: Session | None, item_ids: Iterable[int]
 ) -> None:

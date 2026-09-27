@@ -1,4 +1,4 @@
-"""S7: the session's client comes from client_info; every write reuses it."""
+"""The session's client comes from client_info; every write reuses it."""
 
 from typing import Any
 

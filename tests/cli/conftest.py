@@ -101,6 +101,16 @@ def fixture_default_toml(tmp_path: Path) -> Path:
     return path
 
 
+@pytest.fixture(name="changed_toml")
+def fixture_changed_toml(
+    tmp_path: Path, extended_definition: WorkflowDefinition
+) -> Path:
+    """A workflow file that differs from the default, so importing it writes."""
+    path = tmp_path / "changed.toml"
+    path.write_text(dump_workflow(extended_definition), encoding="utf-8")
+    return path
+
+
 @pytest.fixture(name="write_lock")
 def fixture_write_lock(db_path: Path) -> Iterator[Callable[[str], None]]:
     """Factory: hold a write or read transaction from a second connection."""

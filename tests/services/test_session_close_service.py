@@ -1,4 +1,4 @@
-"""T7: session close dispositions, stale backlog retirement, pure preview."""
+"""Session close dispositions, stale backlog retirement, pure preview."""
 
 from collections.abc import Callable
 
@@ -131,7 +131,7 @@ def test_stale_session_backlogs_move_to_project_backlog(
     event_kinds: Callable[[Project], list[tuple[str, str]]],
 ) -> None:
     """
-    F9: closing S retires backlogs of sessions that closed before S started,
+    Closing S retires backlogs of sessions that closed before S started,
     including items S carried over; an item S re-parks in its own backlog,
     and backlogs of sessions that closed after S started, are kept.
     """

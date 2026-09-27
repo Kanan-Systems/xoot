@@ -1,4 +1,4 @@
-"""T2: migrations apply in order, once, safely across processes."""
+"""Migrations apply in order, once, safely across processes."""
 
 import sqlite3
 import threading

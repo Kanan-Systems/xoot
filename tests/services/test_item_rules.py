@@ -1,4 +1,4 @@
-"""T5: the goal > batch > subtask hierarchy, in the service and the database."""
+"""The goal > batch > subtask hierarchy, in the service and the database."""
 
 from collections.abc import Callable
 from datetime import UTC, datetime

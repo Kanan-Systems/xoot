@@ -70,21 +70,22 @@ def get_by_number(
     return None if row is None else Session.model_validate(dict(row))
 
 
-def list_open(conn: sqlite3.Connection, project_id: int) -> list[Session]:
+def list_open(conn: sqlite3.Connection, project_id: int, limit: int) -> list[Session]:
     """
     List a project's open sessions, oldest first.
 
     Args:
         - conn (sqlite3.Connection): open connection.
         - project_id (int): project id.
+        - limit (int): the most rows to return.
 
     Returns:
-        - sessions (list[Session]): the open sessions.
+        - sessions (list[Session]): up to limit open sessions.
     """
     rows = conn.execute(
         f"SELECT {_COLUMNS} FROM session WHERE project_id = ? AND status = 'open' "
-        "ORDER BY number",
-        (project_id,),
+        "ORDER BY number LIMIT ?",
+        (project_id, limit),
     ).fetchall()
     return [Session.model_validate(dict(row)) for row in rows]
 

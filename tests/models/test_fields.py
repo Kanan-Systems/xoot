@@ -1,4 +1,4 @@
-"""T10: input limits are enforced by the shared field types and the models."""
+"""Input limits are enforced by the shared field types and the models."""
 
 from datetime import datetime, timedelta, timezone
 

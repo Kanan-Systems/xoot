@@ -1,4 +1,4 @@
-"""S8: concurrent calls each get their own Store on their own worker thread."""
+"""Concurrent calls each get their own Store on their own worker thread."""
 
 from pathlib import Path
 from typing import Any

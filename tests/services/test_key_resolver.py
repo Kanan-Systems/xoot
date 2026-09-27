@@ -1,4 +1,4 @@
-"""B4: public keys resolve to rows without the MCP server, raising XootErrors."""
+"""Public keys resolve to rows without the MCP server, raising XootErrors."""
 
 from collections.abc import Callable
 
@@ -68,15 +68,17 @@ def test_unknown_keys_do_not_echo_input(store: Store, key: str, ref: str) -> Non
 def test_a_dash_makes_a_record_key_and_an_alias_is_never_a_key(
     store: Store, project: Project, ctx: WriteContext, make_item: Callable[..., Item]
 ) -> None:
-    """L11: "xoot-1" is item 1 of xoot even when another project has that alias."""
+    """ "xoot-1" is item 1 of xoot; a dashed alias never resolves as a key."""
     other = register_project(
         store,
-        ProjectRegistration(key_prefix="other", name="n", aliases=("xoot-1",)),
+        ProjectRegistration(key_prefix="other", name="n", aliases=("xoot-one",)),
         ctx.actor,
     )
     with store.read() as conn:
         with pytest.raises(NotFoundError) as caught:
             key_resolver.entity_by_key(conn, "xoot-1")
+        with pytest.raises(NotFoundError):
+            key_resolver.entity_by_key(conn, "xoot-one")
     assert caught.value.ref == "xoot-1"
     item = make_item(project, ItemKind.GOAL)
     with store.read() as conn:

@@ -1,4 +1,4 @@
-"""T8: path resolution by longest whole-segment match; alias by exact match."""
+"""Path resolution by longest whole-segment match; alias by exact match."""
 
 import pytest
 from pydantic import ValidationError

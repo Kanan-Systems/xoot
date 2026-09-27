@@ -6,7 +6,9 @@ from xoot.exceptions.xoot_error import XootError
 class DuplicateError(XootError):
     """A value that must be unique is already registered."""
 
-    def __init__(self, field: str, value: str, holder: str | None = None) -> None:
+    def __init__(
+        self, field: str, value: str, holder: str | None = None, *, own: bool = False
+    ) -> None:
         """
         Record the clashing value and, when known, what already holds it.
 
@@ -15,8 +17,12 @@ class DuplicateError(XootError):
             - value (str): the value that is already in use.
             - holder (str | None): what the value is registered as, e.g.
               "an alias of project xoot"; None for a plain clash.
+            - own (bool): the value is already an alias of the very project
+              asking for it; holder is then ignored.
         """
-        if holder is None:
+        if own:
+            message = f"{value!r} is already an {field} of this project"
+        elif holder is None:
             message = f"{field} {value!r} is already registered"
         else:
             message = f"{value!r} is already registered as {holder}"

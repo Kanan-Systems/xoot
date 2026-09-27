@@ -99,10 +99,47 @@ def apply_drop(  # pylint: disable=too-many-arguments
     """
     check_id("item_id", item_id)
     check_id("expected_version", expected_version)
-    planner = partial(_plan_drop, state=state)
     with store.write() as conn:
-        token = _consume(conn, confirm, ctx)
-        return _write_plan(conn, item_id, expected_version, ctx, planner, token=token)
+        return apply_drop_in(
+            WriteScope(conn, ctx), item_id, expected_version, confirm, state=state
+        )
+
+
+def apply_drop_in(
+    scope: WriteScope,
+    item_id: int,
+    expected_version: int,
+    confirm: Confirmation | None = None,
+    *,
+    state: str | None = None,
+) -> SubtreePlan:
+    """
+    Drop an item and everything under it; the caller owns the transaction.
+
+    Args:
+        - scope (WriteScope): the open write scope; changed items are linked
+          to its session, if any.
+        - item_id (int): the subtree root.
+        - expected_version (int): the root version the caller read.
+        - confirm (Confirmation | None): a token from the preview, consumed
+          in the caller's transaction when given.
+        - state (str | None): the dropped state to use; each kind's default
+          dropped state when None.
+
+    Returns:
+        - plan (SubtreePlan): the changes that were written.
+
+    Raises:
+        - ConfirmTokenError: the token cannot authorize this call, or the
+          plan changed since the preview.
+        - StateError: state is not in the root kind's dropped category.
+        - VersionConflictError: the root changed since expected_version.
+        - SessionStateError: the session is closed.
+        - NotFoundError: no such item.
+    """
+    planner = partial(_plan_drop, state=state)
+    token = _consume(scope, confirm)
+    return _write_plan(scope, item_id, expected_version, planner, token=token)
 
 
 def preview_reparent(
@@ -169,38 +206,74 @@ def apply_reparent(  # pylint: disable=too-many-arguments
     check_id("item_id", item_id)
     check_optional_id("new_parent_id", new_parent_id)
     check_id("expected_version", expected_version)
-    planner = partial(_plan_reparent, new_parent_id=new_parent_id)
     with store.write() as conn:
-        token = _consume(conn, confirm, ctx)
-        return _write_plan(conn, item_id, expected_version, ctx, planner, token=token)
+        return apply_reparent_in(
+            WriteScope(conn, ctx),
+            item_id,
+            new_parent_id,
+            expected_version,
+            confirm=confirm,
+        )
 
 
-def _consume(
-    conn: sqlite3.Connection, confirm: Confirmation | None, ctx: WriteContext
-) -> ConfirmToken | None:
+def apply_reparent_in(
+    scope: WriteScope,
+    item_id: int,
+    new_parent_id: int | None,
+    expected_version: int,
+    *,
+    confirm: Confirmation | None = None,
+) -> SubtreePlan:
+    """
+    Move an item and its descendants; the caller owns the transaction.
+
+    Args:
+        - scope (WriteScope): the open write scope; the moved root is linked
+          to its session, if any.
+        - item_id (int): the subtree root.
+        - new_parent_id (int | None): the new parent; None unfiles a subtask.
+        - expected_version (int): the root version the caller read.
+        - confirm (Confirmation | None): a token from the preview, consumed
+          in the caller's transaction when given.
+
+    Returns:
+        - plan (SubtreePlan): the change that was written.
+
+    Raises:
+        - ConfirmTokenError: the token cannot authorize this call, or the
+          plan changed since the preview.
+        - VersionConflictError: the root changed since expected_version.
+        - HierarchyError: the new parent is not allowed for the root's kind.
+        - CrossProjectError: the new parent is in another project.
+        - NotFoundError: the item or the new parent does not exist.
+    """
+    planner = partial(_plan_reparent, new_parent_id=new_parent_id)
+    token = _consume(scope, confirm)
+    return _write_plan(scope, item_id, expected_version, planner, token=token)
+
+
+def _consume(scope: WriteScope, confirm: Confirmation | None) -> ConfirmToken | None:
     """Spend the preview's token first, so it is used only if the write commits."""
     if confirm is None:
         return None
-    return consume_token(conn, confirm, ctx.session_id)
+    return consume_token(scope.conn, confirm, scope.ctx.session_id)
 
 
-# The five inputs of the locked re-plan plus the token its plan must match.
-def _write_plan(  # pylint: disable=too-many-arguments
-    conn: sqlite3.Connection,
+def _write_plan(
+    scope: WriteScope,
     item_id: int,
     expected_version: int,
-    ctx: WriteContext,
     planner: Planner,
     *,
     token: ConfirmToken | None,
 ) -> SubtreePlan:
     """Re-plan under the write lock, check it against the token, then write it."""
+    conn = scope.conn
     root = require_item(conn, item_id)
     ensure_version(conn, EntityType.ITEM, root, expected_version)
-    session = open_session_for(conn, root.project_id, ctx.session_id)
+    session = open_session_for(conn, root.project_id, scope.ctx.session_id)
     plan = planner(conn, root)
     check_plan(token, plan.plan_sha256)
-    scope = WriteScope(conn, ctx)
     apply_changes(scope, plan.changes)
     link_items(scope, session, [change.item_id for change in plan.changes])
     return plan

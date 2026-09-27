@@ -1,4 +1,4 @@
-"""A2: the xoot-mcp console script and python -m xoot.server share one main."""
+"""The xoot-mcp console script and python -m xoot.server share one main."""
 
 from importlib.metadata import entry_points
 

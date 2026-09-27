@@ -1,4 +1,4 @@
-"""E10: bulk create validates everything in a pure preview and applies all or nothing."""
+"""Bulk create validates everything in a pure preview and applies all or nothing."""
 
 from collections.abc import Callable
 from typing import Any

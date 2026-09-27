@@ -1,4 +1,4 @@
-"""Z2/Z3 end to end: tokens bind the previewed plan; drops keep the requested state."""
+"""End to end: tokens bind the previewed plan; drops keep the requested state."""
 
 from collections.abc import Callable
 from typing import Any

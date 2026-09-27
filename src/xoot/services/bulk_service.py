@@ -32,7 +32,7 @@ from xoot.services.lookups import (
     require_project,
     require_session,
 )
-from xoot.services.session_links import link_items
+from xoot.services.session_links import link_items, scope_session_id
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
 from xoot.utils.utils import body_digest
@@ -95,24 +95,53 @@ def apply_bulk(
     """
     check_id("session_id", session_id)
     with store.write() as conn:
-        token = None if confirm is None else consume_token(conn, confirm, session_id)
-        session = _open_session(conn, session_id)
-        check_plan(token, _plan(conn, session, request).plan_sha256)
-        project = require_project(conn, session.project_id)
-        definition = active_workflow(conn, project).definition
         scope = WriteScope(conn, WriteContext(actor=actor, session_id=session_id))
-        created: list[Item] = []
-        for node, parent in request.walk():
-            new = ItemCreate(
-                kind=node.kind,
-                title=node.title,
-                body=node.body,
-                parent_id=node.parent_id if parent is None else created[parent].id,
-                state=definition.for_kind(node.kind).default_state(Category.OPEN),
-            )
-            created.append(insert_item(scope, project, new))
-        link_items(scope, session, [item.id for item in created])
-        return tuple(created)
+        return apply_bulk_in(scope, request, confirm)
+
+
+def apply_bulk_in(
+    scope: WriteScope, request: BulkCreate, confirm: Confirmation | None = None
+) -> tuple[Item, ...]:
+    """
+    Create every node of a bulk create; the caller owns the transaction.
+
+    Args:
+        - scope (WriteScope): the open write scope, attributed to the open
+          session the items belong to (all are linked to it).
+        - request (BulkCreate): the nodes to create.
+        - confirm (Confirmation | None): a token from the preview, consumed
+          in the caller's transaction when given.
+
+    Returns:
+        - items (tuple[Item, ...]): the stored items, in insert order.
+
+    Raises:
+        - ConfirmTokenError: the token cannot authorize this call, or the
+          planned keys changed since the preview.
+        - SessionStateError: the scope has no session, or it is closed.
+        - HierarchyError: a node's parent kind is not allowed.
+        - CrossProjectError: an existing parent is in another project.
+        - NotFoundError: the session or an existing parent does not exist.
+    """
+    conn = scope.conn
+    session_id = scope_session_id(scope)
+    token = None if confirm is None else consume_token(conn, confirm, session_id)
+    session = _open_session(conn, session_id)
+    check_plan(token, _plan(conn, session, request).plan_sha256)
+    project = require_project(conn, session.project_id)
+    definition = active_workflow(conn, project).definition
+    created: list[Item] = []
+    for node, parent in request.walk():
+        new = ItemCreate(
+            kind=node.kind,
+            title=node.title,
+            body=node.body,
+            parent_id=node.parent_id if parent is None else created[parent].id,
+            state=definition.for_kind(node.kind).default_state(Category.OPEN),
+        )
+        created.append(insert_item(scope, project, new))
+    link_items(scope, session, [item.id for item in created])
+    return tuple(created)
 
 
 def _open_session(conn: sqlite3.Connection, session_id: int) -> Session:

@@ -1,4 +1,4 @@
-"""Z2: a confirm token applies only the plan its preview showed."""
+"""A confirm token applies only the plan its preview showed."""
 
 from collections.abc import Callable
 

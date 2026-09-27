@@ -1,4 +1,4 @@
-"""S5: two-phase calls for bulk create, subtree drop, reparent and session close."""
+"""Two-phase calls for bulk create, subtree drop, reparent and session close."""
 
 from collections.abc import Callable
 from typing import Any

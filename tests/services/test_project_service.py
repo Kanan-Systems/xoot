@@ -21,7 +21,7 @@ from xoot.store.store import Store
 def test_registration_applies_the_default_workflow(
     store: Store, project: Project
 ) -> None:
-    """E3: a new project starts on version 1 of the shipped default."""
+    """A new project starts on version 1 of the shipped default."""
     workflow = get_active_workflow(store, project.id)
     assert project.active_workflow_id == workflow.id
     assert workflow.version == 1
@@ -75,7 +75,7 @@ def test_unknown_project(store: Store, ctx: WriteContext) -> None:
 def test_active_workflow_must_be_the_projects_own(
     store: Store, project: Project, other_project: Project
 ) -> None:
-    """D10: the composite foreign key refuses another project's workflow."""
+    """The composite foreign key refuses another project's workflow."""
     with pytest.raises(IntegrityViolationError, match="FOREIGN KEY"):
         with store.write() as conn:
             conn.execute(

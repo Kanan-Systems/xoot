@@ -1,4 +1,4 @@
-"""Item creation, capture and update rules, including T3 concurrency."""
+"""Item creation, capture and update rules, including concurrent creation."""
 
 import os
 import sqlite3
@@ -59,7 +59,7 @@ def test_concurrent_creates_get_unique_contiguous_numbers(
     event_kinds: Callable[[Project], list[tuple[str, str]]],
     spawn_workers: Any,
 ) -> None:
-    """T3: 8 processes x 25 items -> numbers 1..200, 200 events, no busy errors."""
+    """8 processes x 25 items -> numbers 1..200, 200 events, no busy errors."""
     events_before = len(event_kinds(project))
     results = spawn_workers(_create_items, [(str(store.path), project.id)] * WORKERS)
     numbers = sorted(n for worker_numbers, *_ in results for n in worker_numbers)
@@ -112,7 +112,7 @@ def test_session_backlog_only_in_backlogged_state(
 def test_capture_makes_an_unfiled_session_backlog_subtask(
     store: Store, project: Project, make_session: Callable[..., Session], claude: Actor
 ) -> None:
-    """T5: capture creates an unfiled subtask parked in the session's backlog."""
+    """Capture creates an unfiled subtask parked in the session's backlog."""
     session = make_session(project)
     item = capture(store, session.id, ItemDraft(title="idea", body="later"), claude)
     assert (item.kind, item.parent_id, item.unfiled) == (ItemKind.SUBTASK, None, True)
@@ -140,7 +140,7 @@ def test_writes_in_a_session_link_the_item(
     make_session: Callable[..., Session],
     user: Actor,
 ) -> None:
-    """F5: the session must be open and in the project; the item is linked."""
+    """The session must be open and in the project; the item is linked."""
     session = make_session(project)
     ctx = WriteContext(actor=user, session_id=session.id)
     item = create_item(
@@ -166,7 +166,7 @@ def test_leaving_the_backlog_clears_the_session_backlog(
     user: Actor,
     ctx: WriteContext,
 ) -> None:
-    """F4: moving out of the backlogged category drops backlog_session_id."""
+    """Moving out of the backlogged category drops backlog_session_id."""
     item = capture(store, make_session(project).id, ItemDraft(title="idea"), user)
     moved = update_item(store, item.id, 1, ItemUpdate(state="active"), ctx)
     assert (moved.state, moved.backlog_session_id, moved.version) == ("active", None, 2)

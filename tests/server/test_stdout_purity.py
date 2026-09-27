@@ -1,5 +1,5 @@
 """
-S1: stdout carries protocol messages only.
+stdout carries protocol messages only.
 
 This drives a raw subprocess rather than the SDK client, which cannot observe
 stdout before it sends initialize.

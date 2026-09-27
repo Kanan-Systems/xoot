@@ -1,4 +1,4 @@
-"""S2: tools/list exposes the 14 tools with the specified annotations and notice."""
+"""tools/list exposes the 14 tools with the specified annotations and notice."""
 
 from typing import Any
 
@@ -96,7 +96,7 @@ def _flat(text: str | None) -> str:
 
 
 def test_project_level_tools_state_how_resolution_works(harness: Any) -> None:
-    """W1: each project-level tool says chat clients must pass project."""
+    """Each project-level tool says chat clients must pass project."""
     tools, _ = _listing(harness)
     described = {tool.name: _flat(tool.description) for tool in tools}
     assert RESOLUTION == (
@@ -109,7 +109,7 @@ def test_project_level_tools_state_how_resolution_works(harness: Any) -> None:
 
 
 def test_instructions_state_resolution_and_auto_backlog_rules(harness: Any) -> None:
-    """W1, W3: project resolution, auto-backlog agreement, output over memory."""
+    """Project resolution, auto-backlog agreement, output over memory."""
     tools, instructions = _listing(harness)
     flat = _flat(instructions)
     assert (

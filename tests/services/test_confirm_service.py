@@ -1,4 +1,4 @@
-"""D1-D3: confirm tokens are hashed, bound, single-use, short-lived and never logged."""
+"""Confirm tokens are hashed, bound, single-use, short-lived and never logged."""
 
 import logging
 from collections.abc import Callable

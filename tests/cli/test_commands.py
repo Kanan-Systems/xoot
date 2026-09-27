@@ -1,4 +1,4 @@
-"""T2: every command succeeds in text and in --json, and JSON output parses."""
+"""Every command succeeds in text and in --json, and JSON output parses."""
 
 from pathlib import Path
 from typing import Any

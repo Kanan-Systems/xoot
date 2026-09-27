@@ -49,35 +49,58 @@ def create_decision(
     """
     check_id("project_id", project_id)
     with store.write() as conn:
-        project = require_project(conn, project_id)
-        open_session_for(conn, project_id, ctx.session_id)
-        target = None
-        if request.supersedes_id is not None:
-            target = require_decision(conn, request.supersedes_id, project_id)
-            if target.status is DecisionStatus.SUPERSEDED:
-                raise DecisionError(f"{target.key} is already superseded")
-        if request.scope_item_id is not None:
-            require_item(conn, request.scope_item_id, project_id)
-        scope = WriteScope(conn, ctx)
-        number = project_db.allocate_decision_number(conn, project_id)
-        decision = decision_db.insert(
-            conn,
-            NewDecision(
-                project_id=project_id,
-                number=number,
-                key=f"{project.key_prefix}-D{number}",
-                title=request.title,
-                body=request.body,
-                status=request.status,
-                supersedes_id=request.supersedes_id,
-                scope_item_id=request.scope_item_id,
-                created_at=scope.now,
-            ),
-        )
-        scope.created(decision)
-        if target is not None:
-            _write(scope, target, {"status": DecisionStatus.SUPERSEDED})
-        return decision
+        return create_decision_in(WriteScope(conn, ctx), project_id, request)
+
+
+def create_decision_in(
+    scope: WriteScope, project_id: int, request: DecisionCreate
+) -> Decision:
+    """
+    Record a decision; the caller owns the transaction.
+
+    Args:
+        - scope (WriteScope): the open write scope.
+        - project_id (int): project id.
+        - request (DecisionCreate): validated decision details.
+
+    Returns:
+        - decision (Decision): the new decision.
+
+    Raises:
+        - DecisionError: the superseded decision is already superseded.
+        - CrossProjectError: a reference is in another project.
+        - SessionStateError: the session is closed.
+        - NotFoundError: the project or a reference does not exist.
+    """
+    conn = scope.conn
+    project = require_project(conn, project_id)
+    open_session_for(conn, project_id, scope.ctx.session_id)
+    target = None
+    if request.supersedes_id is not None:
+        target = require_decision(conn, request.supersedes_id, project_id)
+        if target.status is DecisionStatus.SUPERSEDED:
+            raise DecisionError(f"{target.key} is already superseded")
+    if request.scope_item_id is not None:
+        require_item(conn, request.scope_item_id, project_id)
+    number = project_db.allocate_decision_number(conn, project_id)
+    decision = decision_db.insert(
+        conn,
+        NewDecision(
+            project_id=project_id,
+            number=number,
+            key=f"{project.key_prefix}-D{number}",
+            title=request.title,
+            body=request.body,
+            status=request.status,
+            supersedes_id=request.supersedes_id,
+            scope_item_id=request.scope_item_id,
+            created_at=scope.now,
+        ),
+    )
+    scope.created(decision)
+    if target is not None:
+        _write(scope, target, {"status": DecisionStatus.SUPERSEDED})
+    return decision
 
 
 def update_decision(
@@ -110,13 +133,43 @@ def update_decision(
     check_id("decision_id", decision_id)
     check_id("expected_version", expected_version)
     with store.write() as conn:
-        decision = require_decision(conn, decision_id)
-        ensure_version(conn, EntityType.DECISION, decision, expected_version)
-        open_session_for(conn, decision.project_id, ctx.session_id)
-        fields = changes.provided()
-        if "status" in fields and decision.status is DecisionStatus.SUPERSEDED:
-            raise DecisionError(f"{decision.key} is superseded; record a new decision")
-        return _write(WriteScope(conn, ctx), decision, fields)
+        return update_decision_in(
+            WriteScope(conn, ctx), decision_id, expected_version, changes
+        )
+
+
+def update_decision_in(
+    scope: WriteScope,
+    decision_id: int,
+    expected_version: int,
+    changes: DecisionUpdate,
+) -> Decision:
+    """
+    Change a decision's title, body or status; the caller owns the transaction.
+
+    Args:
+        - scope (WriteScope): the open write scope.
+        - decision_id (int): decision id.
+        - expected_version (int): the version the caller read.
+        - changes (DecisionUpdate): the fields to change.
+
+    Returns:
+        - decision (Decision): the stored decision.
+
+    Raises:
+        - VersionConflictError: the decision changed since expected_version.
+        - DecisionError: the status of a superseded decision cannot change.
+        - SessionStateError: the session is closed.
+        - NotFoundError: no such decision.
+    """
+    conn = scope.conn
+    decision = require_decision(conn, decision_id)
+    ensure_version(conn, EntityType.DECISION, decision, expected_version)
+    open_session_for(conn, decision.project_id, scope.ctx.session_id)
+    fields = changes.provided()
+    if "status" in fields and decision.status is DecisionStatus.SUPERSEDED:
+        raise DecisionError(f"{decision.key} is superseded; record a new decision")
+    return _write(scope, decision, fields)
 
 
 def get_decision(store: Store, decision_id: int) -> Decision:

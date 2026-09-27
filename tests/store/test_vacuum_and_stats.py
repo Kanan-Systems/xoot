@@ -1,4 +1,4 @@
-"""B6/B7: db_stats reports the real counts; vacuum frees the free pages."""
+"""db_stats reports the real counts; vacuum frees the free pages."""
 
 import os
 from collections.abc import Callable

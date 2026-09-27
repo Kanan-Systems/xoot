@@ -1,5 +1,5 @@
 """
-T3: exit codes 1, 2 and 3, each triggered for real, and the error line
+Exit codes 1, 2 and 3, each triggered for real, and the error line
 format "error: <Class>: <reason>" with no SQL or driver text.
 """
 

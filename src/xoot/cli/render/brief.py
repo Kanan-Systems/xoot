@@ -33,22 +33,29 @@ def render_brief(brief: BriefOutput) -> str:
         "\n".join([*project_lines(brief.project), f"resolved by: {brief.resolved_by}"]),
         brief.header,
         "Counts\n" + counts,
-        "Open sessions\n" + _rows(sessions),
+        "Open sessions\n"
+        + _rows(("key", "title", "client", "started"), sessions)
+        + (
+            f"\n  (first {len(sessions)} shown; more are open)"
+            if brief.open_sessions_truncated
+            else ""
+        ),
         "Active\n" + _items(brief.active),
         "Awaiting input\n" + _items(brief.awaiting_input),
         "Pending session backlog\n" + _items(brief.pending_session_backlog),
         f"Project backlog: {brief.project_backlog_count}",
-        "Recent decisions\n" + _rows(decisions),
+        "Recent decisions\n" + _rows(("key", "status", "title"), decisions),
         "Workflow\n" + "\n".join(workflow),
     ]
     return "\n\n".join(sections)
 
 
 def _items(items: list[ItemSummary]) -> str:
-    return _rows([(i.key, i.kind, i.state, clean(i.title)) for i in items])
+    rows = [(i.key, i.kind, i.state, clean(i.title)) for i in items]
+    return _rows(("key", "kind", "state", "title"), rows)
 
 
-def _rows(rows: list[tuple[str, ...]]) -> str:
+def _rows(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> str:
     if not rows:
         return NONE
-    return "\n".join("  " + line for line in table(rows[0], rows[1:]).splitlines())
+    return "\n".join("  " + line for line in table(headers, rows).splitlines())

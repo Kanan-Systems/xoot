@@ -1,5 +1,5 @@
 """
-T7: redaction through the CLI rewrites the row and its events, empties
+Redaction through the CLI rewrites the row and its events, empties
 confirm_token, and leaves no byte of the old text in the database or WAL.
 """
 
@@ -117,11 +117,11 @@ def test_refused_before_any_prompt(
 def fixture_lookalike(
     store: Store, user: Actor, make_item: Callable[..., Item]
 ) -> tuple[Project, Item, Project]:
-    """L11: project ab with item 12, and project cd whose alias is "ab-12"."""
+    """Project ab with item 12, and project cd whose dashed alias is "ab-x12"."""
     ab = register_project(store, ProjectRegistration(key_prefix="ab", name="ab"), user)
     cd = register_project(
         store,
-        ProjectRegistration(key_prefix="cd", name="cd", aliases=("ab-12",)),
+        ProjectRegistration(key_prefix="cd", name="cd", aliases=("ab-x12",)),
         user,
     )
     items = [make_item(ab, ItemKind.GOAL, title=f"t{n}") for n in range(1, 13)]
@@ -139,7 +139,7 @@ def test_key_with_a_dash_is_an_entity_key(
     lookalike: tuple[Project, Item, Project],
     case: tuple[str, str, str],
 ) -> None:
-    """L11: each KEY redacts exactly the entity it names, never the alias owner."""
+    """Each KEY redacts exactly the entity it names, never the alias owner."""
     key, field, target = case
     ab, item, cd = lookalike
     run = xoot("redact", key, field, "--yes")

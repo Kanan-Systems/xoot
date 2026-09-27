@@ -1,4 +1,4 @@
-"""Z4: issuing a token prunes spent tokens issued more than a day ago."""
+"""Issuing a token prunes spent tokens issued more than a day ago."""
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta

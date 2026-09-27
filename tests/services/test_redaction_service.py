@@ -1,5 +1,5 @@
 """
-X5/Y1/Y4: user-only redaction of item and decision titles and bodies,
+User-only redaction of item and decision titles and bodies,
 session titles and summaries and project names, in the row and in every
 event of the entity. On-disk bytes are covered in test_redaction_disk.
 """
@@ -156,7 +156,7 @@ def test_project_name_is_redacted(store: Store, project: Project, user: Actor) -
 def test_stale_write_after_redaction_names_the_redaction(
     store: Store, project: Project, user: Actor, claude: Actor
 ) -> None:
-    """Y1: the conflict's changed field and actor come from the redact event."""
+    """The conflict's changed field and actor come from the redact event."""
     ctx = WriteContext(actor=claude)
     item = create_item(
         store, project.id, ItemCreate(kind=ItemKind.GOAL, title="t", body="b"), ctx

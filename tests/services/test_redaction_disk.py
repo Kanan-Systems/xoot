@@ -1,5 +1,5 @@
 """
-Y3/Y4: a redacted secret leaves no bytes in the database or its WAL, for every
+A redacted secret leaves no bytes in the database or its WAL, for every
 redactable field. A plain sqlite3 connection with secure_delete off is the
 negative control: it shows the scan does find bytes an overwrite leaves
 behind, so a zero from the xoot path means the bytes are really gone.

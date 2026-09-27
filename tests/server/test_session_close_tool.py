@@ -1,4 +1,4 @@
-"""W2, W3: session_close refuses missing dispositions and warns of auto-backlog moves."""
+"""session_close refuses missing dispositions and warns of auto-backlog moves."""
 
 from collections.abc import Callable
 from typing import Any

@@ -15,7 +15,8 @@ from xoot.server.schemas.workflow_entry import WorkflowEntry
 class BriefOutput(BaseModel):
     """
     A project's current picture: counts, open sessions, what is in flight,
-    what waits in backlogs and the latest decisions. Lists are capped.
+    what waits in backlogs and the latest decisions. Lists are capped;
+    open_sessions_truncated says more sessions are open than are listed.
     workflow is the active workflow per item kind, whose state names are the
     only ones item_update accepts.
     """
@@ -28,6 +29,7 @@ class BriefOutput(BaseModel):
     db_path: str
     counts: dict[Category, int]
     open_sessions: list[SessionSummary]
+    open_sessions_truncated: bool
     active: list[ItemSummary]
     awaiting_input: list[ItemSummary]
     pending_session_backlog: list[ItemSummary]

@@ -14,7 +14,7 @@ from xoot.exceptions.not_found_error import NotFoundError
 from xoot.models.event.actor import Actor
 from xoot.models.event.event_action import EventAction
 from xoot.models.event.write_context import WriteContext
-from xoot.models.fields import ProjectDir, Slug
+from xoot.models.fields import Alias, ProjectDir, Slug
 from xoot.models.project.project import Project
 from xoot.models.project.project_overview import ProjectOverview
 from xoot.models.project.project_registration import ProjectRegistration
@@ -32,6 +32,7 @@ from xoot.services.session_links import open_session_for
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
 
+_ALIAS = TypeAdapter(Alias)
 _SLUG = TypeAdapter(Slug)
 _DIR = TypeAdapter(ProjectDir)
 
@@ -88,18 +89,19 @@ def add_alias(store: Store, project_id: int, alias: str, ctx: WriteContext) -> N
     Args:
         - store (Store): the database.
         - project_id (int): project id.
-        - alias (str): the alias; validated as a slug. It may equal this
-          project's own prefix.
+        - alias (str): the alias; validated as a slug that does not look
+          like a record key. It may equal this project's own prefix.
         - ctx (WriteContext): actor and optional session.
 
     Raises:
         - InvalidIdError: project_id is not an int id.
-        - pydantic.ValidationError: the alias is not a valid slug.
+        - pydantic.ValidationError: the alias is not a valid slug, or looks
+          like an item, decision or session key.
         - DuplicateError: the alias is taken or is another project's prefix.
         - NotFoundError: no such project.
     """
     check_id("project_id", project_id)
-    alias = _SLUG.validate_python(alias)
+    alias = _ALIAS.validate_python(alias)
     with store.write() as conn:
         project = require_project(conn, project_id)
         open_session_for(conn, project_id, ctx.session_id)

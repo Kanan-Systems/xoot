@@ -1,4 +1,4 @@
-"""A2: plan entries and create events digest a body through one helper."""
+"""Plan entries and create events digest a body through one helper."""
 
 from collections.abc import Callable
 

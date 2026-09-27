@@ -1,4 +1,4 @@
-"""C1-C4: workflow definitions round-trip through the hand-written TOML."""
+"""Workflow definitions round-trip through the hand-written TOML."""
 
 import tomllib
 from pathlib import Path

@@ -45,6 +45,7 @@ from xoot.services.lookups import (
     require_session,
 )
 from xoot.services.plan_entries import item_entry
+from xoot.services.session_links import scope_session_id
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
 
@@ -110,36 +111,65 @@ def close_session(
     """
     check_id("session_id", session_id)
     with store.write() as conn:
-        token = None if confirm is None else consume_token(conn, confirm, session_id)
-        session = require_session(conn, session_id)
-        plan = _plan(conn, session, request)
-        if plan.missing_item_ids:
-            raise DispositionError(
-                "missing dispositions for items", plan.missing_item_ids
-            )
-        check_plan(token, plan.plan_sha256)
         scope = WriteScope(conn, WriteContext(actor=actor, session_id=session_id))
-        for item_id, disposition in sorted(plan.dispositions.items()):
-            session_item_ref_db.set_disposition(conn, session_id, item_id, disposition)
-            scope.noted(
-                session,
-                EventAction.DISPOSE,
-                {"item_id": item_id, "disposition": disposition.value},
-                {"item_id": item_id, "disposition": None},
-            )
-        apply_changes(scope, plan.changes)
-        apply_changes(scope.as_system(), plan.auto_backlog)
-        closed = session.model_copy(
-            update={
-                "status": SessionStatus.CLOSED,
-                "summary": request.summary,
-                "close_seq": project_db.allocate_seq(conn, session.project_id),
-                "closed_at": scope.now,
-            }
+        return close_session_in(scope, request, confirm)
+
+
+def close_session_in(
+    scope: WriteScope, request: SessionClose, confirm: Confirmation | None = None
+) -> Session:
+    """
+    Close the scope's session; the caller owns the transaction.
+
+    Args:
+        - scope (WriteScope): the open write scope, attributed to the
+          session being closed.
+        - request (SessionClose): summary and one disposition per open
+          linked item.
+        - confirm (Confirmation | None): a token from the preview, consumed
+          in the caller's transaction when given.
+
+    Returns:
+        - session (Session): the closed session.
+
+    Raises:
+        - ConfirmTokenError: the token cannot authorize this call, or the
+          plan changed since the preview.
+        - DispositionError: a disposition is missing or names an item that
+          needs none.
+        - SessionStateError: the scope has no session, or it is already
+          closed.
+        - NotFoundError: no such session.
+    """
+    conn = scope.conn
+    session_id = scope_session_id(scope)
+    token = None if confirm is None else consume_token(conn, confirm, session_id)
+    session = require_session(conn, session_id)
+    plan = _plan(conn, session, request)
+    if plan.missing_item_ids:
+        raise DispositionError("missing dispositions for items", plan.missing_item_ids)
+    check_plan(token, plan.plan_sha256)
+    for item_id, disposition in sorted(plan.dispositions.items()):
+        session_item_ref_db.set_disposition(conn, session_id, item_id, disposition)
+        scope.noted(
+            session,
+            EventAction.DISPOSE,
+            {"item_id": item_id, "disposition": disposition.value},
+            {"item_id": item_id, "disposition": None},
         )
-        session_db.update(conn, closed)
-        scope.updated(session, closed, EventAction.CLOSE)
-        return closed
+    apply_changes(scope, plan.changes)
+    apply_changes(scope.as_system(), plan.auto_backlog)
+    closed = session.model_copy(
+        update={
+            "status": SessionStatus.CLOSED,
+            "summary": request.summary,
+            "close_seq": project_db.allocate_seq(conn, session.project_id),
+            "closed_at": scope.now,
+        }
+    )
+    session_db.update(conn, closed)
+    scope.updated(session, closed, EventAction.CLOSE)
+    return closed
 
 
 def _plan(

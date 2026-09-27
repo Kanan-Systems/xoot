@@ -1,4 +1,4 @@
-"""T9: db stats agrees with the real row counts; vacuum shrinks the freelist."""
+"""db stats agrees with the real row counts; vacuum shrinks the freelist."""
 
 from collections.abc import Callable
 from typing import Any

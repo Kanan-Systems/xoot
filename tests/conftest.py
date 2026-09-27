@@ -24,6 +24,8 @@ from xoot.models.session.disposition import Disposition
 from xoot.models.session.session import Session
 from xoot.models.session.session_close import SessionClose
 from xoot.models.session.session_start import SessionStart
+from xoot.models.workflow.category import Category
+from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.event import event_db
 from xoot.services.item_service import create_item
 from xoot.services.project_service import register_project
@@ -93,6 +95,17 @@ def fixture_other_project(store: Store, user: Actor) -> Project:
     return register_project(
         store, ProjectRegistration(key_prefix="nova", name="nova"), user
     )
+
+
+@pytest.fixture(name="extended_definition")
+def fixture_extended_definition() -> WorkflowDefinition:
+    """The default workflow plus an active goal state "review": a real change
+    that strands no item, since an identical import is a no-op."""
+    data = WorkflowDefinition.default().model_dump()
+    data["kinds"][ItemKind.GOAL]["states"] += (
+        {"name": "review", "category": Category.ACTIVE},
+    )
+    return WorkflowDefinition.model_validate(data)
 
 
 @pytest.fixture(name="make_item")

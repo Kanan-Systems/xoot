@@ -1,4 +1,4 @@
-"""T1: every command has working --help; malformed usage exits 2."""
+"""Every command has working --help; malformed usage exits 2."""
 
 from pathlib import Path
 from typing import Any

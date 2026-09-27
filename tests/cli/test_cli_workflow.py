@@ -1,5 +1,5 @@
 """
-T5: workflow export and import through the CLI; the model-level round trips
+Workflow export and import through the CLI; the model-level round trips
 are in tests/services/test_workflow_toml.py.
 """
 
@@ -38,16 +38,38 @@ def fixture_blocked_goal(project: Project, make_item: Callable[..., Item]) -> It
 
 
 def test_export_round_trips_through_the_cli(
-    xoot: Any, tmp_path: Path, store: Store, project: Project
+    xoot: Any, tmp_path: Path, store: Store, project: Project, row_counts: Any
 ) -> None:
-    """Export -> import of the same file adds a version and changes nothing else."""
+    """Export -> import of the same file is a no-op: no version, no events."""
     target = tmp_path / "wf.toml"
     assert xoot("workflow", "export", "--project", "xo", "-o", str(target)).code == 0
     definition = WorkflowDefinition.model_validate(tomllib.loads(target.read_text()))
     assert definition == get_active_workflow(store, project.id).definition
+    before = row_counts()
     run = xoot("workflow", "import", str(target), "--project", "xo", "--yes", "--json")
-    assert run.json()["version"] == 2
+    assert (run.json()["version"], run.json()["changed"]) == (1, False)
     assert get_active_workflow(store, project.id).definition == definition
+    assert row_counts() == before
+
+
+@pytest.mark.usefixtures("project")
+def test_identical_import_prints_no_changes_without_asking(
+    xoot: Any, default_toml: Path, row_counts: Any
+) -> None:
+    """No prompt is needed for a no-op, so no terminal or --yes is either."""
+    before = row_counts()
+    run = xoot("workflow", "import", str(default_toml), "--project", "xo")
+    assert (run.code, run.err) == (0, "")
+    assert run.out == "no changes: xoot workflow is still version 1\n"
+    assert row_counts() == before
+
+
+@pytest.mark.usefixtures("project")
+def test_changed_import_reports_the_new_version(xoot: Any, changed_toml: Path) -> None:
+    """A real change still adds a version and says so."""
+    run = xoot("workflow", "import", str(changed_toml), "--project", "xo", "--yes")
+    assert run.code == 0, run.err
+    assert run.out.startswith("xoot workflow is now version 2\n")
 
 
 def test_import_with_a_mapping_applies(

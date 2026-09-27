@@ -1,5 +1,5 @@
 """
-X6: changes xoot derives on its own (F9 backlog moves, workflow remaps) are
+Changes xoot derives on its own (stale backlog moves, workflow remaps) are
 recorded as the system's, with the triggering write's client and session.
 """
 
@@ -44,7 +44,7 @@ def test_f9_moves_are_logged_as_system(
     make_session: Callable[..., Session],
     make_item: Callable[..., Item],
 ) -> None:
-    """The closer's own disposition is theirs; the F9 move is the system's."""
+    """The closer's own disposition is theirs; the stale backlog move is the system's."""
     early = make_session(project)
     parked = capture(store, early.id, ItemDraft(title="parked"), claude)
     close_session(

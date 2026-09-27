@@ -43,7 +43,8 @@ def require_free_alias(
 
     Raises:
         - DuplicateError: the alias is taken, or is another project's prefix;
-          the message names that project.
+          the message names that project, or says it is already this
+          project's alias.
     """
     _refuse_taken(conn, "alias", alias, project_id)
 
@@ -71,6 +72,8 @@ def _refuse_taken(
     if owner is not None and owner.id != own_project_id:
         raise DuplicateError(field, name, f"the prefix of project {owner.key_prefix}")
     alias = project_alias_db.get(conn, name)
+    if alias is not None and alias.project_id == own_project_id:
+        raise DuplicateError(field, name, own=True)
     if alias is not None:
         holder = require_project(conn, alias.project_id).key_prefix
         raise DuplicateError(field, name, f"an alias of project {holder}")

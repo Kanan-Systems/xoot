@@ -1,4 +1,4 @@
-"""T1/Y3: connections get the safety pragmas and fail closed when they do not."""
+"""Connections get the safety pragmas and fail closed when they do not."""
 
 import sqlite3
 from pathlib import Path

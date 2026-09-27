@@ -1,4 +1,4 @@
-"""T9: every mutation writes its event rows, in the same transaction."""
+"""Every mutation writes its event rows, in the same transaction."""
 
 from collections.abc import Callable
 
@@ -51,7 +51,11 @@ def fixture_fresh(
 
 
 def test_project_workflow_and_item_mutations(
-    store: Store, project: Project, ctx: WriteContext, fresh: Callable[[Project], Kinds]
+    store: Store,
+    project: Project,
+    ctx: WriteContext,
+    fresh: Callable[[Project], Kinds],
+    extended_definition: WorkflowDefinition,
 ) -> None:
     """Registration, naming, item writes, subtree applies and workflow changes."""
     assert fresh(project) == [
@@ -74,7 +78,7 @@ def test_project_workflow_and_item_mutations(
     apply_reparent(store, task.id, None, 1, ctx)
     apply_drop(store, task.id, 1, ctx)
     assert fresh(project) == [("item", "create"), ("item", "update")]
-    change = WorkflowChange(definition=WorkflowDefinition.default())
+    change = WorkflowChange(definition=extended_definition)
     set_workflow(store, project.id, change, ctx)
     assert fresh(project) == [("workflow", "create"), ("project", "update")]
 

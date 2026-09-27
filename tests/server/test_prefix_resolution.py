@@ -1,4 +1,4 @@
-"""B1/B5 through MCP: a key prefix resolves like an alias and is reported as
+"""Through MCP: a key prefix resolves like an alias and is reported as
 "prefix", the unresolved error lists prefixes too, and projects_list reports
 paths."""
 

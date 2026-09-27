@@ -1,4 +1,4 @@
-"""F10: session start links focus items, offers pending backlog, warns on overlap."""
+"""Session start links focus items, offers pending backlog, warns on overlap."""
 
 from collections.abc import Callable
 

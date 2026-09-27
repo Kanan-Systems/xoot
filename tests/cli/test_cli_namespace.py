@@ -1,5 +1,5 @@
 """
-T4: namespace refusals in both directions, "/" refused, and project
+Namespace refusals in both directions, "/" refused, and project
 resolution by prefix, alias and working directory through the CLI.
 """
 

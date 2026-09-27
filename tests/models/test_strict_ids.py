@@ -1,4 +1,4 @@
-"""X2: every id, number and version field is a strict int; bool is refused."""
+"""Every id, number and version field is a strict int; bool is refused."""
 
 from collections.abc import Callable
 

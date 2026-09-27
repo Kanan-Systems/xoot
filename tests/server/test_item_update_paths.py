@@ -1,4 +1,4 @@
-"""E11: item_update picks a direct, drop or reparent path, and refuses mixed changes."""
+"""item_update picks a direct, drop or reparent path, and refuses mixed changes."""
 
 from collections.abc import Callable
 from typing import Any
@@ -85,7 +85,7 @@ def test_applied_subtree_drop_returns_every_affected_item(
     make_session: Callable[..., Session],
     harness: Any,
 ) -> None:
-    """W4: the drop returns each dropped item with its state, parent and version."""
+    """The drop returns each dropped item with its state, parent and version."""
     goal = make_item(project, ItemKind.GOAL)
     batch = make_item(project, ItemKind.BATCH, parent_id=goal.id)
     subtask = make_item(project, ItemKind.SUBTASK, parent_id=batch.id)
@@ -120,7 +120,7 @@ def test_applied_subtree_reparent_returns_every_affected_item(
     make_session: Callable[..., Session],
     harness: Any,
 ) -> None:
-    """W4: the moved root and its carried descendants, as they now stand."""
+    """The moved root and its carried descendants, as they now stand."""
     goal = make_item(project, ItemKind.GOAL)
     batch = make_item(project, ItemKind.BATCH, parent_id=goal.id)
     subtask = make_item(project, ItemKind.SUBTASK, parent_id=batch.id)

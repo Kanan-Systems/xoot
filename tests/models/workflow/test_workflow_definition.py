@@ -1,4 +1,4 @@
-"""E3 default workflow and T6 whole-definition validation."""
+"""The default workflow, and validation of a whole definition."""
 
 import pytest
 from pydantic import ValidationError

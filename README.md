@@ -24,6 +24,12 @@ xoot redact KEY FIELD [--yes]      # KEY: item, decision or session key, or a pr
 xoot db stats | vacuum
 ```
 
+A key prefix is 2-32 lowercase letters or digits, starting with a letter,
+with no dashes: every key splits on its first dash, so `ab-12` can only be
+item 12 of project `ab`. An alias may contain dashes (`my-app`, `a-b-c`) but
+must not look like an item, decision or session key (`xoot-12`, `xoot-d3`,
+`ab-s1`).
+
 `--project NAME` takes an alias or a key prefix; without it the project is
 the one whose path contains the working directory. `--db PATH` and `--json`
 work before or after the command; `--json` prints the same models the MCP

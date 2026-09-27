@@ -1,5 +1,5 @@
 """
-X4: item and decision create events store a body digest, not the body;
+Item and decision create events store a body digest, not the body;
 update events keep the changed fields, body included.
 """
 

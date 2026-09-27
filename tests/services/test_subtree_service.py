@@ -1,4 +1,4 @@
-"""F7: subtree drop and reparent, each a pure preview plus a re-validating apply."""
+"""Subtree drop and reparent, each a pure preview plus a re-validating apply."""
 
 from collections.abc import Callable
 

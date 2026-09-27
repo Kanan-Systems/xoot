@@ -1,5 +1,5 @@
 """
-T8: results go to stdout, errors and warnings to stderr. An error leaves
+Results go to stdout, errors and warnings to stderr. An error leaves
 stdout empty; a success leaves stderr empty unless it warns.
 """
 

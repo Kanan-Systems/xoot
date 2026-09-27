@@ -1,4 +1,4 @@
-"""T4: optimistic updates; the loser learns what changed and who changed it."""
+"""Optimistic updates; the loser learns what changed and who changed it."""
 
 from collections.abc import Callable
 from pathlib import Path

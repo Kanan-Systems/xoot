@@ -1,4 +1,4 @@
-"""Z5: decision_record can supersede an older decision of the same project."""
+"""decision_record can supersede an older decision of the same project."""
 
 from collections.abc import Callable
 from typing import Any

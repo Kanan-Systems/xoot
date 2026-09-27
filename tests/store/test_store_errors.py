@@ -1,5 +1,5 @@
 """
-X10/Y5: sqlite3 errors never escape a service or Store.open raw; they are
+sqlite3 errors never escape a service or Store.open raw; they are
 re-raised as XootErrors with the driver error chained as __cause__.
 """
 
@@ -80,7 +80,7 @@ def test_checkpoint_errors_are_translated(store: Store) -> None:
 
 
 def test_open_of_a_non_database_file_is_translated(db_path: Path) -> None:
-    """Y5: a private file that is not SQLite fails as StoreOpenError naming it."""
+    """A private file that is not SQLite fails as StoreOpenError naming it."""
     db_path.parent.mkdir(mode=0o700)
     fd = os.open(db_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:

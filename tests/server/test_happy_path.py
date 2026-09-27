@@ -1,4 +1,4 @@
-"""S4: every tool succeeds end to end on a project registered through the services."""
+"""Every tool succeeds end to end on a project registered through the services."""
 
 from collections.abc import Callable
 from typing import Any

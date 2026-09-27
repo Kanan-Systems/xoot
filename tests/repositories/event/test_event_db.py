@@ -1,5 +1,5 @@
 """
-D9: the event log is append-only in the repository and in the database; the
+The event log is append-only in the repository and in the database; the
 only rewrite either allows is a redaction of before/after.
 """
 

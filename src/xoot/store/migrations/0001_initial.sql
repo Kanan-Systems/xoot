@@ -39,6 +39,19 @@ CREATE TABLE project_alias (
         length(alias) BETWEEN 2 AND 32
         AND alias GLOB '[a-z]*'
         AND alias NOT GLOB '*[^a-z0-9-]*'
+        -- Not key-shaped (^[a-z][a-z0-9]*-[ds]?[0-9]+$): one dash, then a
+        -- number with an optional d or s, reads as an item, decision or
+        -- session key.
+        AND NOT (
+            instr(alias, '-') > 0
+            AND instr(substr(alias, instr(alias, '-') + 1), '-') = 0
+            AND (
+                substr(alias, instr(alias, '-') + 1) GLOB '[0-9]*'
+                OR substr(alias, instr(alias, '-') + 1) GLOB '[ds][0-9]*'
+            )
+            AND ltrim(substr(alias, instr(alias, '-') + 1), 'ds')
+                NOT GLOB '*[^0-9]*'
+        )
     ),
     project_id INTEGER NOT NULL REFERENCES project (id)
 ) STRICT;

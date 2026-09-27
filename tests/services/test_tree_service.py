@@ -1,4 +1,4 @@
-"""F13: the tree query is bounded by root, depth and item count."""
+"""The tree query is bounded by root, depth and item count."""
 
 from collections.abc import Callable
 

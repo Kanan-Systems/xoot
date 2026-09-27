@@ -64,7 +64,8 @@ def run_import(args: argparse.Namespace, store: Store, console: Console) -> int:
     Replace the project's workflow with a TOML file, after confirmation.
 
     The change is planned first, so a missing mapping is refused before the
-    prompt, and the prompt names the removed states and remap counts.
+    prompt, and the prompt names the removed states and remap counts. A file
+    identical to the active workflow prints "no changes" without asking.
 
     Args:
         - args (argparse.Namespace): the file, --project, --map and --yes.
@@ -86,13 +87,22 @@ def run_import(args: argparse.Namespace, store: Store, console: Console) -> int:
     definition = read_workflow_file(Path(absolute(args.file)))
     change = WorkflowChange(definition=definition, mapping=_mapping(args.map))
     plan = plan_workflow_change(store, project.id, change)
-    console.confirm(
-        [f"import a new workflow into project {project.key_prefix}", *plan_lines(plan)],
-        args.yes,
-    )
-    workflow = set_workflow(store, project.id, change, WRITE)
+    active = get_active_workflow(store, project.id)
+    workflow = active
+    if definition != active.definition:
+        console.confirm(
+            [
+                f"import a new workflow into project {project.key_prefix}",
+                *plan_lines(plan),
+            ],
+            args.yes,
+        )
+        workflow = set_workflow(store, project.id, change, WRITE)
     output = WorkflowImportOutput(
-        project=project.key_prefix, version=workflow.version, plan=plan
+        project=project.key_prefix,
+        version=workflow.version,
+        changed=workflow.id != active.id,
+        plan=plan,
     )
     console.result(output, render_import)
     return exit_codes.OK

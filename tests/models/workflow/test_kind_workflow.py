@@ -1,4 +1,4 @@
-"""T6 (model side): invalid kind workflows are rejected."""
+"""Model side: invalid kind workflows are rejected."""
 
 from typing import Any
 

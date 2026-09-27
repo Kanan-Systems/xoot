@@ -11,7 +11,8 @@ def render_tree(output: TreeOutput) -> str:
     Render tree nodes in pre-order, indented by depth.
 
     Each line shows the key, kind, state, category and title; unfiled
-    subtasks are marked.
+    subtasks are marked. The indented key, the kind and the state with its
+    category are padded to columns, so every title starts at one offset.
 
     Args:
         - output (TreeOutput): the tree.
@@ -19,13 +20,20 @@ def render_tree(output: TreeOutput) -> str:
     Returns:
         - text (str): the lines, or "(no items)".
     """
-    lines = []
-    for node in output.nodes:
-        item = node.item
-        category = item.category or "unknown"
-        unfiled = " [unfiled]" if node.unfiled else ""
-        lines.append(
-            f"{INDENT * node.depth}{item.key}  {item.kind}  {item.state} "
-            f"({category})  {clean(item.title)}{unfiled}"
+    if not output.nodes:
+        return "(no items)"
+    columns = [
+        (
+            f"{INDENT * node.depth}{node.item.key}",
+            f"{node.item.kind}",
+            f"{node.item.state} ({node.item.category or 'unknown'})",
         )
-    return "\n".join(lines) or "(no items)"
+        for node in output.nodes
+    ]
+    widths = [max(len(cells[i]) for cells in columns) for i in range(3)]
+    lines = []
+    for node, cells in zip(output.nodes, columns):
+        unfiled = " [unfiled]" if node.unfiled else ""
+        padded = "  ".join(cell.ljust(width) for cell, width in zip(cells, widths))
+        lines.append(f"{padded}  {clean(node.item.title)}{unfiled}")
+    return "\n".join(lines)

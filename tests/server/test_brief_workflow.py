@@ -1,4 +1,4 @@
-"""Z1: brief_get shows the active workflow, so clients use real state names."""
+"""brief_get shows the active workflow, so clients use real state names."""
 
 from typing import Any
 

@@ -1,4 +1,4 @@
-"""S6: tool errors are safe: fixed reasons, field locations, no SQL, no input values."""
+"""Tool errors are safe: fixed reasons, field locations, no SQL, no input values."""
 
 import re
 from collections.abc import Callable

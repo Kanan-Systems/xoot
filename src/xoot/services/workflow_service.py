@@ -99,7 +99,8 @@ def set_workflow(
     Items in a state the new definition removes move to the state the
     mapping names; items whose state leaves the backlogged category lose
     their session backlog. Each item change is its own event, recorded as
-    the system's with the caller's client and session.
+    the system's with the caller's client and session. A definition
+    identical to the active one changes nothing: no version, no events.
 
     Args:
         - store (Store): the database.
@@ -108,7 +109,8 @@ def set_workflow(
         - ctx (WriteContext): actor and optional session.
 
     Returns:
-        - workflow (Workflow): the new active version.
+        - workflow (Workflow): the new active version, or the unchanged
+          active one when the definition is identical.
 
     Raises:
         - InvalidIdError: project_id is not an int id.
@@ -120,7 +122,10 @@ def set_workflow(
     with store.write() as conn:
         project = require_project(conn, project_id)
         session = open_session_for(conn, project_id, ctx.session_id)
-        _check_mapping_keys(active_workflow(conn, project).definition, change)
+        active = active_workflow(conn, project)
+        _check_mapping_keys(active.definition, change)
+        if change.definition == active.definition:
+            return active
         remaps = _plan_remaps(conn, project_id, change)
         scope = WriteScope(conn, ctx)
         version = workflow_db.next_version(conn, project_id)

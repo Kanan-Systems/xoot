@@ -70,10 +70,19 @@ def _init(
         "path", nargs="?", metavar="PATH", help="directory (default: the working one)"
     )
     group = command.add_argument_group("project")
-    group.add_argument("--prefix", required=True, help="key prefix, e.g. xoot")
+    group.add_argument(
+        "--prefix",
+        required=True,
+        help="key prefix, e.g. xoot: 2-32 lowercase letters or digits, starting "
+        "with a letter; no dashes",
+    )
     group.add_argument("--name", help="display name (default: the prefix)")
     group.add_argument(
-        "--alias", action="append", default=[], help="an alias; may be repeated"
+        "--alias",
+        action="append",
+        default=[],
+        help="an alias; may be repeated; may contain dashes but must not look "
+        "like a key (xoot-12, xoot-d3, xoot-s4)",
     )
     command.set_defaults(handler=init.run_init)
 

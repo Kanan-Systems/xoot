@@ -1,4 +1,4 @@
-"""Z3: a subtree drop honors a requested dropped state, or uses the default."""
+"""A subtree drop honors a requested dropped state, or uses the default."""
 
 from collections.abc import Callable, Iterable
 

@@ -6,6 +6,7 @@ identical rules, and defines the single timestamp text format used in storage.
 """
 
 import posixpath
+import re
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
@@ -18,11 +19,16 @@ from pydantic import (
     StrictInt,
     StringConstraints,
 )
+from pydantic_core import PydanticCustomError
 
 TITLE_MAX = 200
 BODY_MAX = 32768
 PATH_MAX = 4096
 SQLITE_INT_MAX = 2**63 - 1
+# A prefix, a dash, an optional d or s and a number: an item, decision or
+# session key once lowercased. The schema's project_alias CHECK matches it.
+_KEY_SHAPED = re.compile(r"^[a-z][a-z0-9]*-[ds]?[0-9]+$")
+_KEY_PREFIX = re.compile(r"^[a-z][a-z0-9]{1,31}$")
 
 
 def reject_nul(value: str) -> str:
@@ -43,6 +49,53 @@ def reject_nul(value: str) -> str:
     """
     if "\x00" in value:
         raise ValueError("NUL characters are not allowed")
+    return value
+
+
+def check_key_prefix(value: str) -> str:
+    """
+    Accept a key prefix, or refuse it with the rule spelled out.
+
+    Args:
+        - value (str): the candidate prefix.
+
+    Returns:
+        - value (str): the same prefix, unchanged.
+
+    Raises:
+        - PydanticCustomError: the prefix breaks the rule.
+    """
+    if _KEY_PREFIX.fullmatch(value) is None:
+        raise PydanticCustomError(
+            "key_prefix",
+            "a key prefix is 2–32 lowercase letters or digits, starting with "
+            "a letter; no dashes",
+        )
+    return value
+
+
+def reject_key_shaped(value: str) -> str:
+    """
+    Reject an alias that looks like an item, decision or session key.
+
+    A key-shaped alias would read as a record key to anyone scanning a list
+    of names, even though resolution never confuses the two.
+
+    Args:
+        - value (str): a slug.
+
+    Returns:
+        - value (str): the same slug, unchanged.
+
+    Raises:
+        - PydanticCustomError: the slug is key-shaped, e.g. "xoot-12".
+    """
+    if _KEY_SHAPED.fullmatch(value):
+        raise PydanticCustomError(
+            "key_shaped_alias",
+            "an alias must not look like an item, decision or session key "
+            "(a prefix, a dash, then a number, such as xoot-12, xoot-d3 or ab-s1)",
+        )
     return value
 
 
@@ -152,9 +205,12 @@ Body = Annotated[
     str, StringConstraints(max_length=BODY_MAX), AfterValidator(reject_nul)
 ]
 Slug = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]{1,31}$")]
+# A new alias. Stored aliases stay Slug, so a row written before this rule
+# still reads back and can be removed.
+Alias = Annotated[Slug, AfterValidator(reject_key_shaped)]
 # No dash, unlike an alias: every key splits on its first dash into the
 # prefix and the rest, so "ab-12" can only ever be item 12 of project ab.
-KeyPrefix = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9]{1,31}$")]
+KeyPrefix = Annotated[str, AfterValidator(check_key_prefix)]
 StateName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_-]{0,31}$")]
 Sha256Hex = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 ToolName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z_]{0,63}$")]

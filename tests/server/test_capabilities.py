@@ -1,5 +1,5 @@
 """
-W6: prompts and resources are served empty.
+Prompts and resources are served empty.
 
 MCPServer always registers the prompts/list and resources/list handlers, and
 the SDK advertises a capability for every registered handler, so the server

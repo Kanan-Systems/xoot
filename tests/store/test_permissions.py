@@ -1,5 +1,5 @@
 """
-X7: every open lstat-s the data directory, the database and any WAL/SHM file,
+Every open lstat-s the data directory, the database and any WAL/SHM file,
 and refuses a symlink, a foreign owner or a group/other permission bit.
 """
 

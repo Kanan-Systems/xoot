@@ -1,5 +1,5 @@
 """
-A3: a redaction deletes every confirm token in its own transaction, used or
+A redaction deletes every confirm token in its own transaction, used or
 not, since a stored plan digest could confirm a guess at redacted text.
 """
 

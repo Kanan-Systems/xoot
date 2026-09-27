@@ -70,15 +70,16 @@ def build_brief(
     backlogged = by_category[Category.BACKLOGGED]
     pending = item_db.list_session_backlogged(conn, project.id, None)
     decisions = decision_db.list_recent(conn, project.id, None, RECENT_DECISIONS)
+    # One row past the cap tells whether the list was cut.
+    sessions = session_db.list_open(conn, project.id, LIST_MAX + 1)
     return BriefOutput(
         header=HEADER,
         project=project_entry(overview(conn, project)),
         resolved_by=resolved_by,
         db_path=str(db_path),
         counts={category: len(items) for category, items in by_category.items()},
-        open_sessions=[
-            session_summary(book, s) for s in session_db.list_open(conn, project.id)
-        ],
+        open_sessions=[session_summary(book, s) for s in sessions[:LIST_MAX]],
+        open_sessions_truncated=len(sessions) > LIST_MAX,
         active=_summaries(book, by_category[Category.ACTIVE]),
         awaiting_input=_summaries(book, by_category[Category.AWAITING_INPUT]),
         pending_session_backlog=_summaries(book, pending),

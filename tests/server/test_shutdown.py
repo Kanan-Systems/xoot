@@ -1,5 +1,5 @@
 """
-W7: SIGINT and SIGTERM stop the server within two seconds, without a traceback.
+SIGINT and SIGTERM stop the server within two seconds, without a traceback.
 
 Drives a raw subprocess: the signal has to reach the server process itself,
 which the SDK's stdio client does not expose.

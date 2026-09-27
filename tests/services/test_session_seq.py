@@ -1,8 +1,8 @@
 """
-X3: session order comes from the project's sequence counter, not the clock.
+Session order comes from the project's sequence counter, not the clock.
 
-The write clock is monkeypatched to step backwards; F9 must still retire the
-right backlogs and closing must still succeed.
+The write clock is monkeypatched to step backwards; closing must still retire
+the right stale backlogs and still succeed.
 """
 
 import sqlite3
@@ -61,7 +61,7 @@ def _start(store: Store, project: Project, user: Actor) -> Session:
 def test_clock_step_back_between_sessions(
     store: Store, project: Project, user: Actor, set_clock: SetClock
 ) -> None:
-    """(a) S2 starts at an earlier wall time than S1 closed; F9 still retires."""
+    """(a) S2 starts at an earlier wall time than S1 closed; S2's close retires S1's backlog."""
     set_clock(12, 0)
     first = _start(store, project, user)
     parked = capture(store, first.id, ItemDraft(title="parked"), user)
@@ -83,7 +83,7 @@ def test_clock_step_back_between_sessions(
 def test_clock_step_back_during_a_session(
     store: Store, project: Project, user: Actor, set_clock: SetClock
 ) -> None:
-    """(b) A session closed "before" it started still closes, and F9 works."""
+    """(b) A session closed "before" it started still closes, and its backlog is still retired."""
     set_clock(12, 0)
     first = _start(store, project, user)
     parked = capture(store, first.id, ItemDraft(title="parked"), user)

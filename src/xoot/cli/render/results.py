@@ -34,8 +34,12 @@ def render_import(output: WorkflowImportOutput) -> str:
         - output (WorkflowImportOutput): the import.
 
     Returns:
-        - text (str): the new version and what it changed.
+        - text (str): the new version and what it changed, or "no changes".
     """
+    if not output.changed:
+        return (
+            f"no changes: {output.project} workflow is still version {output.version}"
+        )
     return "\n".join(
         [f"{output.project} workflow is now version {output.version}"]
         + plan_lines(output.plan)

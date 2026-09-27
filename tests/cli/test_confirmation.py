@@ -1,5 +1,5 @@
 """
-T6: workflow import, redact, remove-alias and remove-path ask first. Without
+Workflow import, redact, remove-alias and remove-path ask first. Without
 a terminal and without --yes they refuse; any answer but y/yes aborts; both
 write nothing. The prompt names what changes, never redacted content.
 """
@@ -32,11 +32,11 @@ def _argv(case: str, toml: Path) -> list[str]:
 @pytest.mark.usefixtures("secret_item")
 @pytest.mark.parametrize("case", list(CONFIRMED))
 def test_no_terminal_without_yes_is_refused(
-    xoot: Any, row_counts: Any, default_toml: Path, case: str
+    xoot: Any, row_counts: Any, changed_toml: Path, case: str
 ) -> None:
     """Nobody can answer, so nothing is asked and nothing is written."""
     before = row_counts()
-    run = xoot(*_argv(case, default_toml))
+    run = xoot(*_argv(case, changed_toml))
     assert (run.code, run.out) == (1, "")
     assert run.err == (
         "error: ConfirmationError: stdin is not a terminal; pass --yes to confirm\n"
@@ -48,11 +48,11 @@ def test_no_terminal_without_yes_is_refused(
 @pytest.mark.parametrize("answer", ["n", "", "no", "yess"])
 @pytest.mark.parametrize("case", list(CONFIRMED))
 def test_anything_but_yes_aborts(
-    xoot: Any, row_counts: Any, default_toml: Path, case: str, answer: str
+    xoot: Any, row_counts: Any, changed_toml: Path, case: str, answer: str
 ) -> None:
     """The prompt shows the change on stderr; a non-yes answer writes nothing."""
     before = row_counts()
-    run = xoot(*_argv(case, default_toml), answer=answer)
+    run = xoot(*_argv(case, changed_toml), answer=answer)
     assert (run.code, run.out) == (1, "")
     assert PROMPTS[case] in run.err and "Proceed? [y/N] " in run.err
     assert run.err.endswith("error: ConfirmationError: aborted; nothing was written\n")
@@ -61,10 +61,10 @@ def test_anything_but_yes_aborts(
 
 @pytest.mark.usefixtures("secret_item")
 @pytest.mark.parametrize("case", list(CONFIRMED))
-def test_yes_applies(xoot: Any, row_counts: Any, default_toml: Path, case: str) -> None:
+def test_yes_applies(xoot: Any, row_counts: Any, changed_toml: Path, case: str) -> None:
     """--yes applies without a prompt; answering y at a terminal does too."""
     before = row_counts()
-    run = xoot(*_argv(case, default_toml), "--yes")
+    run = xoot(*_argv(case, changed_toml), "--yes")
     assert (run.code, run.err) == (0, "")
     assert row_counts() != before
 

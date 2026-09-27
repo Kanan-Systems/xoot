@@ -4,7 +4,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from xoot.models.fields import KeyPrefix, ProjectDir, Slug, Title
+from xoot.models.fields import Alias, KeyPrefix, ProjectDir, Title
 
 MAX_NAMES = 16
 
@@ -16,7 +16,7 @@ class ProjectRegistration(BaseModel):
 
     key_prefix: KeyPrefix
     name: Title
-    aliases: tuple[Slug, ...] = Field(default=(), max_length=MAX_NAMES)
+    aliases: tuple[Alias, ...] = Field(default=(), max_length=MAX_NAMES)
     paths: tuple[ProjectDir, ...] = Field(default=(), max_length=MAX_NAMES)
 
     @model_validator(mode="after")
