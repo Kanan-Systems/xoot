@@ -7,7 +7,7 @@ from xoot.models.fields import format_timestamp
 from xoot.models.project.project import Project
 
 _COLUMNS = (
-    "id, key_prefix, name, next_item_number, next_decision_number, "
+    "id, key_prefix, name, next_item_number, next_decision_number, next_seq, "
     "active_workflow_id, created_at"
 )
 
@@ -90,6 +90,25 @@ def set_active_workflow(
     return Project.model_validate(dict(row))
 
 
+def set_name(conn: sqlite3.Connection, project_id: int, name: str) -> Project:
+    """
+    Replace a project's name. Only a redaction renames a project.
+
+    Args:
+        - conn (sqlite3.Connection): connection inside a write transaction.
+        - project_id (int): project id.
+        - name (str): the new name.
+
+    Returns:
+        - project (Project): the stored row.
+    """
+    row = conn.execute(
+        f"UPDATE project SET name = ? WHERE id = ? RETURNING {_COLUMNS}",
+        (name, project_id),
+    ).fetchone()
+    return Project.model_validate(dict(row))
+
+
 def allocate_item_number(conn: sqlite3.Connection, project_id: int) -> int:
     """
     Take the next item number from the project counter.
@@ -127,6 +146,28 @@ def allocate_decision_number(conn: sqlite3.Connection, project_id: int) -> int:
         conn,
         "UPDATE project SET next_decision_number = next_decision_number + 1 "
         "WHERE id = ? RETURNING next_decision_number - 1",
+        project_id,
+    )
+
+
+def allocate_seq(conn: sqlite3.Connection, project_id: int) -> int:
+    """
+    Take the next value of the project's sequence counter.
+
+    Orders session starts and closes without trusting the clock. Must run
+    inside the write transaction that stores the value.
+
+    Args:
+        - conn (sqlite3.Connection): connection inside a write transaction.
+        - project_id (int): project id.
+
+    Returns:
+        - seq (int): the allocated sequence value.
+    """
+    return _allocate(
+        conn,
+        "UPDATE project SET next_seq = next_seq + 1 "
+        "WHERE id = ? RETURNING next_seq - 1",
         project_id,
     )
 

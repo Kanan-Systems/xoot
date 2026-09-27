@@ -18,6 +18,7 @@ from xoot.models.item.subtree_plan import SubtreePlan
 from xoot.models.workflow.category import TERMINAL_CATEGORIES, Category
 from xoot.repositories.item import item_db
 from xoot.services.conflicts import ensure_version
+from xoot.services.id_checks import check_id, check_optional_id
 from xoot.services.item_rules import check_parent
 from xoot.services.item_writer import apply_changes, plan_change
 from xoot.services.lookups import active_workflow, require_item, require_project
@@ -43,8 +44,10 @@ def preview_drop(store: Store, item_id: int) -> SubtreePlan:
           dropped state.
 
     Raises:
+        - InvalidIdError: item_id is not an int id.
         - NotFoundError: no such item.
     """
+    check_id("item_id", item_id)
     with store.read() as conn:
         return _plan_drop(conn, require_item(conn, item_id))
 
@@ -68,8 +71,11 @@ def apply_drop(
     Raises:
         - VersionConflictError: the root changed since expected_version.
         - SessionStateError: the session is closed.
+        - InvalidIdError: item_id or expected_version is not an int.
         - NotFoundError: no such item.
     """
+    check_id("item_id", item_id)
+    check_id("expected_version", expected_version)
     return _apply(store, item_id, expected_version, ctx, _plan_drop)
 
 
@@ -91,8 +97,11 @@ def preview_reparent(
     Raises:
         - HierarchyError: the new parent is not allowed for the root's kind.
         - CrossProjectError: the new parent is in another project.
+        - InvalidIdError: item_id or new_parent_id is not an int id.
         - NotFoundError: the item or the new parent does not exist.
     """
+    check_id("item_id", item_id)
+    check_optional_id("new_parent_id", new_parent_id)
     with store.read() as conn:
         return _plan_reparent(conn, require_item(conn, item_id), new_parent_id)
 
@@ -121,8 +130,12 @@ def apply_reparent(
         - VersionConflictError: the root changed since expected_version.
         - HierarchyError: the new parent is not allowed for the root's kind.
         - CrossProjectError: the new parent is in another project.
+        - InvalidIdError: an id or expected_version is not an int.
         - NotFoundError: the item or the new parent does not exist.
     """
+    check_id("item_id", item_id)
+    check_optional_id("new_parent_id", new_parent_id)
+    check_id("expected_version", expected_version)
     planner = partial(_plan_reparent, new_parent_id=new_parent_id)
     return _apply(store, item_id, expected_version, ctx, planner)
 

@@ -1,21 +1,24 @@
 """
 SQL access for the append-only event table.
 
-Deliberately exposes no update or delete; the schema's triggers refuse them
-as well.
+Deliberately exposes no general update and no delete. The one rewrite is
+redact(), which touches only before, after and redacted_at; the schema's
+triggers refuse anything else.
 """
 
 import json
 import sqlite3
+from datetime import datetime
 from typing import Any
 
 from xoot.models.event.entity_type import EntityType
 from xoot.models.event.event import Event
 from xoot.models.event.new_event import NewEvent
+from xoot.models.fields import format_timestamp
 
 _COLUMNS = (
     "id, project_id, entity_type, entity_id, action, actor_kind, client, "
-    "session_id, before, after, created_at"
+    "session_id, before, after, created_at, redacted_at"
 )
 
 
@@ -42,6 +45,30 @@ def append(conn: sqlite3.Connection, new: NewEvent) -> Event:
         params,
     ).fetchone()
     return _to_event(row)
+
+
+def redact(
+    conn: sqlite3.Connection,
+    event_id: int,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    redacted_at: datetime,
+) -> None:
+    """
+    Replace an event's before/after with scrubbed copies and stamp it.
+
+    Args:
+        - conn (sqlite3.Connection): connection inside the redaction's write
+          transaction.
+        - event_id (int): the event to rewrite.
+        - before (dict[str, Any] | None): the scrubbed before values.
+        - after (dict[str, Any] | None): the scrubbed after values.
+        - redacted_at (datetime): the redaction time.
+    """
+    conn.execute(
+        "UPDATE event SET before = ?, after = ?, redacted_at = ? WHERE id = ?",
+        (_to_json(before), _to_json(after), format_timestamp(redacted_at), event_id),
+    )
 
 
 def list_for_entity(

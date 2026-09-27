@@ -1,9 +1,10 @@
 """
 Opening SQLite connections with the pragmas every service relies on.
 
-Foreign keys enforce same-project references and WAL lets readers run
-beside the single writer. If either does not take effect the connection is
-refused rather than used unsafely.
+Foreign keys enforce same-project references, WAL lets readers run beside
+the single writer, and secure_delete zeroes freed bytes so replaced or
+redacted text does not linger on disk. If any of these does not take effect
+the connection is refused rather than used unsafely.
 """
 
 import sqlite3
@@ -20,6 +21,7 @@ PRAGMAS = (
     "PRAGMA journal_mode = WAL",
     f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}",
     "PRAGMA synchronous = NORMAL",
+    "PRAGMA secure_delete = ON",
 )
 
 
@@ -37,7 +39,8 @@ def connect(path: Path) -> sqlite3.Connection:
         - connection (sqlite3.Connection): a verified connection.
 
     Raises:
-        - PragmaCheckError: foreign_keys or journal_mode did not take effect.
+        - PragmaCheckError: foreign_keys, journal_mode or secure_delete did
+          not take effect.
         - sqlite3.Error: the database could not be opened.
     """
     conn = sqlite3.connect(path, autocommit=True, timeout=BUSY_TIMEOUT_MS / 1000)
@@ -61,13 +64,16 @@ def verify_pragmas(conn: sqlite3.Connection) -> None:
         - conn (sqlite3.Connection): the connection to check.
 
     Raises:
-        - PragmaCheckError: foreign_keys is not 1 or journal_mode is not wal.
+        - PragmaCheckError: foreign_keys is not 1, journal_mode is not wal,
+          or secure_delete is not 1 (FAST, 2, skips some freed pages).
     """
     foreign_keys = conn.execute("PRAGMA foreign_keys").fetchone()[0]
     journal_mode = str(conn.execute("PRAGMA journal_mode").fetchone()[0]).lower()
-    if foreign_keys != 1 or journal_mode != "wal":
+    secure_delete = conn.execute("PRAGMA secure_delete").fetchone()[0]
+    if foreign_keys != 1 or journal_mode != "wal" or secure_delete != 1:
         raise PragmaCheckError(
-            f"unsafe connection: foreign_keys={foreign_keys}, journal_mode={journal_mode}"
+            f"unsafe connection: foreign_keys={foreign_keys}, "
+            f"journal_mode={journal_mode}, secure_delete={secure_delete}"
         )
 
 

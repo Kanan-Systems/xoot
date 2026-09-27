@@ -3,7 +3,8 @@ Forward-only schema migrations tracked by PRAGMA user_version.
 
 Migrations are numbered .sql files shipped in store/migrations. Each runs in
 its own BEGIN IMMEDIATE transaction and re-reads user_version under the lock,
-so several processes opening a fresh database at once all succeed.
+so several processes opening a fresh database at once all succeed. SQLite
+failures surface as MigrationFailedError, never as raw sqlite3 errors.
 """
 
 import re
@@ -12,6 +13,7 @@ from collections.abc import Iterable, Sequence
 from importlib import resources
 
 from xoot.exceptions.migration_error import MigrationError
+from xoot.exceptions.migration_failed_error import MigrationFailedError
 from xoot.exceptions.schema_version_error import SchemaVersionError
 from xoot.store.transaction import write_transaction
 
@@ -77,8 +79,14 @@ def user_version(conn: sqlite3.Connection) -> int:
 
     Returns:
         - version (int): the current user_version.
+
+    Raises:
+        - MigrationFailedError: SQLite could not read it.
     """
-    return int(conn.execute("PRAGMA user_version").fetchone()[0])
+    try:
+        return int(conn.execute("PRAGMA user_version").fetchone()[0])
+    except sqlite3.Error as exc:
+        raise MigrationFailedError(None, exc) from exc
 
 
 def migrate(
@@ -98,23 +106,31 @@ def migrate(
     Raises:
         - SchemaVersionError: the database is newer than the known set.
         - MigrationError: the shipped files are malformed.
+        - MigrationFailedError: SQLite failed; the failing migration was
+          rolled back.
     """
     ordered = load_migrations() if migrations is None else list(migrations)
     known = ordered[-1][0] if ordered else 0
-    _refuse_newer(user_version(conn), known)
-    for version, sql in ordered:
-        if version <= user_version(conn):
-            continue
-        with write_transaction(conn):
-            # Another process may have migrated while we waited for the lock.
-            current = user_version(conn)
-            _refuse_newer(current, known)
-            if current >= version:
+    applying: int | None = None
+    try:
+        _refuse_newer(user_version(conn), known)
+        for version, sql in ordered:
+            if version <= user_version(conn):
                 continue
-            conn.executescript(sql)
-            # PRAGMA takes no bound parameters; version is an int we parsed.
-            conn.execute(f"PRAGMA user_version = {int(version)}")
-    return user_version(conn)
+            applying = version
+            with write_transaction(conn):
+                # Another process may have migrated while we waited for the lock.
+                current = user_version(conn)
+                _refuse_newer(current, known)
+                if current >= version:
+                    continue
+                conn.executescript(sql)
+                # PRAGMA takes no bound parameters; version is an int we parsed.
+                conn.execute(f"PRAGMA user_version = {int(version)}")
+            applying = None
+        return user_version(conn)
+    except sqlite3.Error as exc:
+        raise MigrationFailedError(applying, exc) from exc
 
 
 def _refuse_newer(found: int, known: int) -> None:

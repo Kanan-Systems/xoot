@@ -14,6 +14,7 @@ from xoot.models.item.tree_result import TreeResult
 from xoot.models.workflow.category import TERMINAL_CATEGORIES
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.item import item_db
+from xoot.services.id_checks import check_id
 from xoot.services.lookups import active_workflow, require_item, require_project
 from xoot.store.store import Store
 
@@ -34,9 +35,11 @@ def tree(store: Store, project_id: int, query: TreeQuery) -> TreeResult:
         - result (TreeResult): nodes in pre-order and a truncated flag.
 
     Raises:
+        - InvalidIdError: project_id is not an int id.
         - NotFoundError: the project or the root does not exist.
         - CrossProjectError: the root is in another project.
     """
+    check_id("project_id", project_id)
     with store.read() as conn:
         definition = active_workflow(conn, require_project(conn, project_id)).definition
         if query.root_id is not None:

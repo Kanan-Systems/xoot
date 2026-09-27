@@ -6,7 +6,8 @@ from xoot.models.session.new_session import NewSession
 from xoot.models.session.session import Session
 
 _COLUMNS = (
-    "id, project_id, number, client, title, status, summary, started_at, closed_at"
+    "id, project_id, number, client, title, status, summary, start_seq, "
+    "close_seq, started_at, closed_at"
 )
 
 
@@ -22,8 +23,9 @@ def insert(conn: sqlite3.Connection, new: NewSession) -> Session:
         - session (Session): the stored row.
     """
     row = conn.execute(
-        "INSERT INTO session (project_id, number, client, title, status, started_at) "
-        "VALUES (:project_id, :number, :client, :title, 'open', :started_at) "
+        "INSERT INTO session (project_id, number, client, title, status, "
+        "start_seq, started_at) VALUES (:project_id, :number, :client, :title, "
+        "'open', :start_seq, :started_at) "
         f"RETURNING {_COLUMNS}",
         new.model_dump(mode="json"),
     ).fetchone()
@@ -69,14 +71,16 @@ def next_number(conn: sqlite3.Connection, project_id: int) -> int:
 
 def update(conn: sqlite3.Connection, session: Session) -> None:
     """
-    Write a session's mutable columns (status, summary, closed_at).
+    Write a session's mutable columns: status, summary, close_seq and
+    closed_at, plus title, which only a redaction changes.
 
     Args:
         - conn (sqlite3.Connection): connection inside a write transaction.
         - session (Session): the new row values.
     """
     conn.execute(
-        "UPDATE session SET status = :status, summary = :summary, "
-        "closed_at = :closed_at WHERE id = :id",
+        "UPDATE session SET title = :title, status = :status, "
+        "summary = :summary, close_seq = :close_seq, closed_at = :closed_at "
+        "WHERE id = :id",
         session.model_dump(mode="json"),
     )

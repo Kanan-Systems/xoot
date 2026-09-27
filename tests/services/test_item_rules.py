@@ -1,6 +1,5 @@
 """T5: the goal > batch > subtask hierarchy, in the service and the database."""
 
-import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -8,6 +7,7 @@ import pytest
 
 from xoot.exceptions.cross_project_error import CrossProjectError
 from xoot.exceptions.hierarchy_error import HierarchyError
+from xoot.exceptions.integrity_violation_error import IntegrityViolationError
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.new_item import NewItem
@@ -111,7 +111,7 @@ def test_database_rejects_wrong_parent_kind(
     parent_kind: ItemKind,
 ) -> None:
     """The schema's parent foreign key enforces the hierarchy by itself."""
-    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+    with pytest.raises(IntegrityViolationError, match="FOREIGN KEY"):
         with store.write() as conn:
             item_db.insert(conn, _raw_item(project, kind, parents[parent_kind].id))
 
@@ -120,6 +120,6 @@ def test_database_rejects_cross_project_parent(
     store: Store, other_project: Project, parents: dict[ItemKind, Item]
 ) -> None:
     """The composite foreign key keeps parents inside the child's project."""
-    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+    with pytest.raises(IntegrityViolationError, match="FOREIGN KEY"):
         with store.write() as conn:
             item_db.insert(conn, _raw_item(other_project, BATCH, parents[GOAL].id))

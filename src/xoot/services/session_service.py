@@ -13,7 +13,9 @@ from xoot.models.session.session import Session
 from xoot.models.session.session_start import SessionStart
 from xoot.models.session.session_start_result import SessionStartResult
 from xoot.repositories.item import item_db
+from xoot.repositories.project import project_db
 from xoot.repositories.session import session_db, session_item_ref_db
+from xoot.services.id_checks import check_id
 from xoot.services.lookups import require_item, require_project, require_session
 from xoot.services.session_links import link_items
 from xoot.services.write_scope import WriteScope
@@ -41,9 +43,11 @@ def start_session(
           items from closed sessions, and focus warnings.
 
     Raises:
+        - InvalidIdError: project_id is not an int id.
         - NotFoundError: the project or a focus item does not exist.
         - CrossProjectError: a focus item is in another project.
     """
+    check_id("project_id", project_id)
     with store.write() as conn:
         require_project(conn, project_id)
         focus = [
@@ -67,6 +71,7 @@ def start_session(
                 number=session_db.next_number(conn, project_id),
                 client=actor.client,
                 title=request.title,
+                start_seq=project_db.allocate_seq(conn, project_id),
                 started_at=scope.now,
             ),
         )
@@ -91,7 +96,9 @@ def get_session(store: Store, session_id: int) -> Session:
         - session (Session): the session.
 
     Raises:
+        - InvalidIdError: session_id is not an int id.
         - NotFoundError: no such session.
     """
+    check_id("session_id", session_id)
     with store.read() as conn:
         return require_session(conn, session_id)

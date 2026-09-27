@@ -15,6 +15,7 @@ from pydantic import (
     BaseModel,
     Field,
     PlainSerializer,
+    StrictInt,
     StringConstraints,
 )
 
@@ -118,7 +119,9 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-Id = Annotated[int, Field(ge=1, le=SQLITE_INT_MAX)]
+# Strict: every id, number and version is a real int. Lax mode would accept
+# "5" or True, and SQLite would then match them to a stored row.
+Id = Annotated[StrictInt, Field(ge=1, le=SQLITE_INT_MAX)]
 Title = Annotated[
     str,
     StringConstraints(min_length=1, max_length=TITLE_MAX),

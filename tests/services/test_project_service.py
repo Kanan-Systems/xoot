@@ -1,11 +1,11 @@
 """Project registration, aliases and paths."""
 
-import sqlite3
 from collections.abc import Callable
 
 import pytest
 
 from xoot.exceptions.duplicate_error import DuplicateError
+from xoot.exceptions.integrity_violation_error import IntegrityViolationError
 from xoot.exceptions.not_found_error import NotFoundError
 from xoot.models.event.actor import Actor
 from xoot.models.event.write_context import WriteContext
@@ -76,7 +76,7 @@ def test_active_workflow_must_be_the_projects_own(
     store: Store, project: Project, other_project: Project
 ) -> None:
     """D10: the composite foreign key refuses another project's workflow."""
-    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+    with pytest.raises(IntegrityViolationError, match="FOREIGN KEY"):
         with store.write() as conn:
             conn.execute(
                 "UPDATE project SET active_workflow_id = ? WHERE id = ?",

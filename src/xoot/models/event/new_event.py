@@ -12,7 +12,7 @@ from xoot.models.session.client import Client
 
 
 class NewEvent(BaseModel):
-    """Every event column except the id the database assigns."""
+    """Every event column except the id and the redaction stamp."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

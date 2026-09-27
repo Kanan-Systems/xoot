@@ -18,6 +18,7 @@ from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.item import item_db
 from xoot.repositories.project import project_db
 from xoot.repositories.workflow import workflow_db
+from xoot.services.id_checks import check_id
 from xoot.services.item_writer import write_item
 from xoot.services.lookups import active_workflow, require_project
 from xoot.services.session_links import link_items, open_session_for
@@ -37,8 +38,10 @@ def get_active_workflow(store: Store, project_id: int) -> Workflow:
         - workflow (Workflow): the active version.
 
     Raises:
+        - InvalidIdError: project_id is not an int id.
         - NotFoundError: no such project.
     """
+    check_id("project_id", project_id)
     with store.read() as conn:
         return active_workflow(conn, require_project(conn, project_id))
 
@@ -51,7 +54,8 @@ def set_workflow(
 
     Items in a state the new definition removes move to the state the
     mapping names; items whose state leaves the backlogged category lose
-    their session backlog. Each item change is its own event.
+    their session backlog. Each item change is its own event, recorded as
+    the system's with the caller's client and session.
 
     Args:
         - store (Store): the database.
@@ -63,10 +67,12 @@ def set_workflow(
         - workflow (Workflow): the new active version.
 
     Raises:
+        - InvalidIdError: project_id is not an int id.
         - WorkflowMappingError: an in-use removed state is not mapped, or
           the mapping names a state the change does not remove.
         - NotFoundError: no such project.
     """
+    check_id("project_id", project_id)
     with store.write() as conn:
         project = require_project(conn, project_id)
         session = open_session_for(conn, project_id, ctx.session_id)
@@ -81,8 +87,9 @@ def set_workflow(
         scope.updated(
             project, project_db.set_active_workflow(conn, project_id, workflow.id)
         )
+        system = scope.as_system()
         for item, fields in remaps:
-            write_item(scope, item, fields)
+            write_item(system, item, fields)
         link_items(scope, session, [item.id for item, _ in remaps])
         return workflow
 

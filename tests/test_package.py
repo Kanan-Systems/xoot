@@ -1,6 +1,7 @@
-"""The package exposes the version declared in pyproject.toml."""
+"""The package exposes its version and ships its typing marker."""
 
 import tomllib
+from importlib import resources
 from importlib.metadata import version
 from pathlib import Path
 
@@ -20,3 +21,10 @@ def test_version_comes_from_metadata() -> None:
         "version"
     ]
     assert xoot.__version__ == version("xoot") == declared
+
+
+def test_typing_marker_is_shipped() -> None:
+    """PEP 561: py.typed marks xoot's annotations as usable by type checkers."""
+    marker = resources.files("xoot").joinpath("py.typed")
+    assert marker.is_file()
+    assert marker.read_bytes() == b""

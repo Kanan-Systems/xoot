@@ -15,4 +15,5 @@ class NewSession(BaseModel):
     number: Id
     client: Client
     title: Title
+    start_seq: Id
     started_at: Timestamp

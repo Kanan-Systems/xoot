@@ -18,6 +18,7 @@ from xoot.models.event.write_context import WriteContext
 from xoot.repositories.decision import decision_db
 from xoot.repositories.project import project_db
 from xoot.services.conflicts import ensure_version
+from xoot.services.id_checks import check_id
 from xoot.services.lookups import require_decision, require_item, require_project
 from xoot.services.session_links import open_session_for
 from xoot.services.write_scope import WriteScope
@@ -43,8 +44,10 @@ def create_decision(
         - DecisionError: the superseded decision is already superseded.
         - CrossProjectError: a reference is in another project.
         - SessionStateError: the session is closed.
+        - InvalidIdError: project_id is not an int id.
         - NotFoundError: the project or a reference does not exist.
     """
+    check_id("project_id", project_id)
     with store.write() as conn:
         project = require_project(conn, project_id)
         open_session_for(conn, project_id, ctx.session_id)
@@ -101,8 +104,11 @@ def update_decision(
         - VersionConflictError: the decision changed since expected_version.
         - DecisionError: the status of a superseded decision cannot change.
         - SessionStateError: the session is closed.
+        - InvalidIdError: decision_id or expected_version is not an int.
         - NotFoundError: no such decision.
     """
+    check_id("decision_id", decision_id)
+    check_id("expected_version", expected_version)
     with store.write() as conn:
         decision = require_decision(conn, decision_id)
         ensure_version(conn, EntityType.DECISION, decision, expected_version)
@@ -125,8 +131,10 @@ def get_decision(store: Store, decision_id: int) -> Decision:
         - decision (Decision): the decision.
 
     Raises:
+        - InvalidIdError: decision_id is not an int id.
         - NotFoundError: no such decision.
     """
+    check_id("decision_id", decision_id)
     with store.read() as conn:
         return require_decision(conn, decision_id)
 

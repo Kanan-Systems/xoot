@@ -17,6 +17,7 @@ from xoot.models.project.project_registration import ProjectRegistration
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.project import project_alias_db, project_db, project_path_db
 from xoot.repositories.workflow import workflow_db
+from xoot.services.id_checks import check_id
 from xoot.services.lookups import require_project
 from xoot.services.session_links import open_session_for
 from xoot.services.write_scope import WriteScope
@@ -81,10 +82,12 @@ def add_alias(store: Store, project_id: int, alias: str, ctx: WriteContext) -> N
         - ctx (WriteContext): actor and optional session.
 
     Raises:
+        - InvalidIdError: project_id is not an int id.
         - pydantic.ValidationError: the alias is not a valid slug.
         - DuplicateError: the alias is taken.
         - NotFoundError: no such project.
     """
+    check_id("project_id", project_id)
     alias = _SLUG.validate_python(alias)
     with store.write() as conn:
         project = require_project(conn, project_id)
@@ -108,10 +111,12 @@ def add_path(store: Store, project_id: int, path: str, ctx: WriteContext) -> str
         - path (str): the normalized path that was stored.
 
     Raises:
+        - InvalidIdError: project_id is not an int id.
         - pydantic.ValidationError: the path is not absolute or too long.
         - DuplicateError: the path is taken.
         - NotFoundError: no such project.
     """
+    check_id("project_id", project_id)
     path = _PATH.validate_python(path)
     with store.write() as conn:
         project = require_project(conn, project_id)
@@ -134,8 +139,10 @@ def get_project(store: Store, project_id: int) -> Project:
         - project (Project): the project.
 
     Raises:
+        - InvalidIdError: project_id is not an int id.
         - NotFoundError: no such project.
     """
+    check_id("project_id", project_id)
     with store.read() as conn:
         return require_project(conn, project_id)
 

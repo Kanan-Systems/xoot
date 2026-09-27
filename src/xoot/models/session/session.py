@@ -11,6 +11,8 @@ class Session(BaseModel):
     """
     One working session in a project. Writes made within it link the items
     they touch; closing it requires a disposition for each open linked item.
+    start_seq and close_seq come from the project's sequence counter and
+    decide ordering; started_at and closed_at are for display only.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -22,5 +24,7 @@ class Session(BaseModel):
     title: Title
     status: SessionStatus
     summary: Body | None
+    start_seq: Id
+    close_seq: Id | None
     started_at: Timestamp
     closed_at: Timestamp | None

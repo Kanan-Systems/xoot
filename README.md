@@ -11,8 +11,9 @@ MCP server or entry point yet, so nothing is usable end to end.
 
 State lives in a local SQLite database at `$XDG_DATA_HOME/xoot/xoot.db`
 (default `~/.local/share/xoot/xoot.db`). A newly created directory gets mode
-0700 and a new database file 0600; existing ones are left as they are. The
-database never lives in this repository.
+0700 and a new database file 0600. On every open, a data directory, database
+or WAL/SHM file that is a symlink, has another owner or any group/other bit
+set is refused, never chmod-ed. The database never lives in this repository.
 
 ## Development
 

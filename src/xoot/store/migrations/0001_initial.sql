@@ -2,8 +2,10 @@
 --
 -- Runs inside the migrator's BEGIN IMMEDIATE transaction, so it must not
 -- issue BEGIN/COMMIT itself. Every table is STRICT. Timestamps are UTC
--- ISO-8601 TEXT in one fixed width (YYYY-MM-DDTHH:MM:SS.ffffffZ) so that
--- text comparison is chronological. JSON is TEXT checked with json_valid.
+-- ISO-8601 TEXT in one fixed width (YYYY-MM-DDTHH:MM:SS.ffffffZ). They are
+-- for display only: the wall clock can step backwards, so ordering that
+-- rules depend on comes from the per-project sequence counter (next_seq).
+-- JSON is TEXT checked with json_valid.
 --
 -- Same-project references use composite foreign keys onto (project_id, id)
 -- so a row can never point at another project's row, even if a service
@@ -20,6 +22,8 @@ CREATE TABLE project (
     next_item_number INTEGER NOT NULL DEFAULT 1 CHECK (next_item_number >= 1),
     next_decision_number INTEGER NOT NULL DEFAULT 1
         CHECK (next_decision_number >= 1),
+    -- Orders session starts and closes within the project.
+    next_seq INTEGER NOT NULL DEFAULT 1 CHECK (next_seq >= 1),
     -- NULL only between the project insert and its first workflow insert,
     -- both inside the registration transaction.
     active_workflow_id INTEGER,
@@ -83,6 +87,9 @@ CREATE TABLE session (
     title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
     status TEXT NOT NULL CHECK (status IN ('open', 'closed')),
     summary TEXT CHECK (summary IS NULL OR length(summary) <= 32768),
+    -- Taken from project.next_seq when the session starts and closes.
+    start_seq INTEGER NOT NULL CHECK (start_seq >= 1),
+    close_seq INTEGER,
     started_at TEXT NOT NULL CHECK (
         started_at GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-6][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'
     ),
@@ -91,7 +98,8 @@ CREATE TABLE session (
         OR closed_at GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-6][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'
     ),
     CHECK ((status = 'open') = (closed_at IS NULL)),
-    CHECK (closed_at IS NULL OR closed_at >= started_at),
+    CHECK ((status = 'open') = (close_seq IS NULL)),
+    CHECK (close_seq IS NULL OR close_seq > start_seq),
     UNIQUE (project_id, number),
     UNIQUE (project_id, id)
 ) STRICT;
@@ -192,10 +200,12 @@ CREATE TABLE event (
     action TEXT NOT NULL CHECK (
         action IN (
             'create', 'update', 'link', 'dispose', 'close',
-            'add_alias', 'add_path'
+            'add_alias', 'add_path', 'redact'
         )
     ),
-    actor_kind TEXT NOT NULL CHECK (actor_kind IN ('claude', 'user')),
+    -- 'system' marks changes xoot makes on its own (stale backlog moves,
+    -- workflow remaps) as a consequence of another actor's write.
+    actor_kind TEXT NOT NULL CHECK (actor_kind IN ('claude', 'user', 'system')),
     client TEXT NOT NULL CHECK (client IN ('chat', 'code', 'paste', 'cli')),
     session_id INTEGER,
     before TEXT CHECK (
@@ -207,6 +217,11 @@ CREATE TABLE event (
     created_at TEXT NOT NULL CHECK (
         created_at GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-6][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'
     ),
+    -- Set when a redaction rewrote before/after.
+    redacted_at TEXT CHECK (
+        redacted_at IS NULL
+        OR redacted_at GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-6][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'
+    ),
     CHECK (before IS NOT NULL OR after IS NOT NULL),
     FOREIGN KEY (project_id, session_id) REFERENCES session (project_id, id)
 ) STRICT;
@@ -214,11 +229,22 @@ CREATE TABLE event (
 CREATE INDEX event_entity ON event (entity_type, entity_id, id);
 CREATE INDEX event_project ON event (project_id, id);
 
--- The event log is append-only. The repository exposes no update or delete;
--- these triggers make the database refuse them too.
-CREATE TRIGGER event_no_update BEFORE UPDATE ON event
+-- The event log is append-only. The one permitted UPDATE is a redaction:
+-- it may rewrite before and after, must stamp redacted_at, and leaves every
+-- other column as recorded. DELETE is always refused.
+CREATE TRIGGER event_redaction_only BEFORE UPDATE ON event
+WHEN NEW.redacted_at IS NULL
+    OR NEW.id IS NOT OLD.id
+    OR NEW.project_id IS NOT OLD.project_id
+    OR NEW.entity_type IS NOT OLD.entity_type
+    OR NEW.entity_id IS NOT OLD.entity_id
+    OR NEW.action IS NOT OLD.action
+    OR NEW.actor_kind IS NOT OLD.actor_kind
+    OR NEW.client IS NOT OLD.client
+    OR NEW.session_id IS NOT OLD.session_id
+    OR NEW.created_at IS NOT OLD.created_at
 BEGIN
-    SELECT RAISE(ABORT, 'event is append-only');
+    SELECT RAISE(ABORT, 'event is append-only; only a redaction may rewrite it');
 END;
 
 CREATE TRIGGER event_no_delete BEFORE DELETE ON event

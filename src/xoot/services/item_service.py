@@ -22,6 +22,7 @@ from xoot.models.workflow.kind_workflow import KindWorkflow
 from xoot.repositories.item import item_db
 from xoot.repositories.project import project_db
 from xoot.services.conflicts import ensure_version
+from xoot.services.id_checks import check_id
 from xoot.services.item_rules import (
     check_parent,
     check_references,
@@ -60,8 +61,10 @@ def create_item(
         - StateError: the state or session backlog breaks the workflow.
         - CrossProjectError: a reference is in another project.
         - SessionStateError: the session is closed.
+        - InvalidIdError: project_id is not an int id.
         - NotFoundError: the project or a reference does not exist.
     """
+    check_id("project_id", project_id)
     with store.write() as conn:
         project = require_project(conn, project_id)
         session = open_session_for(conn, project_id, ctx.session_id)
@@ -95,9 +98,11 @@ def capture(store: Store, session_id: int, draft: ItemDraft, actor: Actor) -> It
         - item (Item): the new unfiled subtask.
 
     Raises:
+        - InvalidIdError: session_id is not an int id.
         - SessionStateError: the session is closed.
         - NotFoundError: no such session.
     """
+    check_id("session_id", session_id)
     with store.write() as conn:
         project_id = require_session(conn, session_id).project_id
         session = open_session_for(conn, project_id, session_id)
@@ -144,8 +149,11 @@ def update_item(
         - StateError: unknown state, disallowed transition or backlog rule.
         - CrossProjectError: a reference is in another project.
         - SessionStateError: the session is closed.
+        - InvalidIdError: item_id or expected_version is not an int.
         - NotFoundError: the item or a reference does not exist.
     """
+    check_id("item_id", item_id)
+    check_id("expected_version", expected_version)
     with store.write() as conn:
         item = require_item(conn, item_id)
         ensure_version(conn, EntityType.ITEM, item, expected_version)
@@ -177,8 +185,10 @@ def get_item(store: Store, item_id: int) -> Item:
         - item (Item): the item.
 
     Raises:
+        - InvalidIdError: item_id is not an int id.
         - NotFoundError: no such item.
     """
+    check_id("item_id", item_id)
     with store.read() as conn:
         return require_item(conn, item_id)
 

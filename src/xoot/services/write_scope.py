@@ -3,6 +3,7 @@ The per-transaction write scope: connection, actor context, one timestamp,
 and the event recording every mutation must do in the same transaction.
 """
 
+import hashlib
 import sqlite3
 from datetime import UTC, datetime
 from typing import Any, Self
@@ -10,6 +11,8 @@ from typing import Any, Self
 from pydantic import BaseModel
 
 from xoot.models.decision.decision import Decision
+from xoot.models.event.actor import Actor
+from xoot.models.event.actor_kind import ActorKind
 from xoot.models.event.entity_type import EntityType
 from xoot.models.event.event_action import EventAction
 from xoot.models.event.new_event import NewEvent
@@ -92,14 +95,38 @@ class WriteScope:
         ctx = self.ctx.model_copy(update={"session_id": session_id})
         return type(self)(self.conn, ctx, self.now)
 
+    def as_system(self) -> Self:
+        """
+        Return the same scope attributed to xoot itself.
+
+        For changes xoot derives from the current write (stale backlog
+        moves, workflow remaps). The client, session and time stay those of
+        the write that triggered them.
+
+        Returns:
+            - scope (WriteScope): a scope with a system actor.
+        """
+        actor = Actor(kind=ActorKind.SYSTEM, client=self.ctx.actor.client)
+        ctx = self.ctx.model_copy(update={"actor": actor})
+        return type(self)(self.conn, ctx, self.now)
+
     def created(self, entity: Tracked) -> None:
         """
         Record the creation of an entity with its full snapshot.
 
+        Item and decision bodies are recorded as body_sha256 and body_len
+        (characters), not as text: a body can be 32 KB, and the row already
+        holds it.
+
         Args:
             - entity (Tracked): the stored row.
         """
-        self._append(entity, EventAction.CREATE, None, entity.model_dump(mode="json"))
+        snapshot = entity.model_dump(mode="json")
+        if isinstance(entity, (Item, Decision)):
+            body = snapshot.pop("body")
+            snapshot["body_sha256"] = hashlib.sha256(body.encode()).hexdigest()
+            snapshot["body_len"] = len(body)
+        self._append(entity, EventAction.CREATE, None, snapshot)
 
     def updated(
         self, before: Tracked, after: Tracked, action: EventAction = EventAction.UPDATE

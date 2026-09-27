@@ -2,10 +2,8 @@
 
 import sqlite3
 from collections.abc import Sequence
-from datetime import datetime
 
 from xoot.exceptions.stale_write_error import StaleWriteError
-from xoot.models.fields import format_timestamp
 from xoot.models.item.item import Item
 from xoot.models.item.new_item import NewItem
 
@@ -168,7 +166,7 @@ def list_descendants(conn: sqlite3.Connection, root_id: int) -> list[Item]:
 
 
 def list_session_backlogged(
-    conn: sqlite3.Connection, project_id: int, closed_before: datetime | None
+    conn: sqlite3.Connection, project_id: int, closed_before_seq: int | None
 ) -> list[Item]:
     """
     List items held in the backlog of a closed session of the project.
@@ -176,18 +174,17 @@ def list_session_backlogged(
     Args:
         - conn (sqlite3.Connection): open connection.
         - project_id (int): project id.
-        - closed_before (datetime | None): only sessions closed strictly
-          before this time; any closed session when None.
+        - closed_before_seq (int | None): only sessions whose close_seq is
+          strictly below this sequence value; any closed session when None.
 
     Returns:
         - items (list[Item]): matching items, by number.
     """
-    cutoff = None if closed_before is None else format_timestamp(closed_before)
     rows = conn.execute(
         f"SELECT {_ITEM_COLUMNS} FROM item "
         "JOIN session ON session.id = item.backlog_session_id "
         "WHERE item.project_id = ? AND session.status = 'closed' "
-        "AND (? IS NULL OR session.closed_at < ?) ORDER BY item.number",
-        (project_id, cutoff, cutoff),
+        "AND (? IS NULL OR session.close_seq < ?) ORDER BY item.number",
+        (project_id, closed_before_seq, closed_before_seq),
     ).fetchall()
     return [Item.model_validate(dict(row)) for row in rows]

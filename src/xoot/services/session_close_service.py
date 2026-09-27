@@ -4,6 +4,8 @@ Closing a session, as a pure preview plus an apply.
 Every linked item that is not done or dropped needs a disposition. Closing
 also retires stale session backlogs: items still parked in the backlog of a
 session that closed before this one started move to the project backlog.
+"Before" is decided by the project's sequence counter, never by the clock,
+and those moves are recorded as the system's, not the closer's.
 """
 
 import sqlite3
@@ -25,7 +27,9 @@ from xoot.models.workflow.category import TERMINAL_CATEGORIES, Category
 from xoot.models.workflow.kind_workflow import KindWorkflow
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.item import item_db
+from xoot.repositories.project import project_db
 from xoot.repositories.session import session_db, session_item_ref_db
+from xoot.services.id_checks import check_id
 from xoot.services.item_writer import apply_changes, plan_change
 from xoot.services.lookups import (
     active_workflow,
@@ -55,10 +59,12 @@ def preview_close(
         - plan (SessionClosePlan): what closing would change.
 
     Raises:
+        - InvalidIdError: session_id is not an int id.
         - SessionStateError: the session is already closed.
         - DispositionError: a disposition names an item that needs none.
         - NotFoundError: no such session.
     """
+    check_id("session_id", session_id)
     with store.read() as conn:
         return _plan(conn, require_session(conn, session_id), request)
 
@@ -80,11 +86,13 @@ def close_session(
         - session (Session): the closed session.
 
     Raises:
+        - InvalidIdError: session_id is not an int id.
         - DispositionError: a disposition is missing or names an item that
           needs none.
         - SessionStateError: the session is already closed.
         - NotFoundError: no such session.
     """
+    check_id("session_id", session_id)
     with store.write() as conn:
         session = require_session(conn, session_id)
         plan = _plan(conn, session, request)
@@ -101,11 +109,13 @@ def close_session(
                 {"item_id": item_id, "disposition": disposition.value},
                 {"item_id": item_id, "disposition": None},
             )
-        apply_changes(scope, [*plan.changes, *plan.auto_backlog])
+        apply_changes(scope, plan.changes)
+        apply_changes(scope.as_system(), plan.auto_backlog)
         closed = session.model_copy(
             update={
                 "status": SessionStatus.CLOSED,
                 "summary": request.summary,
+                "close_seq": project_db.allocate_seq(conn, session.project_id),
                 "closed_at": scope.now,
             }
         )
@@ -185,7 +195,7 @@ def _stale_backlog(
     """Items parked by sessions closed before this one started go to the project backlog."""
     changes = []
     for item in item_db.list_session_backlogged(
-        conn, session.project_id, session.started_at
+        conn, session.project_id, session.start_seq
     ):
         if item.id in rehomed:
             continue
