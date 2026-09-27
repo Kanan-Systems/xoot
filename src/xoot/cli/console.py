@@ -14,6 +14,9 @@ from xoot.cli.render.text import clean
 from xoot.exceptions.confirmation_error import ConfirmationError
 
 YES = frozenset({"y", "yes"})
+# The controlling terminal, whatever stdin is: paste reads its payload from
+# stdin, so the answer has to come from somewhere else.
+TTY_PATH = "/dev/tty"
 
 
 class Console:
@@ -86,4 +89,33 @@ class Console:
             print(clean(line), file=sys.stderr)
         print("Proceed? [y/N] ", end="", file=sys.stderr, flush=True)
         if sys.stdin.readline().strip().lower() not in YES:
+            raise ConfirmationError("aborted; nothing was written")
+
+    @staticmethod
+    def confirm_on_terminal(yes: bool) -> None:
+        """
+        Require a yes typed on the controlling terminal, unless --yes was given.
+
+        The caller has already printed what will change. Without a
+        controlling terminal nobody can answer, so the command is refused.
+
+        Args:
+            - yes (bool): --yes was given.
+
+        Raises:
+            - ConfirmationError: there is no controlling terminal, or the
+              answer was not y/yes.
+        """
+        if yes:
+            return
+        try:
+            terminal = open(TTY_PATH, encoding="utf-8", errors="replace")
+        except OSError as exc:
+            raise ConfirmationError(
+                "no controlling terminal to confirm on; pass --yes to confirm"
+            ) from exc
+        with terminal:
+            print("Apply? [y/N] ", end="", file=sys.stderr, flush=True)
+            answer = terminal.readline()
+        if answer.strip().lower() not in YES:
             raise ConfirmationError("aborted; nothing was written")

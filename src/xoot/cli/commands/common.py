@@ -8,7 +8,7 @@ from pydantic import validate_call
 from xoot.models.event.actor import Actor
 from xoot.models.event.actor_kind import ActorKind
 from xoot.models.event.write_context import WriteContext
-from xoot.models.fields import ProjectDir
+from xoot.models.fields import Alias, ProjectDir
 from xoot.models.project.project import Project
 from xoot.models.session.client import Client
 from xoot.server.schemas.literals import ResolvedBy
@@ -86,3 +86,25 @@ def project_dir(path: ProjectDir) -> str:
           is "/" once normalized.
     """
     return path
+
+
+@validate_call
+def alias_arg(alias: Alias) -> str:
+    """
+    Validate a command's alias argument as a new alias.
+
+    Validating here rather than inside the service labels a refusal "alias"
+    in the error line, the name the user knows the argument by.
+
+    Args:
+        - alias (Alias): the alias; pass it by keyword, so a refusal is
+          located at "alias".
+
+    Returns:
+        - alias (str): the same alias.
+
+    Raises:
+        - pydantic.ValidationError: the alias is not a slug, or looks like
+          a key.
+    """
+    return alias

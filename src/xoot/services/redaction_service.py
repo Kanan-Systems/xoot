@@ -41,6 +41,7 @@ from xoot.services.lookups import (
 )
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
+from xoot.utils.utils import session_key
 
 type Redactable = Item | Decision | Session | Project
 
@@ -96,7 +97,7 @@ def redact_field(
         scope = WriteScope(conn, WriteContext(actor=actor))
         row = _load(scope, entity_type, entity_id)
         if not getattr(row, target.value):
-            raise RedactionError(f"{entity_type} {entity_id} has no {target} to redact")
+            raise RedactionError(f"{_public_key(scope, row)} has no {target} to redact")
         redacted = _store_redacted(scope, row, target)
         event_ids = _redact_events(scope, entity_type, entity_id, target)
         before, after = _redact_record(row, target)
@@ -147,6 +148,16 @@ def _load(scope: WriteScope, entity_type: EntityType, entity_id: int) -> Redacta
     if entity_type is EntityType.SESSION:
         return require_session(scope.conn, entity_id)
     return require_project(scope.conn, entity_id)
+
+
+def _public_key(scope: WriteScope, row: Redactable) -> str:
+    """The key a user knows the row by; the row id is internal."""
+    if isinstance(row, Project):
+        return row.key_prefix
+    if isinstance(row, Session):
+        prefix = require_project(scope.conn, row.project_id).key_prefix
+        return session_key(prefix, row.number)
+    return row.key
 
 
 def _store_redacted(

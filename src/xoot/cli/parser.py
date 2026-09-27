@@ -8,7 +8,7 @@ overrides the top-level default and an absent one leaves it alone.
 
 import argparse
 
-from xoot.cli.commands import brief, db, init, project, redact, workflow
+from xoot.cli.commands import brief, db, init, paste, project, redact, workflow
 from xoot.models.event.redactable_field import RedactableField
 from xoot.models.item.tree_query import MAX_DEPTH
 
@@ -38,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     _views(commands, common)
     _workflow(commands, common)
     _redact(commands, common)
+    _paste(commands, common)
     _db(commands, common)
     return parser
 
@@ -186,6 +187,35 @@ def _redact(
     )
     _confirm(command)
     command.set_defaults(handler=redact.run_redact)
+
+
+def _paste(
+    commands: argparse._SubParsersAction, common: argparse.ArgumentParser
+) -> None:
+    group = commands.add_parser(
+        "paste", help="apply an xoot block from a chat reply, or print its brief"
+    )
+    actions = group.add_subparsers(dest="action", required=True, metavar="ACTION")
+    brief_command = actions.add_parser(
+        "brief", parents=[common], help="print the markdown brief to paste into a chat"
+    )
+    _select(brief_command)
+    brief_command.set_defaults(handler=paste.run_brief)
+    applied = actions.add_parser(
+        "apply", parents=[common], help="preview, confirm and apply one xoot block"
+    )
+    applied.add_argument(
+        "source",
+        metavar="SOURCE",
+        help='a file or pipe holding the reply, or "-" for stdin; at most 256 KiB',
+    )
+    group_confirm = applied.add_argument_group("confirmation")
+    group_confirm.add_argument(
+        "--yes",
+        action="store_true",
+        help="apply without asking on the terminal; the plan is still printed",
+    )
+    applied.set_defaults(handler=paste.run_apply)
 
 
 def _db(commands: argparse._SubParsersAction, common: argparse.ArgumentParser) -> None:

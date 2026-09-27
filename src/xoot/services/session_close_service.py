@@ -78,6 +78,31 @@ def preview_close(
         return _plan(conn, require_session(conn, session_id), request)
 
 
+def plan_close_in(
+    conn: sqlite3.Connection, session_id: int, request: SessionClose
+) -> SessionClosePlan:
+    """
+    Plan closing a session inside the caller's transaction; writes nothing.
+
+    Lets a caller that closes within a larger transaction see the plan,
+    auto-backlog moves included, before close_session_in writes it.
+
+    Args:
+        - conn (sqlite3.Connection): a connection inside a transaction.
+        - session_id (int): session id.
+        - request (SessionClose): summary and dispositions so far.
+
+    Returns:
+        - plan (SessionClosePlan): what closing would change.
+
+    Raises:
+        - SessionStateError: the session is already closed.
+        - DispositionError: a disposition names an item that needs none.
+        - NotFoundError: no such session.
+    """
+    return _plan(conn, require_session(conn, session_id), request)
+
+
 def close_session(
     store: Store,
     session_id: int,

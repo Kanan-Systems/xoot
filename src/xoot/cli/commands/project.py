@@ -3,7 +3,13 @@
 import argparse
 
 from xoot.cli import exit_codes
-from xoot.cli.commands.common import WRITE, absolute, project_dir, project_of
+from xoot.cli.commands.common import (
+    WRITE,
+    absolute,
+    alias_arg,
+    project_dir,
+    project_of,
+)
 from xoot.cli.console import Console
 from xoot.cli.render.projects import render_project, render_project_list
 from xoot.exceptions.not_found_error import NotFoundError
@@ -68,7 +74,8 @@ def run_add_alias(args: argparse.Namespace, store: Store, console: Console) -> i
         - DuplicateError: the alias already names a project.
     """
     project, _ = project_of(args, store)
-    project_service.add_alias(store, project.id, args.alias, WRITE)
+    alias = alias_arg(alias=args.alias)
+    project_service.add_alias(store, project.id, alias, WRITE)
     return _show(store, project.id, console)
 
 

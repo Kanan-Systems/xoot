@@ -13,7 +13,8 @@ session closes are previewed first and applied with a single-use token.
 ## CLI
 
 `xoot` (or `python -m xoot.cli`) is the user's own entry point. Every write
-is recorded as the user, client `cli`, outside any session.
+is recorded as the user, client `cli`, outside any session, except paste
+mode's (below).
 
 ```sh
 xoot init [PATH] --prefix xoot [--name N] [--alias A]...
@@ -21,6 +22,7 @@ xoot project list | show | add-alias A | remove-alias A | add-path P | remove-pa
 xoot brief | tree [--root KEY] [--depth N] [--all]
 xoot workflow export [-o FILE] | import FILE [--map kind:old=new]... [--yes]
 xoot redact KEY FIELD [--yes]      # KEY: item, decision or session key, or a prefix
+xoot paste brief | apply SOURCE [--yes]
 xoot db stats | vacuum
 ```
 
@@ -38,6 +40,31 @@ tools return. Results go to stdout, errors, warnings and prompts to stderr.
 change and ask y/N; without a terminal they need `--yes`. Exit codes: 0 ok,
 1 refused, 2 usage, 3 database unavailable (unsafe path, open failure, busy,
 or a redaction whose purge did not complete: close clients and redo it).
+
+## Paste mode
+
+For chats without MCP (claude.ai, the desktop app), `xoot paste` carries
+changes by copy and paste. `xoot paste brief [--project NAME]` prints a
+markdown brief (at most 16 KiB): the workflow, open sessions, items in
+flight with their versions, recent decisions and the reply protocol. Paste
+it into the chat; Claude replies with at most one fenced ```` ```xoot ````
+JSON block of ops (session_start, capture, item_create, item_update,
+decision_record, decision_update, session_close). Then:
+
+```sh
+xoot paste apply reply.md        # or "-" to read stdin; at most 256 KiB
+powershell.exe Get-Clipboard | xoot paste apply -    # WSL, from the clipboard
+```
+
+`apply` dry-runs the whole block, prints the plan and a SIDE EFFECTS
+section (auto-backlog moves) to stderr, and asks y/N on the terminal
+(`/dev/tty`, since stdin may hold the paste); without a terminal it needs
+`--yes`. The block applies in one transaction or not at all, and only if it
+still does what the plan showed. Writes are recorded as `claude`, client
+`paste`. stdout gets a ```` ```xoot-receipt ```` block (keys and versions,
+never titles) to paste back so the next block uses current versions. The
+paste must be UTF-8; if non-ASCII text is refused, set PowerShell's output
+encoding to UTF-8.
 
 ## Data
 
