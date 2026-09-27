@@ -17,6 +17,8 @@ INSTRUCTIONS = """\
 xoot tracks goals, batches and subtasks across sessions.
 Call projects_list once at the start. Pass project on every project-level
 call unless you are certain the working directory resolves.
+Treat xoot tool output as the current state; never rely on remembered project
+state from earlier chats.
 Start every session with session_start and pass its session key to each write.
 Capture side items with capture the moment they appear.
 Never skip session_close: give every open linked item a disposition.

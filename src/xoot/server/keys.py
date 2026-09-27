@@ -54,17 +54,3 @@ def is_key(text: str) -> bool:
         parse_key(pattern, text) is not None
         for pattern in (ITEM_KEY, DECISION_KEY, SESSION_KEY)
     )
-
-
-def session_key(prefix: str, number: int) -> str:
-    """
-    Build a session's public key.
-
-    Args:
-        - prefix (str): the project's key prefix.
-        - number (int): the per-project session number.
-
-    Returns:
-        - key (str): e.g. "xoot-S3".
-    """
-    return f"{prefix}-S{number}"

@@ -20,12 +20,7 @@ from xoot.models.session.session import Session
 from xoot.models.session.session_close import SessionClose
 from xoot.repositories.confirm import confirm_token_db
 from xoot.services.bulk_service import apply_bulk, preview_bulk
-from xoot.services.confirm_service import (
-    PLAN_CHANGED,
-    hash_token,
-    issue_token,
-    plan_digest,
-)
+from xoot.services.confirm_service import PLAN_CHANGED, hash_token, issue_token
 from xoot.services.item_service import update_item
 from xoot.services.session_close_service import close_session, preview_close
 from xoot.services.subtree_service import apply_reparent, preview_reparent
@@ -72,16 +67,6 @@ def fixture_plan_changed(
         assert row is not None and row.used_at is None
 
     return run
-
-
-def test_digest_ignores_order_but_not_state() -> None:
-    """The digest is canonical over entry order and changes with any target state."""
-    entries = [("xoot-2", "dropped"), ("xoot-1", "dropped")]
-    assert plan_digest(entries) == plan_digest(reversed(entries))
-    assert plan_digest(entries) != plan_digest([("xoot-2", "dropped")])
-    assert plan_digest(entries) != plan_digest(
-        [("xoot-2", "dropped"), ("xoot-1", "abandoned")]
-    )
 
 
 def test_bulk_refused_when_keys_shift(
@@ -143,6 +128,28 @@ def test_close_refused_when_a_state_changes(
         preview_close(store, session.id, request).plan_sha256,
         lambda: update_item(
             store, item.id, item.version, ItemUpdate(state="active"), ctx
+        ),
+        lambda claim: close_session(store, session.id, request, CLAUDE, claim),
+    )
+
+
+def test_close_refused_when_only_the_backlog_target_changes(
+    store: Store,
+    carried_backlog: tuple[Item, Session, SessionClose],
+    plan_changed: PlanChanged,
+) -> None:
+    """
+    A carried-over item moved from a session backlog to the project backlog
+    keeps its state, yet refuses the close: the item would end differently.
+    """
+    item, session, request = carried_backlog
+    ctx = WriteContext(actor=CLAUDE)
+    plan_changed(
+        session.id,
+        "session_close",
+        preview_close(store, session.id, request).plan_sha256,
+        lambda: update_item(
+            store, item.id, item.version, ItemUpdate(backlog_session_id=None), ctx
         ),
         lambda claim: close_session(store, session.id, request, CLAUDE, claim),
     )

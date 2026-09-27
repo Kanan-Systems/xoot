@@ -14,6 +14,7 @@ from functools import partial
 from xoot.exceptions.state_error import StateError
 from xoot.models.confirm.confirm_token import ConfirmToken
 from xoot.models.confirm.confirmation import Confirmation
+from xoot.models.confirm.plan_entry import PlanEntry
 from xoot.models.event.entity_type import EntityType
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
@@ -27,6 +28,7 @@ from xoot.services.id_checks import check_id, check_optional_id
 from xoot.services.item_rules import check_parent
 from xoot.services.item_writer import apply_changes, plan_change
 from xoot.services.lookups import active_workflow, require_item, require_project
+from xoot.services.plan_entries import item_entry
 from xoot.services.session_links import link_items, open_session_for
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
@@ -222,7 +224,7 @@ def _plan_drop(
     ):
         raise StateError(f"state {state!r} is not a dropped state")
     changes: list[ItemChange] = []
-    entries: list[tuple[str, str]] = []
+    entries: list[PlanEntry] = []
     for item in [root, *item_db.list_descendants(conn, root.id)]:
         workflow = definition.for_kind(item.kind)
         if workflow.category_of(item.state) in TERMINAL_CATEGORIES:
@@ -232,10 +234,11 @@ def _plan_drop(
             if state is not None and workflow.category_of(state) is Category.DROPPED
             else workflow.default_state(Category.DROPPED)
         )
-        change = plan_change(item, {"state": target, "backlog_session_id": None})
+        fields = {"state": target, "backlog_session_id": None}
+        change = plan_change(item, fields)
         if change is not None:
             changes.append(change)
-            entries.append((item.key, target))
+            entries.append(item_entry(conn, item, fields))
     return SubtreePlan(
         root_id=root.id,
         changes=tuple(changes),
@@ -248,13 +251,17 @@ def _plan_reparent(
     conn: sqlite3.Connection, root: Item, new_parent_id: int | None
 ) -> SubtreePlan:
     check_parent(conn, root.project_id, root.kind, new_parent_id)
-    change = plan_change(root, {"parent_id": new_parent_id})
+    fields = {"parent_id": new_parent_id}
+    change = plan_change(root, fields)
     descendants = item_db.list_descendants(conn, root.id)
-    # A move keeps every state, so the digest pins which items move.
-    moved = [root, *descendants]
+    # Descendants keep their own rows, but the digest still pins which move.
+    entries = [
+        item_entry(conn, root, fields),
+        *(item_entry(conn, item, {}) for item in descendants),
+    ]
     return SubtreePlan(
         root_id=root.id,
         changes=() if change is None else (change,),
         carried_item_ids=tuple(item.id for item in descendants),
-        plan_sha256=plan_digest((item.key, item.state) for item in moved),
+        plan_sha256=plan_digest(entries),
     )

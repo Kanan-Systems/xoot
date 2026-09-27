@@ -10,8 +10,8 @@ class BulkPlan(BaseModel):
     """
     Every item the bulk create would insert, in insert order. Keys are
     planned from the project's counter; the apply reports the keys actually
-    assigned. plan_sha256 digests the planned keys and their initial
-    states.
+    assigned. plan_sha256 digests the post-apply entry of every planned
+    item.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")

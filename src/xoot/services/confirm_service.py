@@ -19,6 +19,7 @@ from xoot.exceptions.session_state_error import SessionStateError
 from xoot.models.confirm.confirm_token import ConfirmToken
 from xoot.models.confirm.confirmation import Confirmation
 from xoot.models.confirm.new_confirm_token import NewConfirmToken
+from xoot.models.confirm.plan_entry import PlanEntry
 from xoot.models.session.session_status import SessionStatus
 from xoot.repositories.confirm import confirm_token_db
 from xoot.services.id_checks import check_id
@@ -47,18 +48,21 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def plan_digest(entries: Iterable[tuple[str, str]]) -> str:
+def plan_digest(entries: Iterable[PlanEntry]) -> str:
     """
-    Digest a plan as the sorted list of affected keys and target states.
+    Digest a plan as the post-apply entry of every item it touches.
+
+    Two plans that would leave any affected item different in any column
+    the apply writes digest differently. Entry order does not matter.
 
     Args:
-        - entries (Iterable[tuple[str, str]]): (item key, state after the
-          plan) for every item the plan touches.
+        - entries (Iterable[PlanEntry]): one entry per affected item.
 
     Returns:
         - digest (str): lowercase hex SHA-256.
     """
-    return canonical_sha256(sorted([key, state] for key, state in entries))
+    rows = [entry.model_dump(mode="json") for entry in entries]
+    return canonical_sha256(sorted(rows, key=canonical_sha256))
 
 
 # One parameter per bound value, plus the clock override tests use.

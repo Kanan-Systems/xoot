@@ -15,7 +15,6 @@ from xoot.models.item.item_change import ItemChange
 from xoot.models.session.session import Session
 from xoot.server.errors import PUBLIC_NAMES
 from xoot.server.key_book import KeyBook
-from xoot.server.keys import session_key
 from xoot.server.schemas.change_entry import ChangeEntry
 from xoot.server.schemas.decision_detail import DecisionDetail
 from xoot.server.schemas.decision_summary import DecisionSummary
@@ -23,6 +22,7 @@ from xoot.server.schemas.event_entry import EventEntry
 from xoot.server.schemas.item_detail import ItemDetail
 from xoot.server.schemas.item_summary import ItemSummary
 from xoot.server.schemas.session_summary import SessionSummary
+from xoot.utils.utils import session_key
 
 _INTERNAL = frozenset({"id", "project_id", "number"})
 _BODY = frozenset({"body", "body_sha256", "body_len"})

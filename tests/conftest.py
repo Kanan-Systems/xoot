@@ -20,7 +20,9 @@ from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
 from xoot.models.project.project_registration import ProjectRegistration
 from xoot.models.session.client import Client
+from xoot.models.session.disposition import Disposition
 from xoot.models.session.session import Session
+from xoot.models.session.session_close import SessionClose
 from xoot.models.session.session_start import SessionStart
 from xoot.repositories.event import event_db
 from xoot.services.item_service import create_item
@@ -113,6 +115,25 @@ def fixture_make_session(store: Store, user: Actor) -> Callable[..., Session]:
         return start_session(store, project.id, request, user).session
 
     return make
+
+
+@pytest.fixture(name="carried_backlog")
+def fixture_carried_backlog(
+    project: Project,
+    make_item: Callable[..., Item],
+    make_session: Callable[..., Session],
+) -> tuple[Item, Session, SessionClose]:
+    """
+    A subtask parked in one open session's backlog, linked to a second
+    session, and a close request for the second that carries it over.
+    """
+    other = make_session(project)
+    item = make_item(
+        project, ItemKind.SUBTASK, state="backlogged", backlog_session_id=other.id
+    )
+    session = make_session(project, item.id)
+    request = SessionClose(dispositions={item.id: Disposition.CARRY_OVER})
+    return item, session, request
 
 
 @pytest.fixture(name="event_kinds")

@@ -44,6 +44,7 @@ from xoot.services.lookups import (
     require_project,
     require_session,
 )
+from xoot.services.plan_entries import item_entry
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
 
@@ -184,7 +185,9 @@ def _plan(
         dispositions=dict(request.dispositions),
         changes=tuple(changes),
         auto_backlog=auto_backlog,
-        plan_sha256=_digest(conn, required, changes, auto_backlog),
+        plan_sha256=_digest(
+            conn, required, changes, auto_backlog, request.dispositions
+        ),
         warnings=_warnings(conn, definition, required, request, changes),
     )
 
@@ -194,13 +197,17 @@ def _digest(
     required: list[Item],
     changes: list[ItemChange],
     auto_backlog: tuple[ItemChange, ...],
+    dispositions: dict[int, Disposition],
 ) -> str:
-    """Every required item and auto-backlog move, with the state it ends in."""
-    closing = {c.item_id: c.after["state"] for c in changes if "state" in c.after}
-    entries = [(item.key, closing.get(item.id, item.state)) for item in required]
-    # Auto-backlog moves keep the state; only the backlog changes.
-    entries.extend((c.key, require_item(conn, c.item_id).state) for c in auto_backlog)
-    return plan_digest(entries)
+    """Every required and auto-backlogged item as the close leaves it."""
+    fields: dict[int, dict[str, Any]] = {item.id: {} for item in required}
+    # Same order as the apply: dispositions first, then the system's moves.
+    for change in (*changes, *auto_backlog):
+        fields.setdefault(change.item_id, {}).update(change.after)
+    return plan_digest(
+        item_entry(conn, require_item(conn, item_id), after, dispositions.get(item_id))
+        for item_id, after in fields.items()
+    )
 
 
 def _warnings(

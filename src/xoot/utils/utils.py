@@ -3,6 +3,8 @@ Helpers used by more than one module.
 
 canonical_sha256 is the one way xoot hashes structured data, so the argument
 digest and the plan digest of a two-phase call can never drift apart.
+session_key lives here because sessions, unlike items and decisions, store
+no key, and both the services and the server need to build one.
 """
 
 import hashlib
@@ -27,3 +29,17 @@ def canonical_sha256(value: Any) -> str:
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
     return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def session_key(prefix: str, number: int) -> str:
+    """
+    Build a session's public key.
+
+    Args:
+        - prefix (str): the project's key prefix.
+        - number (int): the per-project session number.
+
+    Returns:
+        - key (str): e.g. "xoot-S3".
+    """
+    return f"{prefix}-S{number}"

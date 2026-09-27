@@ -15,8 +15,8 @@ class SessionClosePlan(BaseModel):
     any are missing). changes come from dispositions; auto_backlog moves
     stale session-backlog items to the project backlog. warnings flag items
     left live under a backlogged or dropped parent; they never block.
-    plan_sha256 digests every required and auto-backlogged key with the
-    state it ends in.
+    plan_sha256 digests every required and auto-backlogged item as the
+    close leaves it, disposition included.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")

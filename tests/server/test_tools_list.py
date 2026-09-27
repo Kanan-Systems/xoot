@@ -109,7 +109,7 @@ def test_project_level_tools_state_how_resolution_works(harness: Any) -> None:
 
 
 def test_instructions_state_resolution_and_auto_backlog_rules(harness: Any) -> None:
-    """W1, W3: projects_list first, project on every call, auto-backlog agreement."""
+    """W1, W3: project resolution, auto-backlog agreement, output over memory."""
     tools, instructions = _listing(harness)
     flat = _flat(instructions)
     assert (
@@ -118,5 +118,9 @@ def test_instructions_state_resolution_and_auto_backlog_rules(harness: Any) -> N
         "resolves." in flat
     )
     assert CONFIRM_AUTO_BACKLOG in flat
+    assert (
+        "Treat xoot tool output as the current state; never rely on remembered "
+        "project state from earlier chats." in flat
+    )
     (close,) = [tool for tool in tools if tool.name == "session_close"]
     assert CONFIRM_AUTO_BACKLOG in _flat(close.description)

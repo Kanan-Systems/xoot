@@ -11,6 +11,7 @@ import sqlite3
 
 from xoot.exceptions.session_state_error import SessionStateError
 from xoot.models.confirm.confirmation import Confirmation
+from xoot.models.confirm.plan_entry import PlanEntry
 from xoot.models.event.actor import Actor
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.bulk_create import BulkCreate
@@ -31,6 +32,7 @@ from xoot.services.lookups import (
     require_project,
     require_session,
 )
+from xoot.services.plan_entries import body_digest
 from xoot.services.session_links import link_items
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
@@ -125,6 +127,7 @@ def _plan(conn: sqlite3.Connection, session: Session, request: BulkCreate) -> Bu
     project = require_project(conn, session.project_id)
     definition = active_workflow(conn, project).definition
     planned: list[PlannedItem] = []
+    entries: list[PlanEntry] = []
     for node, parent in request.walk():
         if parent is None:
             check_parent(conn, project.id, node.kind, node.parent_id)
@@ -137,16 +140,26 @@ def _plan(conn: sqlite3.Connection, session: Session, request: BulkCreate) -> Bu
             check_child_kind(planned[parent].kind, node.kind)
             parent_key = planned[parent].key
         number = project.next_item_number + len(planned)
-        planned.append(
-            PlannedItem(
-                key=f"{project.key_prefix}-{number}",
-                kind=node.kind,
-                title=node.title,
+        item = PlannedItem(
+            key=f"{project.key_prefix}-{number}",
+            kind=node.kind,
+            title=node.title,
+            parent_key=parent_key,
+        )
+        planned.append(item)
+        # A new item starts with no backlog session and no awaited decision.
+        entries.append(
+            PlanEntry(
+                key=item.key,
+                kind=item.kind,
+                title=item.title,
+                body_sha256=body_digest(node.body),
+                state=definition.for_kind(item.kind).default_state(Category.OPEN),
                 parent_key=parent_key,
+                backlog_session_key=None,
+                awaiting_decision_key=None,
             )
         )
-    digest = plan_digest(
-        (p.key, definition.for_kind(p.kind).default_state(Category.OPEN))
-        for p in planned
+    return BulkPlan(
+        session_id=session.id, items=tuple(planned), plan_sha256=plan_digest(entries)
     )
-    return BulkPlan(session_id=session.id, items=tuple(planned), plan_sha256=digest)

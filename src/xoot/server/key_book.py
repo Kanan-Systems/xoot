@@ -8,8 +8,8 @@ from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.decision import decision_db
 from xoot.repositories.item import item_db
 from xoot.repositories.session import session_db
-from xoot.server.keys import session_key
 from xoot.services.lookups import active_workflow, require_project
+from xoot.utils.utils import session_key
 
 
 class KeyBook:

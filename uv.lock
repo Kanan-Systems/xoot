@@ -1016,6 +1016,7 @@ name = "xoot"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "mcp" },
     { name = "pydantic" },
 ]
@@ -1031,6 +1032,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4.15.1,<5" },
     { name = "mcp", specifier = ">=2.2,<3" },
     { name = "pydantic", specifier = ">=2.13.5,<3" },
 ]
