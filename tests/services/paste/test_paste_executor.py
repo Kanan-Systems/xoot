@@ -63,7 +63,7 @@ FULL_BLOCK = [
     {
         "op": "session_close",
         "summary": "planned",
-        # capture takes no ref, so its item is named by the key it will get.
+        # A literal key names the captured item as well as a ref would.
         "dispositions": {
             "$g": "carry_over",
             "$b": "project_backlog",

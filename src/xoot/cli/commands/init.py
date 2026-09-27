@@ -6,6 +6,7 @@ from xoot.cli import exit_codes
 from xoot.cli.commands.common import (
     USER,
     absolute,
+    alias_arg,
     project_dir,
     working_directory,
 )
@@ -31,7 +32,8 @@ def run_init(args: argparse.Namespace, store: Store, console: Console) -> int:
 
     Raises:
         - pydantic.ValidationError: the prefix, name, an alias or the path
-          is invalid (the path may not be "/").
+          is invalid (the path may not be "/"); a bad alias is located at
+          "alias", the first one found.
         - DuplicateError: the prefix or an alias already names a project,
           or the path is taken.
     """
@@ -41,7 +43,7 @@ def run_init(args: argparse.Namespace, store: Store, console: Console) -> int:
     registration = ProjectRegistration(
         key_prefix=args.prefix,
         name=args.prefix if args.name is None else args.name,
-        aliases=tuple(args.alias),
+        aliases=tuple(alias_arg(alias=alias) for alias in args.alias),
         paths=(path,),
     )
     project = register_project(store, registration, USER)

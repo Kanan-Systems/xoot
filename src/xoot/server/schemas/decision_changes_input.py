@@ -1,16 +1,10 @@
-"""The changes argument of decision_update."""
+"""
+The changes argument of decision_update.
 
-from pydantic import BaseModel, ConfigDict
+The model lives in models/ so services (paste mode) can use it without
+importing the server; it is re-exported here for the tool schemas.
+"""
 
-from xoot.models.decision.decision_status import DecisionStatus
-from xoot.models.fields import Body, Title
+from xoot.models.decision.decision_changes_input import DecisionChangesInput
 
-
-class DecisionChangesInput(BaseModel):
-    """Fields to change; leave a field out to keep it. None can be cleared."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    title: Title | None = None
-    body: Body | None = None
-    status: DecisionStatus | None = None
+__all__ = ["DecisionChangesInput"]

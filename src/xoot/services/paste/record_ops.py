@@ -117,15 +117,16 @@ def run_session_close(run: PasteRun, index: int, op: SessionCloseOp) -> PasteOpO
         - op (SessionCloseOp): the op.
 
     Returns:
-        - outcome (PasteOpOutcome): the session's key and the disposition
-          changes; auto-backlog moves go on the run.
+        - outcome (PasteOpOutcome): the session's key, every disposition
+          and the changes they make; auto-backlog moves go on the run.
 
     Raises:
         - PasteOpError: an item has two dispositions, a disposition names an
           item that needs none, or one is missing; keys are listed.
     """
     session = run.open_session()
-    by_id = {run.item(key).id: value for key, value in op.dispositions.items()}
+    disposed = [(run.item(key), value) for key, value in op.dispositions.items()]
+    by_id = {item.id: value for item, value in disposed}
     if len(by_id) != len(op.dispositions):
         raise PasteOpError(
             index, op.op, reason="an item is given more than one disposition"
@@ -149,6 +150,7 @@ def run_session_close(run: PasteRun, index: int, op: SessionCloseOp) -> PasteOpO
         op=op.op,
         key=run.session_key(closed),
         changes=_close_changes(run, plan),
+        dispositions={item.key: value for item, value in disposed},
     )
 
 

@@ -24,7 +24,7 @@ def test_key_shaped_alias_error_is_in_words(xoot: Any, row_counts: Any) -> None:
     run = xoot("init", "/work/new", "--prefix", "ab", "--alias", "ab-s1")
     assert (run.code, run.out) == (1, "")
     assert run.err.startswith(
-        "error: ValidationError: aliases.0: an alias must not look like an "
+        "error: ValidationError: alias: an alias must not look like an "
         "item, decision or session key"
     )
     assert row_counts() == before

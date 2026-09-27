@@ -4,8 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from xoot.models.decision.decision_changes_input import DecisionChangesInput
 from xoot.models.fields import Id
-from xoot.server.schemas.decision_changes_input import DecisionChangesInput
 from xoot.services.paste.models.fields import KeyOrRef
 
 

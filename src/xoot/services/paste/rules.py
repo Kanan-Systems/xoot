@@ -3,7 +3,7 @@ The block rules that need no database: session, op order, refs and versions.
 
 A block names an open session or starts one with its first op, never both
 and never neither. session_start may only come first and session_close only
-last. A ref is defined once, by an item_create or decision_record, and
+last. A ref is defined once, by a capture, item_create or decision_record, and
 "$<ref>" may only appear in a later op, in a field of the matching kind; the
 session is implied and never referenced by $. An update of a ref'd record
 omits expected_version (the block created it); one of an existing record
@@ -15,6 +15,7 @@ from typing import Literal
 
 from xoot.exceptions.paste_error import PasteError
 from xoot.exceptions.paste_op_error import PasteOpError
+from xoot.services.paste.models.capture_op import CaptureOp
 from xoot.services.paste.models.decision_record_op import DecisionRecordOp
 from xoot.services.paste.models.decision_update_op import DecisionUpdateOp
 from xoot.services.paste.models.fields import is_ref, ref_name
@@ -139,8 +140,10 @@ def _check_version(index: int, op: PasteOp) -> None:
 
 
 def _define(index: int, op: PasteOp, defined: dict[str, RefKind]) -> None:
-    if not isinstance(op, (ItemCreateOp, DecisionRecordOp)) or op.ref is None:
+    if not isinstance(op, (CaptureOp, ItemCreateOp, DecisionRecordOp)):
+        return
+    if op.ref is None:
         return
     if op.ref in defined:
         raise PasteOpError(index, op.op, reason=f"duplicate ref ${op.ref}")
-    defined[op.ref] = "item" if isinstance(op, ItemCreateOp) else "decision"
+    defined[op.ref] = "decision" if isinstance(op, DecisionRecordOp) else "item"

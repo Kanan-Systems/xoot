@@ -43,18 +43,21 @@ or a redaction whose purge did not complete: close clients and redo it).
 
 ## Paste mode
 
-For chats without MCP (claude.ai, the desktop app), `xoot paste` carries
-changes by copy and paste. `xoot paste brief [--project NAME]` prints a
-markdown brief (at most 16 KiB): the workflow, open sessions, items in
-flight with their versions, recent decisions and the reply protocol. Paste
-it into the chat; Claude replies with at most one fenced ```` ```xoot ````
-JSON block of ops (session_start, capture, item_create, item_update,
-decision_record, decision_update, session_close). Then:
+For chats without MCP, `xoot paste` carries changes by copy and paste.
+`xoot paste brief [--project NAME]` prints a markdown brief (at most 16 KiB):
+the workflow, open sessions, items in flight with their versions, recent
+decisions and the reply protocol. Paste it into the chat; Claude replies with
+at most one fenced ```` ```xoot ```` JSON block of ops (session_start,
+capture, item_create, item_update, decision_record, decision_update,
+session_close). Then:
 
 ```sh
 xoot paste apply reply.md        # or "-" to read stdin; at most 256 KiB
-powershell.exe Get-Clipboard | xoot paste apply -    # WSL, from the clipboard
+powershell.exe -NoProfile -Command \
+  '[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw' \
+  | xoot paste apply -           # WSL, from the Windows clipboard
 ```
+Without the UTF-8 setting PowerShell writes the legacy code page, which xoot refuses.
 
 `apply` dry-runs the whole block, prints the plan and a SIDE EFFECTS
 section (auto-backlog moves) to stderr, and asks y/N on the terminal
@@ -62,9 +65,7 @@ section (auto-backlog moves) to stderr, and asks y/N on the terminal
 `--yes`. The block applies in one transaction or not at all, and only if it
 still does what the plan showed. Writes are recorded as `claude`, client
 `paste`. stdout gets a ```` ```xoot-receipt ```` block (keys and versions,
-never titles) to paste back so the next block uses current versions. The
-paste must be UTF-8; if non-ASCII text is refused, set PowerShell's output
-encoding to UTF-8.
+never titles) to paste back so the next block uses current versions.
 
 ## Data
 

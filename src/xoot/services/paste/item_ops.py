@@ -7,11 +7,11 @@ a subtree drop or reparent needs no confirm token here: the dry-run plan the
 user confirms takes its place.
 """
 
+from xoot.models.item.item_changes_input import ItemChangesInput
 from xoot.models.item.item_create import ItemCreate
 from xoot.models.item.item_draft import ItemDraft
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.item.subtree_plan import SubtreePlan
-from xoot.server.schemas.item_changes_input import ItemChangesInput
 from xoot.services import key_resolver
 from xoot.services.item_service import capture_in, create_item_in, update_item_in
 from xoot.services.lookups import require_item
@@ -37,10 +37,10 @@ def run_capture(run: PasteRun, index: int, op: CaptureOp) -> PasteOpOutcome:
         - op (CaptureOp): the op.
 
     Returns:
-        - outcome (PasteOpOutcome): the new item's key.
+        - outcome (PasteOpOutcome): the new item's key and ref.
     """
     item = capture_in(run.scope, ItemDraft(title=op.title, body=op.body))
-    return run.created(index, op.op, item, None)
+    return run.created(index, op.op, item, op.ref)
 
 
 def run_item_create(run: PasteRun, index: int, op: ItemCreateOp) -> PasteOpOutcome:

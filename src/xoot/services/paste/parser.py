@@ -16,8 +16,8 @@ import re
 from pydantic import BaseModel, ValidationError
 
 from xoot.exceptions.paste_error import PasteError
-from xoot.server.schemas.decision_changes_input import DecisionChangesInput
-from xoot.server.schemas.item_changes_input import ItemChangesInput
+from xoot.models.decision.decision_changes_input import DecisionChangesInput
+from xoot.models.item.item_changes_input import ItemChangesInput
 from xoot.services.paste.models.capture_op import CaptureOp
 from xoot.services.paste.models.decision_record_op import DecisionRecordOp
 from xoot.services.paste.models.decision_update_op import DecisionUpdateOp

@@ -14,10 +14,10 @@ from typing import Any, Literal
 
 from xoot.exceptions.update_path_error import UpdatePathError
 from xoot.models.item.item import Item
+from xoot.models.item.item_changes_input import ItemChangesInput
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.workflow.category import Category
 from xoot.repositories.item import item_db
-from xoot.server.schemas.item_changes_input import ItemChangesInput
 from xoot.services.lookups import active_workflow, require_project
 
 type UpdatePath = Literal["update", "drop", "reparent"]

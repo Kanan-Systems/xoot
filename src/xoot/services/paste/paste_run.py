@@ -30,6 +30,7 @@ from xoot.services.paste.models.paste_auto_backlog import PasteAutoBacklog
 from xoot.services.paste.models.paste_block import PasteBlock
 from xoot.services.paste.models.paste_decision_state import PasteDecisionState
 from xoot.services.paste.models.paste_item_state import PasteItemState
+from xoot.services.paste.models.paste_label import PasteLabel
 from xoot.services.paste.models.paste_op_outcome import PasteOpOutcome
 from xoot.services.paste.models.paste_result import PasteResult
 from xoot.services.paste.rules import NO_SESSION
@@ -201,12 +202,13 @@ class PasteRun:
             - outcomes (list[PasteOpOutcome]): every op's outcome, in order.
 
         Returns:
-            - result (PasteResult): the outcomes, refs, final records and
-              side effects.
+            - result (PasteResult): the outcomes, refs, final records, side
+              effects, and the labels the plan shows.
         """
         session = self.open_session()
         items: list[PasteItemState] = []
         decisions: list[PasteDecisionState] = []
+        labels: dict[str, PasteLabel] = {}
         for kind, row_id in self._touched:
             if kind == "item":
                 item = item_db.get(self.conn, row_id)
@@ -216,6 +218,7 @@ class PasteRun:
                             key=item.key, version=item.version, state=item.state
                         )
                     )
+                    labels[item.key] = PasteLabel(kind=item.kind, title=item.title)
             else:
                 decision = decision_db.get(self.conn, row_id)
                 if decision is not None:
@@ -226,6 +229,9 @@ class PasteRun:
                             status=decision.status,
                         )
                     )
+                    labels[decision.key] = PasteLabel(
+                        kind="decision", title=decision.title
+                    )
         return PasteResult(
             project=self.project.key_prefix,
             session=self.session_key(session),
@@ -235,6 +241,7 @@ class PasteRun:
             items=tuple(items),
             decisions=tuple(decisions),
             auto_backlog=tuple(self.auto_backlog),
+            labels=labels,
         )
 
     def _join(self, key: str) -> None:

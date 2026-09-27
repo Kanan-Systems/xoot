@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from xoot.models.fields import Id
-from xoot.server.schemas.item_changes_input import ItemChangesInput
+from xoot.models.item.item_changes_input import ItemChangesInput
 from xoot.services.paste.models.fields import KeyOrRef
 
 

@@ -49,7 +49,7 @@ reviews the plan and confirms; the whole block applies or none of it does.
 
 Ops (`op` names the kind; `?` marks optional fields):
 - `session_start`: title, focus? (item keys). First op only.
-- `capture`: title, body?
+- `capture`: ref?, title, body? (an unfiled subtask in the session backlog)
 - `item_create`: ref?, kind (goal, batch, subtask), title, body?, parent?
 - `item_update`: key, expected_version, changes {title?, body?, state?,
   parent?, backlog_session?, awaiting_decision?}

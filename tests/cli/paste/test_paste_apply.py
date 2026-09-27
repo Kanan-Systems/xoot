@@ -49,11 +49,11 @@ def test_yes_applies_and_prints_the_plan_on_stderr(
     assert run.err.splitlines() == [
         "paste plan: project xoot, session xoot-S1 (open after the block)",
         "  op 1 session_start: xoot-S1 (new)",
-        "  op 2 item_create: xoot-1 (new, $g)",
-        "  op 3 item_create: xoot-2 (new, $b)",
-        "  op 4 item_update: xoot-2",
+        f'  op 2 item_create: xoot-1 (new, $g) goal "g {MARKER}"',
+        '  op 3 item_create: xoot-2 (new, $b) batch "b"',
+        '  op 4 item_update: xoot-2 batch "b"',
         "      xoot-2 state: open -> active",
-        "  op 5 decision_record: xoot-D1 (new, $d)",
+        f'  op 5 decision_record: xoot-D1 (new, $d) decision "d {MARKER}"',
         "SIDE EFFECTS",
         "  (none)",
     ]
@@ -82,7 +82,8 @@ def test_receipt_maps_refs_and_holds_no_text(
     with store.read() as conn:
         batch = item_db.get_by_key(conn, receipt["refs"]["b"])
     assert batch is not None and batch.version == 2
-    assert MARKER not in run.out and MARKER not in run.err
+    # Titles are named in the plan on stderr; bodies never appear anywhere.
+    assert MARKER not in run.out and f"body {MARKER}" not in run.err
 
 
 @pytest.mark.usefixtures("project")
@@ -160,7 +161,7 @@ def test_side_effects_list_the_auto_backlog_moves(
     lines = run.err.splitlines()
     effects = lines[lines.index("SIDE EFFECTS") + 1 :]
     assert effects == [
-        "  xoot-1: moves from the backlog of xoot-S1 to the project backlog"
+        '  xoot-1 subtask "t": moves from the backlog of xoot-S1 to the project backlog'
     ]
 
 
