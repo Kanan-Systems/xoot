@@ -49,6 +49,46 @@ def get(conn: sqlite3.Connection, session_id: int) -> Session | None:
     return None if row is None else Session.model_validate(dict(row))
 
 
+def get_by_number(
+    conn: sqlite3.Connection, project_id: int, number: int
+) -> Session | None:
+    """
+    Fetch a session by its number within a project.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - project_id (int): project id.
+        - number (int): the per-project session number.
+
+    Returns:
+        - session (Session | None): the session, or None.
+    """
+    row = conn.execute(
+        f"SELECT {_COLUMNS} FROM session WHERE project_id = ? AND number = ?",
+        (project_id, number),
+    ).fetchone()
+    return None if row is None else Session.model_validate(dict(row))
+
+
+def list_open(conn: sqlite3.Connection, project_id: int) -> list[Session]:
+    """
+    List a project's open sessions, oldest first.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - project_id (int): project id.
+
+    Returns:
+        - sessions (list[Session]): the open sessions.
+    """
+    rows = conn.execute(
+        f"SELECT {_COLUMNS} FROM session WHERE project_id = ? AND status = 'open' "
+        "ORDER BY number",
+        (project_id,),
+    ).fetchall()
+    return [Session.model_validate(dict(row)) for row in rows]
+
+
 def next_number(conn: sqlite3.Connection, project_id: int) -> int:
     """
     Return the next session number of a project.

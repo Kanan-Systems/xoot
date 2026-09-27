@@ -39,3 +39,19 @@ def get(conn: sqlite3.Connection, alias: str) -> ProjectAlias | None:
         "SELECT alias, project_id FROM project_alias WHERE alias = ?", (alias,)
     ).fetchone()
     return None if row is None else ProjectAlias.model_validate(dict(row))
+
+
+def list_all(conn: sqlite3.Connection) -> list[ProjectAlias]:
+    """
+    List every alias, by name.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+
+    Returns:
+        - aliases (list[ProjectAlias]): all aliases.
+    """
+    rows = conn.execute(
+        "SELECT alias, project_id FROM project_alias ORDER BY alias"
+    ).fetchall()
+    return [ProjectAlias.model_validate(dict(row)) for row in rows]

@@ -13,6 +13,7 @@ from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.new_item import NewItem
 from xoot.models.project.project import Project
 from xoot.repositories.item import item_db
+from xoot.services.item_rules import check_child_kind
 from xoot.store.store import Store
 
 GOAL, BATCH, SUBTASK = ItemKind.GOAL, ItemKind.BATCH, ItemKind.SUBTASK
@@ -123,3 +124,16 @@ def test_database_rejects_cross_project_parent(
     with pytest.raises(IntegrityViolationError, match="FOREIGN KEY"):
         with store.write() as conn:
             item_db.insert(conn, _raw_item(other_project, BATCH, parents[GOAL].id))
+
+
+@pytest.mark.parametrize("parent_kind", list(ItemKind))
+@pytest.mark.parametrize("kind", list(ItemKind))
+def test_child_kind_follows_the_hierarchy(
+    parent_kind: ItemKind, kind: ItemKind
+) -> None:
+    """A planned parent allows exactly goal > batch and batch > subtask."""
+    if (parent_kind, kind) in {(GOAL, BATCH), (BATCH, SUBTASK)}:
+        check_child_kind(parent_kind, kind)
+    else:
+        with pytest.raises(HierarchyError):
+            check_child_kind(parent_kind, kind)

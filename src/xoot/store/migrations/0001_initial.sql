@@ -251,3 +251,36 @@ CREATE TRIGGER event_no_delete BEFORE DELETE ON event
 BEGIN
     SELECT RAISE(ABORT, 'event is append-only');
 END;
+
+-- Single-use tokens for two-phase tool calls. Only the token's SHA-256 is
+-- stored: the token itself exists only in the preview result, so reading the
+-- database is not enough to apply a pending change. A token is bound to one
+-- tool, one argument digest and one session, and used_at is set in the same
+-- transaction as the write it allows.
+CREATE TABLE confirm_token (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_sha256 TEXT NOT NULL UNIQUE CHECK (
+        length(token_sha256) = 64 AND token_sha256 NOT GLOB '*[^0-9a-f]*'
+    ),
+    tool TEXT NOT NULL CHECK (
+        length(tool) BETWEEN 1 AND 64
+        AND tool GLOB '[a-z]*'
+        AND tool NOT GLOB '*[^a-z_]*'
+    ),
+    args_sha256 TEXT NOT NULL CHECK (
+        length(args_sha256) = 64 AND args_sha256 NOT GLOB '*[^0-9a-f]*'
+    ),
+    session_id INTEGER NOT NULL REFERENCES session (id),
+    expires_at TEXT NOT NULL CHECK (
+        expires_at GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-6][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'
+    ),
+    -- Fixed-width timestamps compare as text, so a token can never be
+    -- recorded as used after it expired.
+    used_at TEXT CHECK (
+        used_at IS NULL
+        OR (
+            used_at GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-6][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'
+            AND used_at < expires_at
+        )
+    )
+) STRICT;

@@ -6,6 +6,9 @@ also retires stale session backlogs: items still parked in the backlog of a
 session that closed before this one started move to the project backlog.
 "Before" is decided by the project's sequence counter, never by the clock,
 and those moves are recorded as the system's, not the closer's.
+
+Parent and child states stay independent: the preview only warns when a
+disposition leaves an item live under a backlogged or dropped parent.
 """
 
 import sqlite3
@@ -13,11 +16,14 @@ from typing import Any
 
 from xoot.exceptions.disposition_error import DispositionError
 from xoot.exceptions.session_state_error import SessionStateError
+from xoot.models.confirm.confirmation import Confirmation
 from xoot.models.event.actor import Actor
 from xoot.models.event.event_action import EventAction
 from xoot.models.event.write_context import WriteContext
+from xoot.models.item.item import Item
 from xoot.models.item.item_change import ItemChange
 from xoot.models.item.item_kind import ItemKind
+from xoot.models.session.close_warning import CloseWarning
 from xoot.models.session.disposition import Disposition
 from xoot.models.session.session import Session
 from xoot.models.session.session_close import SessionClose
@@ -29,6 +35,7 @@ from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.item import item_db
 from xoot.repositories.project import project_db
 from xoot.repositories.session import session_db, session_item_ref_db
+from xoot.services.confirm_service import consume_token
 from xoot.services.id_checks import check_id
 from xoot.services.item_writer import apply_changes, plan_change
 from xoot.services.lookups import (
@@ -70,7 +77,11 @@ def preview_close(
 
 
 def close_session(
-    store: Store, session_id: int, request: SessionClose, actor: Actor
+    store: Store,
+    session_id: int,
+    request: SessionClose,
+    actor: Actor,
+    confirm: Confirmation | None = None,
 ) -> Session:
     """
     Close a session: apply dispositions, retire stale backlogs, record all.
@@ -81,11 +92,14 @@ def close_session(
         - request (SessionClose): summary and one disposition per open
           linked item.
         - actor (Actor): who closes it.
+        - confirm (Confirmation | None): a token from the preview, consumed
+          in this transaction when given.
 
     Returns:
         - session (Session): the closed session.
 
     Raises:
+        - ConfirmTokenError: the token cannot authorize this call.
         - InvalidIdError: session_id is not an int id.
         - DispositionError: a disposition is missing or names an item that
           needs none.
@@ -94,6 +108,8 @@ def close_session(
     """
     check_id("session_id", session_id)
     with store.write() as conn:
+        if confirm is not None:
+            consume_token(conn, confirm, session_id)
         session = require_session(conn, session_id)
         plan = _plan(conn, session, request)
         if plan.missing_item_ids:
@@ -166,7 +182,46 @@ def _plan(
         dispositions=dict(request.dispositions),
         changes=tuple(changes),
         auto_backlog=_stale_backlog(conn, definition, session, rehomed),
+        warnings=_warnings(conn, definition, required, request, changes),
     )
+
+
+def _warnings(
+    conn: sqlite3.Connection,
+    definition: WorkflowDefinition,
+    required: list[Item],
+    request: SessionClose,
+    changes: list[ItemChange],
+) -> tuple[CloseWarning, ...]:
+    """Flag disposed items left live under a backlogged or dropped parent."""
+    closing = {c.item_id: c.after["state"] for c in changes if "state" in c.after}
+    warnings = []
+    for item in required:
+        if item.id not in request.dispositions or item.parent_id is None:
+            continue
+        parent = require_item(conn, item.parent_id)
+        child = _category(definition, item.kind, closing.get(item.id, item.state))
+        above = _category(definition, parent.kind, closing.get(parent.id, parent.state))
+        if above is not None and _left_under(child, above):
+            warnings.append(
+                CloseWarning(
+                    item_id=item.id,
+                    key=item.key,
+                    parent_id=parent.id,
+                    parent_key=parent.key,
+                    parent_category=above,
+                )
+            )
+    return tuple(warnings)
+
+
+def _left_under(child: Category | None, parent: Category) -> bool:
+    """A live child under a dropped parent, or under a backlogged one unless also backlogged."""
+    if child in TERMINAL_CATEGORIES:
+        return False
+    if parent is Category.DROPPED:
+        return True
+    return parent is Category.BACKLOGGED and child is not Category.BACKLOGGED
 
 
 def _disposition_fields(

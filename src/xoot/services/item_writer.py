@@ -2,7 +2,9 @@
 Planning and writing item changes.
 
 Every item mutation, whatever service drives it, goes through write_item so
-it is re-validated, version-bumped and recorded the same way.
+it is re-validated, version-bumped and recorded the same way. Every insert
+goes through insert_item, so single and bulk creates number and record items
+identically.
 """
 
 from collections.abc import Sequence
@@ -10,9 +12,48 @@ from typing import Any
 
 from xoot.models.item.item import Item
 from xoot.models.item.item_change import ItemChange
+from xoot.models.item.item_create import ItemCreate
+from xoot.models.item.new_item import NewItem
+from xoot.models.project.project import Project
 from xoot.repositories.item import item_db
+from xoot.repositories.project import project_db
 from xoot.services.lookups import require_item
 from xoot.services.write_scope import WriteScope, changed_fields
+
+
+def insert_item(scope: WriteScope, project: Project, request: ItemCreate) -> Item:
+    """
+    Allocate the next number and store an item with its create event.
+
+    The caller has already validated the request, including its state.
+
+    Args:
+        - scope (WriteScope): the current write scope.
+        - project (Project): the item's project.
+        - request (ItemCreate): validated item details with state set.
+
+    Returns:
+        - item (Item): the stored item.
+    """
+    number = project_db.allocate_item_number(scope.conn, project.id)
+    item = item_db.insert(
+        scope.conn,
+        NewItem(
+            project_id=project.id,
+            number=number,
+            key=f"{project.key_prefix}-{number}",
+            kind=request.kind,
+            parent_id=request.parent_id,
+            title=request.title,
+            body=request.body,
+            state=request.state,
+            backlog_session_id=request.backlog_session_id,
+            awaiting_decision_id=request.awaiting_decision_id,
+            created_at=scope.now,
+        ),
+    )
+    scope.created(item)
+    return item
 
 
 def plan_change(item: Item, fields: dict[str, Any]) -> ItemChange | None:

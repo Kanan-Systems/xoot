@@ -203,3 +203,66 @@ def test_closed_session_cannot_close_again(
         close_session(store, session.id, SessionClose(), user)
     with pytest.raises(SessionStateError):
         preview_close(store, session.id, SessionClose())
+
+
+@pytest.fixture(name="family")
+def fixture_family(
+    project: Project,
+    make_session: Callable[..., Session],
+    make_item: Callable[..., Item],
+) -> tuple[Session, Item, Item]:
+    """An open session linked to an active batch and its active subtask."""
+    goal = make_item(project, ItemKind.GOAL)
+    batch = make_item(project, ItemKind.BATCH, parent_id=goal.id, state="active")
+    child = make_item(project, ItemKind.SUBTASK, parent_id=batch.id, state="active")
+    return make_session(project, batch.id, child.id), batch, child
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        (Disposition.DROPPED, Disposition.CARRY_OVER, True),
+        (Disposition.PROJECT_BACKLOG, Disposition.CARRY_OVER, True),
+        (Disposition.SESSION_BACKLOG, Disposition.CARRY_OVER, True),
+        (Disposition.DROPPED, Disposition.PROJECT_BACKLOG, True),
+        (Disposition.PROJECT_BACKLOG, Disposition.SESSION_BACKLOG, False),
+        (Disposition.DROPPED, Disposition.DROPPED, False),
+        (Disposition.CARRY_OVER, Disposition.CARRY_OVER, False),
+    ],
+)
+def test_close_warns_about_live_children_of_parked_parents(
+    store: Store,
+    user: Actor,
+    family: tuple[Session, Item, Item],
+    case: tuple[Disposition, Disposition, bool],
+) -> None:
+    """Decision 6: states stay independent; the preview only warns, and close still works."""
+    session, batch, child = family
+    parent_to, child_to, warned = case
+    request = SessionClose(dispositions={batch.id: parent_to, child.id: child_to})
+    plan = preview_close(store, session.id, request)
+    expected = [(child.key, batch.key)] if warned else []
+    assert [(w.key, w.parent_key) for w in plan.warnings] == expected
+    assert (
+        close_session(store, session.id, request, user).status is SessionStatus.CLOSED
+    )
+
+
+def test_close_warns_about_a_parent_parked_earlier(
+    store: Store,
+    ctx: WriteContext,
+    project: Project,
+    make_session: Callable[..., Session],
+    make_item: Callable[..., Item],
+) -> None:
+    """A parent already backlogged outside this session counts too."""
+    goal = make_item(project, ItemKind.GOAL)
+    batch = make_item(project, ItemKind.BATCH, parent_id=goal.id)
+    update_item(store, batch.id, 1, ItemUpdate(state="backlogged"), ctx)
+    child = make_item(project, ItemKind.SUBTASK, parent_id=batch.id, state="active")
+    session = make_session(project, child.id)
+    request = SessionClose(dispositions={child.id: Disposition.CARRY_OVER})
+    warnings = preview_close(store, session.id, request).warnings
+    assert [(w.key, w.parent_key, w.parent_category) for w in warnings] == [
+        (child.key, batch.key, "backlogged")
+    ]

@@ -4,6 +4,7 @@ import sqlite3
 
 from xoot.exceptions.stale_write_error import StaleWriteError
 from xoot.models.decision.decision import Decision
+from xoot.models.decision.decision_status import DecisionStatus
 from xoot.models.decision.new_decision import NewDecision
 
 _COLUMNS = (
@@ -48,6 +49,50 @@ def get(conn: sqlite3.Connection, decision_id: int) -> Decision | None:
         f"SELECT {_COLUMNS} FROM decision WHERE id = ?", (decision_id,)
     ).fetchone()
     return None if row is None else Decision.model_validate(dict(row))
+
+
+def get_by_key(conn: sqlite3.Connection, key: str) -> Decision | None:
+    """
+    Fetch a decision by its public key.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - key (str): e.g. "xoot-D3".
+
+    Returns:
+        - decision (Decision | None): the decision, or None.
+    """
+    row = conn.execute(
+        f"SELECT {_COLUMNS} FROM decision WHERE key = ?", (key,)
+    ).fetchone()
+    return None if row is None else Decision.model_validate(dict(row))
+
+
+def list_recent(
+    conn: sqlite3.Connection,
+    project_id: int,
+    status: DecisionStatus | None,
+    limit: int,
+) -> list[Decision]:
+    """
+    List a project's decisions, newest first.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - project_id (int): project id.
+        - status (DecisionStatus | None): only this status; any when None.
+        - limit (int): the most rows to return.
+
+    Returns:
+        - decisions (list[Decision]): up to limit decisions.
+    """
+    value = None if status is None else status.value
+    rows = conn.execute(
+        f"SELECT {_COLUMNS} FROM decision WHERE project_id = ? "
+        "AND (? IS NULL OR status = ?) ORDER BY number DESC LIMIT ?",
+        (project_id, value, value, limit),
+    ).fetchall()
+    return [Decision.model_validate(dict(row)) for row in rows]
 
 
 def update(conn: sqlite3.Connection, decision: Decision, expected_version: int) -> None:

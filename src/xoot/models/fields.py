@@ -132,6 +132,8 @@ Body = Annotated[
 ]
 Slug = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]{1,31}$")]
 StateName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_-]{0,31}$")]
+Sha256Hex = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+ToolName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z_]{0,63}$")]
 AbsolutePath = Annotated[
     str,
     StringConstraints(min_length=1, max_length=PATH_MAX),

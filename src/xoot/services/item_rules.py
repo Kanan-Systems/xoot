@@ -54,6 +54,27 @@ def check_parent(
         )
 
 
+def check_child_kind(parent_kind: ItemKind, kind: ItemKind) -> None:
+    """
+    Enforce the hierarchy for a parent that is not stored yet, such as one
+    planned earlier in the same bulk create.
+
+    Args:
+        - parent_kind (ItemKind): the planned parent's kind.
+        - kind (ItemKind): the child's kind.
+
+    Raises:
+        - HierarchyError: the child kind may not sit under the parent kind.
+    """
+    allowed = _PARENT_KIND[kind]
+    if allowed is None:
+        raise HierarchyError("a goal cannot have a parent")
+    if parent_kind is not allowed:
+        raise HierarchyError(
+            f"a {kind}'s parent must be a {allowed}, not a {parent_kind}"
+        )
+
+
 def check_state(
     workflow: KindWorkflow, state: str, backlog_session_id: int | None
 ) -> Category:

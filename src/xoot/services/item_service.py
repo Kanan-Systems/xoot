@@ -15,12 +15,8 @@ from xoot.models.item.item_create import ItemCreate
 from xoot.models.item.item_draft import ItemDraft
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.item_update import ItemUpdate
-from xoot.models.item.new_item import NewItem
-from xoot.models.project.project import Project
 from xoot.models.workflow.category import Category
 from xoot.models.workflow.kind_workflow import KindWorkflow
-from xoot.repositories.item import item_db
-from xoot.repositories.project import project_db
 from xoot.services.conflicts import ensure_version
 from xoot.services.id_checks import check_id
 from xoot.services.item_rules import (
@@ -29,7 +25,7 @@ from xoot.services.item_rules import (
     check_state,
     check_transition,
 )
-from xoot.services.item_writer import write_item
+from xoot.services.item_writer import insert_item, write_item
 from xoot.services.lookups import (
     active_workflow,
     require_item,
@@ -76,7 +72,7 @@ def create_item(
             conn, project_id, request.backlog_session_id, request.awaiting_decision_id
         )
         scope = WriteScope(conn, ctx)
-        item = _insert(scope, project, request.model_copy(update={"state": state}))
+        item = insert_item(scope, project, request.model_copy(update={"state": state}))
         link_items(scope, session, [item.id])
         return item
 
@@ -116,7 +112,7 @@ def capture(store: Store, session_id: int, draft: ItemDraft, actor: Actor) -> It
             backlog_session_id=session_id,
         )
         scope = WriteScope(conn, WriteContext(actor=actor, session_id=session_id))
-        item = _insert(scope, project, request)
+        item = insert_item(scope, project, request)
         link_items(scope, session, [item.id])
         return item
 
@@ -191,29 +187,6 @@ def get_item(store: Store, item_id: int) -> Item:
     check_id("item_id", item_id)
     with store.read() as conn:
         return require_item(conn, item_id)
-
-
-def _insert(scope: WriteScope, project: Project, request: ItemCreate) -> Item:
-    """Allocate the next number and store the item with its create event."""
-    number = project_db.allocate_item_number(scope.conn, project.id)
-    item = item_db.insert(
-        scope.conn,
-        NewItem(
-            project_id=project.id,
-            number=number,
-            key=f"{project.key_prefix}-{number}",
-            kind=request.kind,
-            parent_id=request.parent_id,
-            title=request.title,
-            body=request.body,
-            state=request.state,
-            backlog_session_id=request.backlog_session_id,
-            awaiting_decision_id=request.awaiting_decision_id,
-            created_at=scope.now,
-        ),
-    )
-    scope.created(item)
-    return item
 
 
 def _effective_fields(

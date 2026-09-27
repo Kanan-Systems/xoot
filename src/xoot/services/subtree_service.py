@@ -10,6 +10,7 @@ import sqlite3
 from collections.abc import Callable
 from functools import partial
 
+from xoot.models.confirm.confirmation import Confirmation
 from xoot.models.event.entity_type import EntityType
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
@@ -17,6 +18,7 @@ from xoot.models.item.item_change import ItemChange
 from xoot.models.item.subtree_plan import SubtreePlan
 from xoot.models.workflow.category import TERMINAL_CATEGORIES, Category
 from xoot.repositories.item import item_db
+from xoot.services.confirm_service import consume_token
 from xoot.services.conflicts import ensure_version
 from xoot.services.id_checks import check_id, check_optional_id
 from xoot.services.item_rules import check_parent
@@ -53,7 +55,11 @@ def preview_drop(store: Store, item_id: int) -> SubtreePlan:
 
 
 def apply_drop(
-    store: Store, item_id: int, expected_version: int, ctx: WriteContext
+    store: Store,
+    item_id: int,
+    expected_version: int,
+    ctx: WriteContext,
+    confirm: Confirmation | None = None,
 ) -> SubtreePlan:
     """
     Drop an item and everything under it.
@@ -64,11 +70,14 @@ def apply_drop(
         - expected_version (int): the root version the caller read.
         - ctx (WriteContext): actor and optional session (changed items are
           linked).
+        - confirm (Confirmation | None): a token from the preview, consumed
+          in this transaction when given.
 
     Returns:
         - plan (SubtreePlan): the changes that were written.
 
     Raises:
+        - ConfirmTokenError: the token cannot authorize this call.
         - VersionConflictError: the root changed since expected_version.
         - SessionStateError: the session is closed.
         - InvalidIdError: item_id or expected_version is not an int.
@@ -76,7 +85,9 @@ def apply_drop(
     """
     check_id("item_id", item_id)
     check_id("expected_version", expected_version)
-    return _apply(store, item_id, expected_version, ctx, _plan_drop)
+    with store.write() as conn:
+        _consume(conn, confirm, ctx)
+        return _write_plan(conn, item_id, expected_version, ctx, _plan_drop)
 
 
 def preview_reparent(
@@ -106,12 +117,15 @@ def preview_reparent(
         return _plan_reparent(conn, require_item(conn, item_id), new_parent_id)
 
 
-def apply_reparent(
+# Six arguments: the five of the original apply plus the optional confirm.
+def apply_reparent(  # pylint: disable=too-many-arguments
     store: Store,
     item_id: int,
     new_parent_id: int | None,
     expected_version: int,
     ctx: WriteContext,
+    *,
+    confirm: Confirmation | None = None,
 ) -> SubtreePlan:
     """
     Move an item, with its descendants, under a new parent.
@@ -122,11 +136,14 @@ def apply_reparent(
         - new_parent_id (int | None): the new parent; None unfiles a subtask.
         - expected_version (int): the root version the caller read.
         - ctx (WriteContext): actor and optional session.
+        - confirm (Confirmation | None): a token from the preview, consumed
+          in this transaction when given.
 
     Returns:
         - plan (SubtreePlan): the change that was written.
 
     Raises:
+        - ConfirmTokenError: the token cannot authorize this call.
         - VersionConflictError: the root changed since expected_version.
         - HierarchyError: the new parent is not allowed for the root's kind.
         - CrossProjectError: the new parent is in another project.
@@ -137,26 +154,35 @@ def apply_reparent(
     check_optional_id("new_parent_id", new_parent_id)
     check_id("expected_version", expected_version)
     planner = partial(_plan_reparent, new_parent_id=new_parent_id)
-    return _apply(store, item_id, expected_version, ctx, planner)
+    with store.write() as conn:
+        _consume(conn, confirm, ctx)
+        return _write_plan(conn, item_id, expected_version, ctx, planner)
 
 
-def _apply(
-    store: Store,
+def _consume(
+    conn: sqlite3.Connection, confirm: Confirmation | None, ctx: WriteContext
+) -> None:
+    """Spend the preview's token first, so it is used only if the write commits."""
+    if confirm is not None:
+        consume_token(conn, confirm, ctx.session_id)
+
+
+def _write_plan(
+    conn: sqlite3.Connection,
     item_id: int,
     expected_version: int,
     ctx: WriteContext,
     planner: Planner,
 ) -> SubtreePlan:
     """Re-plan under the write lock, then write the plan and its events."""
-    with store.write() as conn:
-        root = require_item(conn, item_id)
-        ensure_version(conn, EntityType.ITEM, root, expected_version)
-        session = open_session_for(conn, root.project_id, ctx.session_id)
-        plan = planner(conn, root)
-        scope = WriteScope(conn, ctx)
-        apply_changes(scope, plan.changes)
-        link_items(scope, session, [change.item_id for change in plan.changes])
-        return plan
+    root = require_item(conn, item_id)
+    ensure_version(conn, EntityType.ITEM, root, expected_version)
+    session = open_session_for(conn, root.project_id, ctx.session_id)
+    plan = planner(conn, root)
+    scope = WriteScope(conn, ctx)
+    apply_changes(scope, plan.changes)
+    link_items(scope, session, [change.item_id for change in plan.changes])
+    return plan
 
 
 def _plan_drop(conn: sqlite3.Connection, root: Item) -> SubtreePlan:

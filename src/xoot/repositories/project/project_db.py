@@ -69,6 +69,22 @@ def get_by_prefix(conn: sqlite3.Connection, key_prefix: str) -> Project | None:
     return None if row is None else Project.model_validate(dict(row))
 
 
+def list_all(conn: sqlite3.Connection) -> list[Project]:
+    """
+    List every project, by key prefix.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+
+    Returns:
+        - projects (list[Project]): all projects.
+    """
+    rows = conn.execute(
+        f"SELECT {_COLUMNS} FROM project ORDER BY key_prefix"
+    ).fetchall()
+    return [Project.model_validate(dict(row)) for row in rows]
+
+
 def set_active_workflow(
     conn: sqlite3.Connection, project_id: int, workflow_id: int
 ) -> Project:

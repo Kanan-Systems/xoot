@@ -44,7 +44,7 @@ def test_shipped_migrations_apply(db_path: Path) -> None:
         ).fetchall()
     assert {name for name, _ in tables} == {
         "project", "project_alias", "project_path", "workflow", "item",
-        "session", "session_item_ref", "decision", "event",
+        "session", "session_item_ref", "decision", "event", "confirm_token",
     }  # fmt: skip
     assert all(strict == 1 for _, strict in tables)
 

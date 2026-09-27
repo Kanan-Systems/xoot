@@ -53,6 +53,21 @@ def get(conn: sqlite3.Connection, item_id: int) -> Item | None:
     return None if row is None else Item.model_validate(dict(row))
 
 
+def get_by_key(conn: sqlite3.Connection, key: str) -> Item | None:
+    """
+    Fetch an item by its public key.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - key (str): e.g. "xoot-12".
+
+    Returns:
+        - item (Item | None): the item, or None.
+    """
+    row = conn.execute(f"SELECT {_COLUMNS} FROM item WHERE key = ?", (key,)).fetchone()
+    return None if row is None else Item.model_validate(dict(row))
+
+
 def update(conn: sqlite3.Connection, item: Item, expected_version: int) -> None:
     """
     Write an item's mutable columns, guarded by its previous version.

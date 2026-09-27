@@ -4,8 +4,11 @@ Local-only tracker for goals, batches and subtasks across Claude sessions.
 
 ## Status
 
-Pre-alpha. The storage layer and domain services exist, but there is no CLI,
-MCP server or entry point yet, so nothing is usable end to end.
+Pre-alpha. `xoot-mcp` (or `python -m xoot.server`) serves the tracker to MCP
+clients over stdio. It opens the database below, or the file given with
+`--db PATH`, and logs the path it uses once to stderr. Tools take public keys
+(`xoot-12`, `xoot-D3`, `xoot-S4`); bulk creates, subtree drops and moves, and
+session closes are previewed first and applied with a single-use token.
 
 ## Data
 

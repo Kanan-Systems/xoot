@@ -19,3 +19,23 @@ write xoot's own tracker records, so a compromised or misbehaving client
 cannot use xoot to reach arbitrary files or run commands. The main risks in
 scope are corrupting or leaking the local tracker data. Anyone with access
 to the user's account already has that data, so that attacker is out of scope.
+
+## MCP server
+
+The server speaks MCP over stdio only. The `mcp` SDK it depends on also ships
+an HTTP transport, so installing xoot pulls in starlette, uvicorn, PyJWT,
+cryptography and the SDK's HTTP client. xoot only ever starts the stdio
+transport: that stack is installed and partly imported, but no server is
+started, no port is opened, and xoot makes no network request.
+
+Every write is recorded with actor `claude`; no tool accepts an actor or a
+client. A session's client (`code` or `chat`) comes from the name the MCP
+client reports at initialization. That name is unauthenticated: it labels
+the session and grants nothing.
+
+Stored titles, bodies and summaries are written by users and agents. The
+server returns them as data, and every tool description says so, but a
+client model may still read them as instructions. Treat them as untrusted.
+
+Never put secrets in key prefixes or aliases. They are part of every key,
+appear in outputs and events, and cannot be redacted.
