@@ -29,7 +29,7 @@ from xoot.server.schemas.arguments import (
 from xoot.server.schemas.decision_changes_input import DecisionChangesInput
 from xoot.server.schemas.decision_detail import DecisionDetail
 from xoot.server.schemas.decisions_output import DecisionsOutput
-from xoot.server.tool_meta import READ, WRITE, describe
+from xoot.server.tool_meta import READ, RESOLUTION, WRITE, describe
 from xoot.services.decision_service import create_decision, update_decision
 from xoot.store.store import Store
 
@@ -80,6 +80,15 @@ async def decision_record(  # pylint: disable=too-many-arguments
     scope: Annotated[
         str | None, Field(description="Item key the decision applies to.")
     ] = None,
+    supersedes: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Key of a decision in the same project that this one replaces; "
+                "it becomes superseded."
+            )
+        ),
+    ] = None,
 ) -> DecisionDetail:
     """
     Record a decision in the session's project.
@@ -91,6 +100,7 @@ async def decision_record(  # pylint: disable=too-many-arguments
         - body (str): the decision and its reasons.
         - status (str): locked or deferred.
         - scope (str | None): the item key it applies to.
+        - supersedes (str | None): the decision key it replaces.
 
     Returns:
         - decision (DecisionDetail): the new decision.
@@ -100,10 +110,14 @@ async def decision_record(  # pylint: disable=too-many-arguments
         found, write = session_writer(store, session)
         with store.read() as conn:
             scope_item_id = optional_item_id(conn, scope)
+            supersedes_id = (
+                None if supersedes is None else decision_by_key(conn, supersedes).id
+            )
         request = DecisionCreate(
             title=title,
             body=body,
             status=DecisionStatus(status),
+            supersedes_id=supersedes_id,
             scope_item_id=scope_item_id,
         )
         decision = create_decision(store, found.project_id, request, write)
@@ -157,7 +171,7 @@ def register(server: MCPServer) -> None:
         decisions_list,
         description=describe(
             "Decisions of a project, newest first, at most 50, optionally of "
-            "one status."
+            f"one status. {RESOLUTION}"
         ),
         annotations=READ,
     )
@@ -165,7 +179,8 @@ def register(server: MCPServer) -> None:
         decision_record,
         description=describe(
             "Record a decision (locked or deferred) in the session's project, "
-            "optionally scoped to one item."
+            "optionally scoped to one item. supersedes names an older decision "
+            "of the same project; it becomes superseded in the same write."
         ),
         annotations=WRITE,
     )

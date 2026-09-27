@@ -1,18 +1,22 @@
 """
 Issuing and consuming confirm tokens for two-phase writes.
 
-A preview issues a token bound to one tool, one argument digest and one open
-session. The apply presents it inside its own write transaction, which checks
-and consumes it first, so the token is spent only if the write commits.
+A preview issues a token bound to one tool, one argument digest, one plan
+digest and one open session. The apply presents it inside its own write
+transaction, which checks and consumes it first, then re-plans and compares
+the plan digest before writing, so the token is spent only if the write
+commits, and only for the plan the preview showed.
 """
 
 import hashlib
 import secrets
 import sqlite3
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 
 from xoot.exceptions.confirm_token_error import ConfirmTokenError
 from xoot.exceptions.session_state_error import SessionStateError
+from xoot.models.confirm.confirm_token import ConfirmToken
 from xoot.models.confirm.confirmation import Confirmation
 from xoot.models.confirm.new_confirm_token import NewConfirmToken
 from xoot.models.session.session_status import SessionStatus
@@ -20,10 +24,14 @@ from xoot.repositories.confirm import confirm_token_db
 from xoot.services.id_checks import check_id
 from xoot.services.lookups import require_session
 from xoot.store.store import Store
+from xoot.utils.utils import canonical_sha256
 
 TOKEN_TTL = timedelta(minutes=5)
 # 16 random bytes: 128 bits, far beyond guessing within the TTL.
 TOKEN_BYTES = 16
+# Spent tokens are kept this long after issue, then pruned by the next issue.
+PRUNE_AGE = timedelta(days=1)
+PLAN_CHANGED = "plan changed since preview; preview again"
 
 
 def hash_token(token: str) -> str:
@@ -39,21 +47,42 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def issue_token(
+def plan_digest(entries: Iterable[tuple[str, str]]) -> str:
+    """
+    Digest a plan as the sorted list of affected keys and target states.
+
+    Args:
+        - entries (Iterable[tuple[str, str]]): (item key, state after the
+          plan) for every item the plan touches.
+
+    Returns:
+        - digest (str): lowercase hex SHA-256.
+    """
+    return canonical_sha256(sorted([key, state] for key, state in entries))
+
+
+# One parameter per bound value, plus the clock override tests use.
+def issue_token(  # pylint: disable=too-many-arguments
     store: Store,
     session_id: int,
     tool: str,
     args_sha256: str,
+    plan_sha256: str,
+    *,
     now: datetime | None = None,
 ) -> str:
     """
     Create a single-use token that authorizes one previewed write.
+
+    Spent tokens issued more than PRUNE_AGE ago are deleted first, in the
+    same transaction, so the table does not grow without bound.
 
     Args:
         - store (Store): the database.
         - session_id (int): the open session the write belongs to.
         - tool (str): the tool the token is valid for.
         - args_sha256 (str): digest of the previewed call's arguments.
+        - plan_sha256 (str): plan_digest of the previewed plan.
         - now (datetime | None): issue time; the current UTC time when None.
 
     Returns:
@@ -63,7 +92,7 @@ def issue_token(
         - InvalidIdError: session_id is not an int id.
         - NotFoundError: no such session.
         - SessionStateError: the session is closed.
-        - pydantic.ValidationError: tool or args_sha256 is malformed.
+        - pydantic.ValidationError: tool or a digest is malformed.
     """
     check_id("session_id", session_id)
     issued_at = datetime.now(UTC) if now is None else now
@@ -72,12 +101,17 @@ def issue_token(
         token_sha256=hash_token(token),
         tool=tool,
         args_sha256=args_sha256,
+        plan_sha256=plan_sha256,
         session_id=session_id,
         expires_at=issued_at + TOKEN_TTL,
     )
     with store.write() as conn:
         if require_session(conn, session_id).status is not SessionStatus.OPEN:
             raise SessionStateError(f"session {session_id} is closed")
+        # No issue time is stored; it is always expires_at - TOKEN_TTL.
+        confirm_token_db.delete_spent(
+            conn, issued_at, issued_at - PRUNE_AGE + TOKEN_TTL
+        )
         confirm_token_db.insert(conn, new)
     return token
 
@@ -87,18 +121,22 @@ def consume_token(
     confirmation: Confirmation,
     session_id: int | None,
     now: datetime | None = None,
-) -> None:
+) -> ConfirmToken:
     """
     Check a presented token and mark it used.
 
     Must run inside the write transaction of the change it authorizes, so a
-    failed write rolls the use back and the token stays valid.
+    failed write rolls the use back and the token stays valid. The caller
+    then re-plans and passes the result to check_plan before writing.
 
     Args:
         - conn (sqlite3.Connection): connection inside that transaction.
         - confirmation (Confirmation): the token, tool and argument digest.
         - session_id (int | None): the session of the write.
         - now (datetime | None): use time; the current UTC time when None.
+
+    Returns:
+        - token (ConfirmToken): the row, for check_plan.
 
     Raises:
         - ConfirmTokenError: the token is unknown, bound to another tool,
@@ -119,3 +157,23 @@ def consume_token(
     if used_at >= row.expires_at:
         raise ConfirmTokenError("the confirm token has expired")
     confirm_token_db.mark_used(conn, row.id, used_at)
+    return row
+
+
+def check_plan(token: ConfirmToken | None, plan_sha256: str) -> None:
+    """
+    Refuse an apply whose freshly computed plan differs from the preview's.
+
+    Raising inside the apply's transaction rolls back the token's use too,
+    so the token stays unused and nothing is written.
+
+    Args:
+        - token (ConfirmToken | None): the consumed token; None when the call
+          needed no confirmation.
+        - plan_sha256 (str): plan_digest of the plan about to be written.
+
+    Raises:
+        - ConfirmTokenError: the plan changed since the preview.
+    """
+    if token is not None and token.plan_sha256 != plan_sha256:
+        raise ConfirmTokenError(PLAN_CHANGED)

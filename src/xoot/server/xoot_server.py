@@ -16,8 +16,10 @@ class XootServer(MCPServer):
     An MCPServer bound to one database file.
 
     Tools read db_path from their Context to open a short-lived Store per
-    call. call_tool rewrites the SDK's argument-validation error, whose text
-    quotes the rejected input, into field locations only.
+    call; db_calls counts the calls still running, so a shutdown can wait
+    for their transactions to end. call_tool rewrites the SDK's
+    argument-validation error, whose text quotes the rejected input, into
+    field locations only.
     """
 
     def __init__(self, db_path: Path, **kwargs: Any) -> None:
@@ -30,6 +32,7 @@ class XootServer(MCPServer):
         """
         super().__init__(**kwargs)
         self.db_path = db_path
+        self.db_calls = 0
 
     async def call_tool(
         self,

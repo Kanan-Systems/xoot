@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
 from xoot.models.event.actor import Actor
@@ -20,12 +21,13 @@ from xoot.server.render import change_entry, item_summary, session_summary
 from xoot.server.resolution import item_by_key, resolve_project, session_writer
 from xoot.server.roots import root_paths
 from xoot.server.schemas.arguments import ConfirmToken, ProjectAlias, SessionKey
-from xoot.server.schemas.close_preview import ClosePreview
+from xoot.server.schemas.auto_backlog_warning_entry import AutoBacklogWarningEntry
+from xoot.server.schemas.close_preview import ClosePreview, CloseWarningItem
 from xoot.server.schemas.close_warning_entry import CloseWarningEntry
 from xoot.server.schemas.focus_warning_entry import FocusWarningEntry
 from xoot.server.schemas.session_close_output import SessionCloseOutput
 from xoot.server.schemas.session_start_output import SessionStartOutput
-from xoot.server.tool_meta import DESTRUCTIVE, WRITE, describe
+from xoot.server.tool_meta import DESTRUCTIVE, RESOLUTION, WRITE, describe
 from xoot.services.confirm_service import issue_token
 from xoot.services.session_close_service import close_session, preview_close
 from xoot.services.session_service import start_session
@@ -118,6 +120,10 @@ async def session_close(
 
     Returns:
         - output (SessionCloseOutput): the preview and a token, or the session.
+
+    Raises:
+        - ToolError: a required item has no disposition; the message lists
+          the missing item keys.
     """
     digest = args_digest(
         {
@@ -134,11 +140,9 @@ async def session_close(
         request = SessionClose(summary=summary, dispositions=by_id)
         if confirm_token is None:
             plan = preview_close(store, found.id, request)
-            token = (
-                None
-                if plan.missing_item_ids
-                else issue_token(store, found.id, CLOSE_TOOL, digest)
-            )
+            if plan.missing_item_ids:
+                raise ToolError(_missing_message(store, plan))
+            token = issue_token(store, found.id, CLOSE_TOOL, digest, plan.plan_sha256)
             return SessionCloseOutput(
                 phase="preview",
                 confirm_token=token,
@@ -156,6 +160,13 @@ async def session_close(
     return await run_db(ctx, work)
 
 
+def _missing_message(store: Store, plan: SessionClosePlan) -> str:
+    # Keys come from stored rows, never from the caller, so they are safe to echo.
+    with store.read() as conn:
+        keys = _keys(KeyBook(conn), plan.missing_item_ids)
+    return f"missing dispositions: {', '.join(keys)}"
+
+
 def _preview(store: Store, plan: SessionClosePlan) -> ClosePreview:
     with store.read() as conn:
         book = KeyBook(conn)
@@ -163,18 +174,25 @@ def _preview(store: Store, plan: SessionClosePlan) -> ClosePreview:
             book.item_key(item_id): disposition
             for item_id, disposition in plan.dispositions.items()
         }
+        warnings: list[CloseWarningItem] = [
+            CloseWarningEntry(
+                key=w.key, parent=w.parent_key, parent_category=w.parent_category
+            )
+            for w in plan.warnings
+        ]
+        warnings.extend(
+            AutoBacklogWarningEntry(
+                key=c.key,
+                origin_session=book.session_key(c.before.get("backlog_session_id")),
+            )
+            for c in plan.auto_backlog
+        )
         return ClosePreview(
             required=_keys(book, plan.required_item_ids),
-            missing=_keys(book, plan.missing_item_ids),
             dispositions={k: v for k, v in keyed.items() if k is not None},
             changes=[change_entry(book, c) for c in plan.changes],
             auto_backlog=[change_entry(book, c) for c in plan.auto_backlog],
-            warnings=[
-                CloseWarningEntry(
-                    key=w.key, parent=w.parent_key, parent_category=w.parent_category
-                )
-                for w in plan.warnings
-            ],
+            warnings=warnings,
         )
 
 
@@ -195,7 +213,7 @@ def register(server: MCPServer) -> None:
             "Start a working session in a project; call it first. Links the "
             "focus items and returns the session key every write needs, plus "
             "backlog items earlier sessions left and focus items other open "
-            "sessions share."
+            f"sessions share. {RESOLUTION}"
         ),
         annotations=WRITE,
     )
@@ -203,10 +221,13 @@ def register(server: MCPServer) -> None:
         session_close,
         description=describe(
             "Close the session; never skip it. Every open item linked to the "
-            "session needs a disposition. First call returns the plan, missing "
-            "dispositions and warnings, plus a confirm_token once nothing is "
-            "missing, and writes nothing else; call again with the same "
-            "arguments plus the token."
+            "session needs a disposition; a call missing any fails and lists "
+            "the missing item keys. First call returns the plan, warnings and "
+            "a confirm_token, and writes nothing else; call again with the same "
+            "arguments plus the token. The warnings include every item the "
+            "close moves from an earlier session's backlog to the project "
+            "backlog. Before confirming, name every auto-backlog warning to "
+            "the user and get their agreement."
         ),
         annotations=DESTRUCTIVE,
     )

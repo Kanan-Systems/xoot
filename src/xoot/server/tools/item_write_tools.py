@@ -131,7 +131,7 @@ async def items_create_bulk(
             request = BulkCreate(items=tuple(_bulk_item(conn, node) for node in items))
         if confirm_token is None:
             plan = preview_bulk(store, found.id, request)
-            token = issue_token(store, found.id, BULK_TOOL, digest)
+            token = issue_token(store, found.id, BULK_TOOL, digest, plan.plan_sha256)
             planned = [
                 PlannedEntry(key=p.key, kind=p.kind, title=p.title, parent=p.parent_key)
                 for p in plan.items

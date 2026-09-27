@@ -23,7 +23,7 @@ from xoot.server.schemas.item_get_output import ItemGetOutput
 from xoot.server.schemas.literals import BacklogScope
 from xoot.server.schemas.tree_entry import TreeEntry
 from xoot.server.schemas.tree_output import TreeOutput
-from xoot.server.tool_meta import READ, describe
+from xoot.server.tool_meta import READ, RESOLUTION, describe
 from xoot.services.tree_service import tree
 from xoot.store.store import Store
 
@@ -200,7 +200,7 @@ def register(server: MCPServer) -> None:
         description=describe(
             "Item tree of a project in pre-order: goals > batches > subtasks, "
             "plus unfiled subtasks. Bounded by depth and limit; truncated says "
-            "whether items were hidden."
+            f"whether items were hidden. {RESOLUTION}"
         ),
         annotations=READ,
     )
@@ -215,7 +215,9 @@ def register(server: MCPServer) -> None:
     server.add_tool(
         backlog_list,
         description=describe(
-            "Backlog items of a project for one scope, by number, at most 100."
+            "Backlog items of a project for one scope, by number, at most 100. "
+            "Captured items appear in both the session scope and the unfiled "
+            f"scope. {RESOLUTION}"
         ),
         annotations=READ,
     )

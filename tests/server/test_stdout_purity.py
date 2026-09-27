@@ -8,7 +8,7 @@ stdout before it sends initialize.
 import json
 import select
 import subprocess
-import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Any
 
@@ -20,16 +20,6 @@ WAIT_S = 30.0
 QUIET_S = 1.0
 
 REQUESTS: list[dict[str, Any]] = [
-    {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2025-11-25",
-            "capabilities": {},
-            "clientInfo": {"name": "raw-test", "version": "1"},
-        },
-    },
     {"jsonrpc": "2.0", "method": "notifications/initialized"},
     {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
     {
@@ -52,22 +42,24 @@ def _readable(stream: IO[bytes], timeout: float) -> bool:
     return bool(ready)
 
 
-def test_stdout_is_protocol_only(db_path: Path, project: Project) -> None:
+def test_stdout_is_protocol_only(
+    db_path: Path,
+    project: Project,
+    raw_server: Callable[[], subprocess.Popen[bytes]],
+    raw_initialize: bytes,
+) -> None:
     """Nothing reaches stdout before initialize; afterwards every line is JSON-RPC."""
     assert project.key_prefix == "xoot"
-    with subprocess.Popen(
-        [sys.executable, "-m", "xoot.server", "--db", str(db_path)],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    ) as server:
+    with raw_server() as server:
         assert server.stdin and server.stdout and server.stderr
         assert _readable(server.stderr, WAIT_S), "server did not start"
         assert f"database: {db_path}".encode() in server.stderr.readline()
         assert not _readable(server.stdout, QUIET_S), "stdout written before initialize"
 
-        for request in REQUESTS:
-            server.stdin.write(json.dumps(request).encode() + b"\n")
+        lines_in = [raw_initialize]
+        lines_in.extend(json.dumps(request).encode() + b"\n" for request in REQUESTS)
+        for line_in in lines_in:
+            server.stdin.write(line_in)
             server.stdin.flush()
         lines, answered = [], set()
         while answered != {1, 2, 3, 4}:

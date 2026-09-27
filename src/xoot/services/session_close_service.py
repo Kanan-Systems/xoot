@@ -35,7 +35,7 @@ from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.item import item_db
 from xoot.repositories.project import project_db
 from xoot.repositories.session import session_db, session_item_ref_db
-from xoot.services.confirm_service import consume_token
+from xoot.services.confirm_service import check_plan, consume_token, plan_digest
 from xoot.services.id_checks import check_id
 from xoot.services.item_writer import apply_changes, plan_change
 from xoot.services.lookups import (
@@ -99,7 +99,8 @@ def close_session(
         - session (Session): the closed session.
 
     Raises:
-        - ConfirmTokenError: the token cannot authorize this call.
+        - ConfirmTokenError: the token cannot authorize this call, or the
+          plan changed since the preview.
         - InvalidIdError: session_id is not an int id.
         - DispositionError: a disposition is missing or names an item that
           needs none.
@@ -108,14 +109,14 @@ def close_session(
     """
     check_id("session_id", session_id)
     with store.write() as conn:
-        if confirm is not None:
-            consume_token(conn, confirm, session_id)
+        token = None if confirm is None else consume_token(conn, confirm, session_id)
         session = require_session(conn, session_id)
         plan = _plan(conn, session, request)
         if plan.missing_item_ids:
             raise DispositionError(
                 "missing dispositions for items", plan.missing_item_ids
             )
+        check_plan(token, plan.plan_sha256)
         scope = WriteScope(conn, WriteContext(actor=actor, session_id=session_id))
         for item_id, disposition in sorted(plan.dispositions.items()):
             session_item_ref_db.set_disposition(conn, session_id, item_id, disposition)
@@ -175,15 +176,31 @@ def _plan(
         change = plan_change(item, fields)
         if change is not None:
             changes.append(change)
+    auto_backlog = _stale_backlog(conn, definition, session, rehomed)
     return SessionClosePlan(
         session_id=session.id,
         required_item_ids=tuple(sorted(required_ids)),
         missing_item_ids=tuple(sorted(required_ids - set(request.dispositions))),
         dispositions=dict(request.dispositions),
         changes=tuple(changes),
-        auto_backlog=_stale_backlog(conn, definition, session, rehomed),
+        auto_backlog=auto_backlog,
+        plan_sha256=_digest(conn, required, changes, auto_backlog),
         warnings=_warnings(conn, definition, required, request, changes),
     )
+
+
+def _digest(
+    conn: sqlite3.Connection,
+    required: list[Item],
+    changes: list[ItemChange],
+    auto_backlog: tuple[ItemChange, ...],
+) -> str:
+    """Every required item and auto-backlog move, with the state it ends in."""
+    closing = {c.item_id: c.after["state"] for c in changes if "state" in c.after}
+    entries = [(item.key, closing.get(item.id, item.state)) for item in required]
+    # Auto-backlog moves keep the state; only the backlog changes.
+    entries.extend((c.key, require_item(conn, c.item_id).state) for c in auto_backlog)
+    return plan_digest(entries)
 
 
 def _warnings(

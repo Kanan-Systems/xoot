@@ -27,10 +27,11 @@ from xoot.services.confirm_service import (
     issue_token,
 )
 from xoot.services.session_close_service import close_session
-from xoot.services.subtree_service import apply_drop
+from xoot.services.subtree_service import apply_drop, preview_drop
 from xoot.store.store import Store
 
 DIGEST = "a" * 64
+PLAN = "d" * 64
 OTHER_DIGEST = "b" * 64
 TOOL = "session_close"
 
@@ -52,7 +53,7 @@ def _consume(store: Store, claim: Confirmation, session_id: int) -> None:
 
 def test_only_the_digest_is_stored(store: Store, session: Session) -> None:
     """The row holds the token's SHA-256, never the token itself."""
-    token = issue_token(store, session.id, TOOL, DIGEST)
+    token = issue_token(store, session.id, TOOL, DIGEST, PLAN)
     assert len(token) >= 22
     rows = store.conn.execute("SELECT * FROM confirm_token").fetchall()
     assert len(rows) == 1
@@ -62,7 +63,7 @@ def test_only_the_digest_is_stored(store: Store, session: Session) -> None:
 
 def test_consume_marks_used_once(store: Store, session: Session) -> None:
     """A good token is consumed once; replaying it fails."""
-    token = issue_token(store, session.id, TOOL, DIGEST)
+    token = issue_token(store, session.id, TOOL, DIGEST, PLAN)
     _consume(store, _claim(token), session.id)
     with store.read() as conn:
         row = confirm_token_db.get_by_hash(conn, hash_token(token))
@@ -82,7 +83,7 @@ def test_mismatched_claims_fail(
     store: Store, session: Session, change: dict[str, str], reason: str
 ) -> None:
     """A token only applies to the tool and arguments it was issued for."""
-    token = issue_token(store, session.id, TOOL, DIGEST)
+    token = issue_token(store, session.id, TOOL, DIGEST, PLAN)
     with pytest.raises(ConfirmTokenError, match=reason):
         _consume(store, _claim(token, **change), session.id)
 
@@ -94,7 +95,7 @@ def test_other_session_fails(
     make_session: Callable[..., Session],
 ) -> None:
     """A token issued in one session cannot be used from another."""
-    token = issue_token(store, session.id, TOOL, DIGEST)
+    token = issue_token(store, session.id, TOOL, DIGEST, PLAN)
     other = make_session(project)
     with pytest.raises(ConfirmTokenError, match="another session"):
         _consume(store, _claim(token), other.id)
@@ -111,7 +112,7 @@ def test_expired_token_fails(
 ) -> None:
     """Once the clock passes the TTL the token is refused and stays unused."""
     issued = datetime(2026, 9, 27, 12, 0, tzinfo=UTC)
-    token = issue_token(store, session.id, TOOL, DIGEST, now=issued)
+    token = issue_token(store, session.id, TOOL, DIGEST, PLAN, now=issued)
 
     clock = SimpleNamespace(now=lambda tz: issued + TOKEN_TTL)
     monkeypatch.setattr(confirm_service, "datetime", clock)
@@ -128,7 +129,7 @@ def test_closed_session_gets_no_token(
     """Tokens are only issued for open sessions."""
     close_session(store, session.id, SessionClose(), user)
     with pytest.raises(SessionStateError):
-        issue_token(store, session.id, TOOL, DIGEST)
+        issue_token(store, session.id, TOOL, DIGEST, PLAN)
 
 
 def test_failed_apply_leaves_token_unused(
@@ -142,7 +143,8 @@ def test_failed_apply_leaves_token_unused(
     goal = make_item(project, ItemKind.GOAL)
     make_item(project, ItemKind.BATCH, parent_id=goal.id)
     ctx = WriteContext(actor=claude, session_id=session.id)
-    token = issue_token(store, session.id, "item_update", DIGEST)
+    plan = preview_drop(store, goal.id)
+    token = issue_token(store, session.id, "item_update", DIGEST, plan.plan_sha256)
     claim = _claim(token, tool="item_update")
     with pytest.raises(VersionConflictError):
         apply_drop(store, goal.id, goal.version + 1, ctx, claim)
@@ -157,6 +159,6 @@ def test_token_is_never_logged(
 ) -> None:
     """Issuing and consuming log nothing that contains the token."""
     with caplog.at_level(logging.DEBUG):
-        token = issue_token(store, session.id, TOOL, DIGEST)
+        token = issue_token(store, session.id, TOOL, DIGEST, PLAN)
         _consume(store, _claim(token), session.id)
     assert token not in caplog.text

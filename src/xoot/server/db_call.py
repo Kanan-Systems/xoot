@@ -34,10 +34,7 @@ def db_path_of(ctx: Context) -> Path:
     Raises:
         - TypeError: the context belongs to another server class.
     """
-    server = ctx.mcp_server
-    if not isinstance(server, XootServer):
-        raise TypeError("xoot tools must run on an XootServer")
-    return server.db_path
+    return _server_of(ctx).db_path
 
 
 async def run_db[T](ctx: Context, work: Callable[[Store], T]) -> T:
@@ -55,7 +52,20 @@ async def run_db[T](ctx: Context, work: Callable[[Store], T]) -> T:
         - ToolError: work raised a domain or validation error; the message is
           the safe form, the original is chained.
     """
-    return await anyio.to_thread.run_sync(partial(_in_store, db_path_of(ctx), work))
+    server = _server_of(ctx)
+    # Only the event-loop thread touches the counter, so += is safe.
+    server.db_calls += 1
+    try:
+        return await anyio.to_thread.run_sync(partial(_in_store, server.db_path, work))
+    finally:
+        server.db_calls -= 1
+
+
+def _server_of(ctx: Context) -> XootServer:
+    server = ctx.mcp_server
+    if not isinstance(server, XootServer):
+        raise TypeError("xoot tools must run on an XootServer")
+    return server
 
 
 def _in_store[T](db_path: Path, work: Callable[[Store], T]) -> T:

@@ -129,7 +129,7 @@ async def _write_flow(
         },
         "summary": "done for today",
     }
-    out["incomplete"] = await harness.ok(
+    out["incomplete"] = await harness.error(
         client, "session_close", session=key, dispositions={focus.key: "carry_over"}
     )
     out["close_preview"] = await harness.ok(client, "session_close", **close)
@@ -158,7 +158,6 @@ def test_write_tools(
     assert out["item_update"]["item"]["title"] == "renamed"
     assert out["item_update"]["item"]["version"] == 2
     assert out["decision_update"]["status"] == "deferred"
-    assert out["incomplete"]["confirm_token"] is None
-    assert len(out["incomplete"]["preview"]["missing"]) == 3
-    assert out["close_preview"]["preview"]["missing"] == []
+    assert "missing dispositions: " in out["incomplete"]
+    assert out["close_preview"]["preview"]["required"]
     assert out["session_close"]["session"]["status"] == "closed"

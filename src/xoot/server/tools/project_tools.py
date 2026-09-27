@@ -10,7 +10,7 @@ from xoot.server.roots import root_paths
 from xoot.server.schemas.arguments import ProjectAlias
 from xoot.server.schemas.brief_output import BriefOutput
 from xoot.server.schemas.projects_list_output import ProjectsListOutput
-from xoot.server.tool_meta import READ, describe
+from xoot.server.tool_meta import READ, RESOLUTION, describe
 from xoot.store.store import Store
 
 
@@ -74,7 +74,9 @@ def register(server: MCPServer) -> None:
         description=describe(
             "Brief on one project: item counts per category, open sessions, "
             "active and awaiting-input items, pending session-backlog items, the "
-            "project-backlog count and the latest decisions. Read this first."
+            "project-backlog count, the latest decisions, and the workflow: per "
+            "kind, each state with its category and whether transitions are "
+            f"restricted. Read this first. {RESOLUTION}"
         ),
         annotations=READ,
     )

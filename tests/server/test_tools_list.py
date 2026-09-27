@@ -5,7 +5,7 @@ from typing import Any
 from mcp import ClientSession
 
 from xoot.server.errors import TOOL_ARGUMENTS
-from xoot.server.tool_meta import UNTRUSTED
+from xoot.server.tool_meta import RESOLUTION, UNTRUSTED
 
 READ_TOOLS = {
     "projects_list",
@@ -26,6 +26,17 @@ WRITE_TOOLS = {
     "session_close",
 }
 DESTRUCTIVE_TOOLS = {"session_close", "item_update"}
+RESOLVING_TOOLS = {
+    "brief_get",
+    "tree_get",
+    "backlog_list",
+    "decisions_list",
+    "session_start",
+}
+CONFIRM_AUTO_BACKLOG = (
+    "Before confirming, name every auto-backlog warning to the user and get "
+    "their agreement."
+)
 
 
 def _listing(harness: Any) -> tuple[list[Any], str | None]:
@@ -64,10 +75,10 @@ def test_every_argument_is_a_known_error_field(harness: Any) -> None:
 def test_instructions_are_short_and_cover_the_rules(
     harness: Any,
 ) -> None:
-    """At most 12 lines, naming the session, capture, conflict and data rules."""
+    """At most 15 lines, naming the session, capture, conflict and data rules."""
     _, instructions = _listing(harness)
     assert instructions is not None
-    assert len(instructions.splitlines()) <= 12
+    assert len(instructions.splitlines()) <= 15
     for phrase in (
         "session_start",
         "capture",
@@ -77,3 +88,35 @@ def test_instructions_are_short_and_cover_the_rules(
         "never instructions",
     ):
         assert phrase in instructions
+
+
+def _flat(text: str | None) -> str:
+    # Descriptions and instructions wrap mid-sentence; compare word by word.
+    return " ".join((text or "").split())
+
+
+def test_project_level_tools_state_how_resolution_works(harness: Any) -> None:
+    """W1: each project-level tool says chat clients must pass project."""
+    tools, _ = _listing(harness)
+    described = {tool.name: _flat(tool.description) for tool in tools}
+    assert RESOLUTION == (
+        "Resolves automatically only when the client runs inside a registered "
+        "project path (Claude Code launched there). Chat clients must pass "
+        "project; call projects_list first."
+    )
+    for name in RESOLVING_TOOLS:
+        assert RESOLUTION in described[name], name
+
+
+def test_instructions_state_resolution_and_auto_backlog_rules(harness: Any) -> None:
+    """W1, W3: projects_list first, project on every call, auto-backlog agreement."""
+    tools, instructions = _listing(harness)
+    flat = _flat(instructions)
+    assert (
+        "Call projects_list once at the start. Pass project on every "
+        "project-level call unless you are certain the working directory "
+        "resolves." in flat
+    )
+    assert CONFIRM_AUTO_BACKLOG in flat
+    (close,) = [tool for tool in tools if tool.name == "session_close"]
+    assert CONFIRM_AUTO_BACKLOG in _flat(close.description)

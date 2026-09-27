@@ -255,8 +255,8 @@ END;
 -- Single-use tokens for two-phase tool calls. Only the token's SHA-256 is
 -- stored: the token itself exists only in the preview result, so reading the
 -- database is not enough to apply a pending change. A token is bound to one
--- tool, one argument digest and one session, and used_at is set in the same
--- transaction as the write it allows.
+-- tool, one argument digest, one plan digest and one session, and used_at is
+-- set in the same transaction as the write it allows.
 CREATE TABLE confirm_token (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     token_sha256 TEXT NOT NULL UNIQUE CHECK (
@@ -269,6 +269,11 @@ CREATE TABLE confirm_token (
     ),
     args_sha256 TEXT NOT NULL CHECK (
         length(args_sha256) = 64 AND args_sha256 NOT GLOB '*[^0-9a-f]*'
+    ),
+    -- Digest of the previewed plan (affected keys and target states); the
+    -- apply recomputes it under the write lock and refuses a different plan.
+    plan_sha256 TEXT NOT NULL CHECK (
+        length(plan_sha256) = 64 AND plan_sha256 NOT GLOB '*[^0-9a-f]*'
     ),
     session_id INTEGER NOT NULL REFERENCES session (id),
     expires_at TEXT NOT NULL CHECK (

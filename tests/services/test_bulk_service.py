@@ -223,7 +223,10 @@ def test_apply_consumes_its_token(
     store: Store, session: Session, claude: Actor
 ) -> None:
     """With a confirmation, the apply spends it; a replay is refused."""
-    token = issue_token(store, session.id, "items_create_bulk", DIGEST)
+    plan = preview_bulk(store, session.id, _tree())
+    token = issue_token(
+        store, session.id, "items_create_bulk", DIGEST, plan.plan_sha256
+    )
     claim = Confirmation(token=token, tool="items_create_bulk", args_sha256=DIGEST)
     assert len(apply_bulk(store, session.id, _tree(), claude, claim)) == 5
     with pytest.raises(ConfirmTokenError, match="already been used"):

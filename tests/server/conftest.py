@@ -4,9 +4,12 @@ Fixtures for the end-to-end server tests.
 Every test spawns `python -m xoot.server --db <tmp>` and drives it through
 the SDK's own stdio client, so the protocol, argument validation and error
 paths are the real ones. Projects are registered through the services before
-the server starts; the server's stderr is kept in a file per test.
+the server starts; the server's stderr is kept in a file per test. Tests
+that must see raw stdio or signal the process use raw_server instead.
 """
 
+import json
+import subprocess
 import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -19,6 +22,7 @@ from mcp.client.context import ClientRequestContext
 from mcp.types import Implementation, ListRootsResult, Root
 
 type Scenario = Callable[[ClientSession], Awaitable[Any]]
+type RawServer = Callable[[], subprocess.Popen[bytes]]
 
 DEFAULT_CLIENT = "claude-code"
 
@@ -131,3 +135,34 @@ def fixture_server_stderr(tmp_path: Path) -> Path:
 def fixture_harness(db_path: Path, server_stderr: Path) -> Harness:
     """A harness on this test's database."""
     return Harness(db_path, server_stderr)
+
+
+@pytest.fixture(name="raw_server")
+def fixture_raw_server(db_path: Path) -> RawServer:
+    """Factory: spawn the server on this test's database with piped stdio."""
+
+    def spawn() -> subprocess.Popen[bytes]:
+        return subprocess.Popen(
+            [sys.executable, "-m", "xoot.server", "--db", str(db_path)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    return spawn
+
+
+@pytest.fixture(name="raw_initialize")
+def fixture_raw_initialize() -> bytes:
+    """An initialize request with id 1, as one newline-terminated JSON-RPC line."""
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "raw-test", "version": "1"},
+        },
+    }
+    return json.dumps(request).encode() + b"\n"

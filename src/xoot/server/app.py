@@ -15,9 +15,13 @@ from xoot.server.xoot_server import XootServer
 
 INSTRUCTIONS = """\
 xoot tracks goals, batches and subtasks across sessions.
+Call projects_list once at the start. Pass project on every project-level
+call unless you are certain the working directory resolves.
 Start every session with session_start and pass its session key to each write.
 Capture side items with capture the moment they appear.
 Never skip session_close: give every open linked item a disposition.
+Before confirming, name every auto-backlog warning to the user and get their
+agreement.
 Update items with item_update, passing expected_version from your last read.
 Previews return a confirm_token; repeat the same call with it to apply.
 On a version conflict, re-read. If it touches the fields you are changing,

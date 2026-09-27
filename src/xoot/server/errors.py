@@ -48,7 +48,7 @@ TOOL_ARGUMENTS = frozenset(
         "body", "changes", "confirm_token", "depth", "dispositions",
         "expected_version", "focus", "include_done", "items", "key", "kind",
         "limit", "parent", "project", "root", "scope", "session", "status",
-        "summary", "title",
+        "summary", "supersedes", "title",
     }
 )  # fmt: skip
 

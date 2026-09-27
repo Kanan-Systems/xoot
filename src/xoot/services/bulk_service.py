@@ -2,8 +2,9 @@
 Creating a tree of new items in one transaction, as a preview plus an apply.
 
 The preview validates every node in a read-only snapshot and returns the keys
-the items would get. The apply consumes its confirm token, re-validates under
-the write lock and inserts every item, or none of them.
+the items would get. The apply consumes its confirm token, re-plans under the
+write lock, refuses a plan that differs from the preview's, and inserts every
+item, or none of them.
 """
 
 import sqlite3
@@ -20,7 +21,7 @@ from xoot.models.item.planned_item import PlannedItem
 from xoot.models.session.session import Session
 from xoot.models.session.session_status import SessionStatus
 from xoot.models.workflow.category import Category
-from xoot.services.confirm_service import consume_token
+from xoot.services.confirm_service import check_plan, consume_token, plan_digest
 from xoot.services.id_checks import check_id
 from xoot.services.item_rules import check_child_kind, check_parent
 from xoot.services.item_writer import insert_item
@@ -82,7 +83,8 @@ def apply_bulk(
         - items (tuple[Item, ...]): the stored items, in insert order.
 
     Raises:
-        - ConfirmTokenError: the token cannot authorize this call.
+        - ConfirmTokenError: the token cannot authorize this call, or the
+          planned keys changed since the preview.
         - InvalidIdError: session_id is not an int id.
         - SessionStateError: the session is closed.
         - HierarchyError: a node's parent kind is not allowed.
@@ -91,10 +93,9 @@ def apply_bulk(
     """
     check_id("session_id", session_id)
     with store.write() as conn:
-        if confirm is not None:
-            consume_token(conn, confirm, session_id)
+        token = None if confirm is None else consume_token(conn, confirm, session_id)
         session = _open_session(conn, session_id)
-        _plan(conn, session, request)
+        check_plan(token, _plan(conn, session, request).plan_sha256)
         project = require_project(conn, session.project_id)
         definition = active_workflow(conn, project).definition
         scope = WriteScope(conn, WriteContext(actor=actor, session_id=session_id))
@@ -122,6 +123,7 @@ def _open_session(conn: sqlite3.Connection, session_id: int) -> Session:
 def _plan(conn: sqlite3.Connection, session: Session, request: BulkCreate) -> BulkPlan:
     """Check every node against the current rows and assign planned keys."""
     project = require_project(conn, session.project_id)
+    definition = active_workflow(conn, project).definition
     planned: list[PlannedItem] = []
     for node, parent in request.walk():
         if parent is None:
@@ -143,4 +145,8 @@ def _plan(conn: sqlite3.Connection, session: Session, request: BulkCreate) -> Bu
                 parent_key=parent_key,
             )
         )
-    return BulkPlan(session_id=session.id, items=tuple(planned))
+    digest = plan_digest(
+        (p.key, definition.for_kind(p.kind).default_state(Category.OPEN))
+        for p in planned
+    )
+    return BulkPlan(session_id=session.id, items=tuple(planned), plan_sha256=digest)

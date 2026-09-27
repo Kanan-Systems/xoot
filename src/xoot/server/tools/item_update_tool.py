@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict
 
 from xoot.models.confirm.confirmation import Confirmation
 from xoot.models.event.write_context import WriteContext
-from xoot.models.fields import Id
+from xoot.models.fields import Id, StateName
 from xoot.models.item.item import Item
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.item.subtree_plan import SubtreePlan
@@ -34,6 +34,7 @@ from xoot.server.resolution import (
     session_by_key,
     session_writer,
 )
+from xoot.server.schemas.affected_item_entry import AffectedItemEntry
 from xoot.server.schemas.arguments import (
     ConfirmToken,
     ExpectedVersion,
@@ -118,7 +119,7 @@ async def item_update(  # pylint: disable=too-many-arguments
             return _plan_output(store, request, "applied", None, request.apply(store))
         if confirm_token is None:
             plan = request.preview(store)
-            token = issue_token(store, found.id, TOOL, digest)
+            token = issue_token(store, found.id, TOOL, digest, plan.plan_sha256)
             return _plan_output(store, request, "preview", token, plan)
         claim = confirmation(TOOL, confirm_token, digest)
         return _plan_output(
@@ -137,6 +138,8 @@ class _SubtreeChange(BaseModel):
     item_id: Id
     key: str
     new_parent_id: Id | None
+    # The dropped state asked for; drop only.
+    state: StateName | None
     expected_version: Id
     write: WriteContext
 
@@ -151,7 +154,7 @@ class _SubtreeChange(BaseModel):
             - plan (SubtreePlan): the planned changes.
         """
         if self.mode == "drop":
-            return preview_drop(store, self.item_id)
+            return preview_drop(store, self.item_id, self.state)
         return preview_reparent(store, self.item_id, self.new_parent_id)
 
     def apply(self, store: Store, claim: Confirmation | None = None) -> SubtreePlan:
@@ -167,7 +170,12 @@ class _SubtreeChange(BaseModel):
         """
         if self.mode == "drop":
             return apply_drop(
-                store, self.item_id, self.expected_version, self.write, claim
+                store,
+                self.item_id,
+                self.expected_version,
+                self.write,
+                claim,
+                state=self.state,
             )
         return apply_reparent(
             store,
@@ -209,6 +217,7 @@ def _request(
         item_id=item.id,
         key=item.key,
         new_parent_id=optional_item_id(conn, changes.parent),
+        state=changes.state if mode == "drop" else None,
         expected_version=expected_version,
         write=write,
     )
@@ -248,9 +257,34 @@ def _plan_output(
             changes=[change_entry(book, change) for change in plan.changes],
             carried=[key for key in keys if key is not None],
         )
+        items = None if phase == "preview" else _affected(conn, book, plan)
     return ItemUpdateOutput(
-        mode=request.mode, phase=phase, confirm_token=token, item=None, plan=output
+        mode=request.mode,
+        phase=phase,
+        confirm_token=token,
+        item=None,
+        items=items,
+        plan=output,
     )
+
+
+def _affected(
+    conn: sqlite3.Connection, book: KeyBook, plan: SubtreePlan
+) -> list[AffectedItemEntry]:
+    """Every changed or carried item, read back after the write."""
+    item_ids = [change.item_id for change in plan.changes]
+    item_ids.extend(plan.carried_item_ids)
+    rows = (item_db.get(conn, item_id) for item_id in item_ids)
+    return [
+        AffectedItemEntry(
+            key=row.key,
+            state=row.state,
+            parent=book.item_key(row.parent_id),
+            version=row.version,
+        )
+        for row in rows
+        if row is not None
+    ]
 
 
 def register(server: MCPServer) -> None:
@@ -264,7 +298,8 @@ def register(server: MCPServer) -> None:
         item_update,
         description=describe(
             "Change an item's title, body, state, parent or references, passing "
-            "expected_version from your last read. Send a parent change, or a "
+            "expected_version from your last read. Take state names from the "
+            "workflow in brief_get. Send a parent change, or a "
             "drop of an item with children, alone. On an item with children "
             "those two first return a plan and a confirm_token and write "
             "nothing else; call again with the same arguments plus the token."

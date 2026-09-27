@@ -3,13 +3,16 @@ Subtree drop and reparent, each as a pure preview plus an apply.
 
 The preview runs in a read-only snapshot and returns the planned changes.
 The apply re-plans under the write lock (the tree may have changed since the
-preview) and writes exactly that plan.
+preview). With a confirm token it refuses a plan that differs from the one
+the preview showed; otherwise it writes exactly the fresh plan.
 """
 
 import sqlite3
 from collections.abc import Callable
 from functools import partial
 
+from xoot.exceptions.state_error import StateError
+from xoot.models.confirm.confirm_token import ConfirmToken
 from xoot.models.confirm.confirmation import Confirmation
 from xoot.models.event.entity_type import EntityType
 from xoot.models.event.write_context import WriteContext
@@ -18,7 +21,7 @@ from xoot.models.item.item_change import ItemChange
 from xoot.models.item.subtree_plan import SubtreePlan
 from xoot.models.workflow.category import TERMINAL_CATEGORIES, Category
 from xoot.repositories.item import item_db
-from xoot.services.confirm_service import consume_token
+from xoot.services.confirm_service import check_plan, consume_token, plan_digest
 from xoot.services.conflicts import ensure_version
 from xoot.services.id_checks import check_id, check_optional_id
 from xoot.services.item_rules import check_parent
@@ -31,7 +34,7 @@ from xoot.store.store import Store
 type Planner = Callable[[sqlite3.Connection, Item], SubtreePlan]
 
 
-def preview_drop(store: Store, item_id: int) -> SubtreePlan:
+def preview_drop(store: Store, item_id: int, state: str | None = None) -> SubtreePlan:
     """
     Plan dropping an item and everything under it; writes nothing.
 
@@ -40,26 +43,31 @@ def preview_drop(store: Store, item_id: int) -> SubtreePlan:
     Args:
         - store (Store): the database.
         - item_id (int): the subtree root.
+        - state (str | None): the dropped state to use; each kind's default
+          dropped state when None.
 
     Returns:
-        - plan (SubtreePlan): the items that would move to the default
-          dropped state.
+        - plan (SubtreePlan): the items that would move to a dropped state.
 
     Raises:
+        - StateError: state is not in the root kind's dropped category.
         - InvalidIdError: item_id is not an int id.
         - NotFoundError: no such item.
     """
     check_id("item_id", item_id)
     with store.read() as conn:
-        return _plan_drop(conn, require_item(conn, item_id))
+        return _plan_drop(conn, require_item(conn, item_id), state)
 
 
-def apply_drop(
+# Six arguments: the five of the original apply plus the requested state.
+def apply_drop(  # pylint: disable=too-many-arguments
     store: Store,
     item_id: int,
     expected_version: int,
     ctx: WriteContext,
     confirm: Confirmation | None = None,
+    *,
+    state: str | None = None,
 ) -> SubtreePlan:
     """
     Drop an item and everything under it.
@@ -72,12 +80,16 @@ def apply_drop(
           linked).
         - confirm (Confirmation | None): a token from the preview, consumed
           in this transaction when given.
+        - state (str | None): the dropped state to use; each kind's default
+          dropped state when None.
 
     Returns:
         - plan (SubtreePlan): the changes that were written.
 
     Raises:
-        - ConfirmTokenError: the token cannot authorize this call.
+        - ConfirmTokenError: the token cannot authorize this call, or the
+          plan changed since the preview.
+        - StateError: state is not in the root kind's dropped category.
         - VersionConflictError: the root changed since expected_version.
         - SessionStateError: the session is closed.
         - InvalidIdError: item_id or expected_version is not an int.
@@ -85,9 +97,10 @@ def apply_drop(
     """
     check_id("item_id", item_id)
     check_id("expected_version", expected_version)
+    planner = partial(_plan_drop, state=state)
     with store.write() as conn:
-        _consume(conn, confirm, ctx)
-        return _write_plan(conn, item_id, expected_version, ctx, _plan_drop)
+        token = _consume(conn, confirm, ctx)
+        return _write_plan(conn, item_id, expected_version, ctx, planner, token=token)
 
 
 def preview_reparent(
@@ -143,7 +156,8 @@ def apply_reparent(  # pylint: disable=too-many-arguments
         - plan (SubtreePlan): the change that was written.
 
     Raises:
-        - ConfirmTokenError: the token cannot authorize this call.
+        - ConfirmTokenError: the token cannot authorize this call, or the
+          plan changed since the preview.
         - VersionConflictError: the root changed since expected_version.
         - HierarchyError: the new parent is not allowed for the root's kind.
         - CrossProjectError: the new parent is in another project.
@@ -155,55 +169,79 @@ def apply_reparent(  # pylint: disable=too-many-arguments
     check_id("expected_version", expected_version)
     planner = partial(_plan_reparent, new_parent_id=new_parent_id)
     with store.write() as conn:
-        _consume(conn, confirm, ctx)
-        return _write_plan(conn, item_id, expected_version, ctx, planner)
+        token = _consume(conn, confirm, ctx)
+        return _write_plan(conn, item_id, expected_version, ctx, planner, token=token)
 
 
 def _consume(
     conn: sqlite3.Connection, confirm: Confirmation | None, ctx: WriteContext
-) -> None:
+) -> ConfirmToken | None:
     """Spend the preview's token first, so it is used only if the write commits."""
-    if confirm is not None:
-        consume_token(conn, confirm, ctx.session_id)
+    if confirm is None:
+        return None
+    return consume_token(conn, confirm, ctx.session_id)
 
 
-def _write_plan(
+# The five inputs of the locked re-plan plus the token its plan must match.
+def _write_plan(  # pylint: disable=too-many-arguments
     conn: sqlite3.Connection,
     item_id: int,
     expected_version: int,
     ctx: WriteContext,
     planner: Planner,
+    *,
+    token: ConfirmToken | None,
 ) -> SubtreePlan:
-    """Re-plan under the write lock, then write the plan and its events."""
+    """Re-plan under the write lock, check it against the token, then write it."""
     root = require_item(conn, item_id)
     ensure_version(conn, EntityType.ITEM, root, expected_version)
     session = open_session_for(conn, root.project_id, ctx.session_id)
     plan = planner(conn, root)
+    check_plan(token, plan.plan_sha256)
     scope = WriteScope(conn, ctx)
     apply_changes(scope, plan.changes)
     link_items(scope, session, [change.item_id for change in plan.changes])
     return plan
 
 
-def _plan_drop(conn: sqlite3.Connection, root: Item) -> SubtreePlan:
+def _plan_drop(
+    conn: sqlite3.Connection, root: Item, state: str | None = None
+) -> SubtreePlan:
+    """
+    Drop every live item of the subtree into the requested dropped state.
+
+    The request is checked against the root's kind; a descendant whose kind
+    has no dropped state of that name takes its own kind's default instead.
+    """
     definition = active_workflow(
         conn, require_project(conn, root.project_id)
     ).definition
+    if (
+        state is not None
+        and definition.for_kind(root.kind).category_of(state) is not Category.DROPPED
+    ):
+        raise StateError(f"state {state!r} is not a dropped state")
     changes: list[ItemChange] = []
+    entries: list[tuple[str, str]] = []
     for item in [root, *item_db.list_descendants(conn, root.id)]:
         workflow = definition.for_kind(item.kind)
         if workflow.category_of(item.state) in TERMINAL_CATEGORIES:
             continue
-        change = plan_change(
-            item,
-            {
-                "state": workflow.default_state(Category.DROPPED),
-                "backlog_session_id": None,
-            },
+        target = (
+            state
+            if state is not None and workflow.category_of(state) is Category.DROPPED
+            else workflow.default_state(Category.DROPPED)
         )
+        change = plan_change(item, {"state": target, "backlog_session_id": None})
         if change is not None:
             changes.append(change)
-    return SubtreePlan(root_id=root.id, changes=tuple(changes), carried_item_ids=())
+            entries.append((item.key, target))
+    return SubtreePlan(
+        root_id=root.id,
+        changes=tuple(changes),
+        carried_item_ids=(),
+        plan_sha256=plan_digest(entries),
+    )
 
 
 def _plan_reparent(
@@ -211,9 +249,12 @@ def _plan_reparent(
 ) -> SubtreePlan:
     check_parent(conn, root.project_id, root.kind, new_parent_id)
     change = plan_change(root, {"parent_id": new_parent_id})
-    carried = tuple(item.id for item in item_db.list_descendants(conn, root.id))
+    descendants = item_db.list_descendants(conn, root.id)
+    # A move keeps every state, so the digest pins which items move.
+    moved = [root, *descendants]
     return SubtreePlan(
         root_id=root.id,
         changes=() if change is None else (change,),
-        carried_item_ids=carried,
+        carried_item_ids=tuple(item.id for item in descendants),
+        plan_sha256=plan_digest((item.key, item.state) for item in moved),
     )

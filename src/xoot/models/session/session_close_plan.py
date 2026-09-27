@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from xoot.models.fields import Id
+from xoot.models.fields import Id, Sha256Hex
 from xoot.models.item.item_change import ItemChange
 from xoot.models.session.close_warning import CloseWarning
 from xoot.models.session.disposition import Disposition
@@ -15,6 +15,8 @@ class SessionClosePlan(BaseModel):
     any are missing). changes come from dispositions; auto_backlog moves
     stale session-backlog items to the project backlog. warnings flag items
     left live under a backlogged or dropped parent; they never block.
+    plan_sha256 digests every required and auto-backlogged key with the
+    state it ends in.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -25,4 +27,5 @@ class SessionClosePlan(BaseModel):
     dispositions: dict[Id, Disposition]
     changes: tuple[ItemChange, ...]
     auto_backlog: tuple[ItemChange, ...]
+    plan_sha256: Sha256Hex
     warnings: tuple[CloseWarning, ...] = ()

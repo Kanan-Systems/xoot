@@ -2,18 +2,22 @@
 
 from pydantic import BaseModel, ConfigDict
 
+from xoot.models.item.item_kind import ItemKind
 from xoot.models.workflow.category import Category
 from xoot.server.schemas.decision_summary import DecisionSummary
 from xoot.server.schemas.item_summary import ItemSummary
 from xoot.server.schemas.literals import ResolvedBy
 from xoot.server.schemas.project_entry import ProjectEntry
 from xoot.server.schemas.session_summary import SessionSummary
+from xoot.server.schemas.workflow_entry import WorkflowEntry
 
 
 class BriefOutput(BaseModel):
     """
     A project's current picture: counts, open sessions, what is in flight,
     what waits in backlogs and the latest decisions. Lists are capped.
+    workflow is the active workflow per item kind, whose state names are the
+    only ones item_update accepts.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -29,3 +33,4 @@ class BriefOutput(BaseModel):
     pending_session_backlog: list[ItemSummary]
     project_backlog_count: int
     recent_decisions: list[DecisionSummary]
+    workflow: dict[ItemKind, WorkflowEntry]

@@ -8,7 +8,10 @@ from xoot.models.confirm.confirm_token import ConfirmToken
 from xoot.models.confirm.new_confirm_token import NewConfirmToken
 from xoot.models.fields import format_timestamp
 
-_COLUMNS = "id, token_sha256, tool, args_sha256, session_id, expires_at, used_at"
+_COLUMNS = (
+    "id, token_sha256, tool, args_sha256, plan_sha256, session_id, expires_at, "
+    "used_at"
+)
 
 
 def insert(conn: sqlite3.Connection, new: NewConfirmToken) -> ConfirmToken:
@@ -23,9 +26,9 @@ def insert(conn: sqlite3.Connection, new: NewConfirmToken) -> ConfirmToken:
         - token (ConfirmToken): the stored row.
     """
     row = conn.execute(
-        "INSERT INTO confirm_token (token_sha256, tool, args_sha256, session_id, "
-        "expires_at) VALUES (:token_sha256, :tool, :args_sha256, :session_id, "
-        f":expires_at) RETURNING {_COLUMNS}",
+        "INSERT INTO confirm_token (token_sha256, tool, args_sha256, plan_sha256, "
+        "session_id, expires_at) VALUES (:token_sha256, :tool, :args_sha256, "
+        f":plan_sha256, :session_id, :expires_at) RETURNING {_COLUMNS}",
         new.model_dump(mode="json"),
     ).fetchone()
     return ConfirmToken.model_validate(dict(row))
@@ -71,3 +74,28 @@ def mark_used(conn: sqlite3.Connection, token_id: int, used_at: datetime) -> Non
         raise StaleWriteError(
             f"confirm token {token_id} changed during the transaction"
         )
+
+
+def delete_spent(
+    conn: sqlite3.Connection, now: datetime, expires_before: datetime
+) -> int:
+    """
+    Delete tokens that can no longer authorize anything and are old enough.
+
+    A row goes when it is used or expired, and its expiry is before
+    expires_before; the caller derives that bound from the issue-age cutoff.
+
+    Args:
+        - conn (sqlite3.Connection): connection inside a write transaction.
+        - now (datetime): the current time, for the expiry test.
+        - expires_before (datetime): only rows expiring before this go.
+
+    Returns:
+        - deleted (int): the number of rows removed.
+    """
+    cursor = conn.execute(
+        "DELETE FROM confirm_token WHERE (used_at IS NOT NULL OR expires_at <= ?) "
+        "AND expires_at < ?",
+        (format_timestamp(now), format_timestamp(expires_before)),
+    )
+    return cursor.rowcount

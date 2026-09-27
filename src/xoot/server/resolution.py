@@ -2,8 +2,9 @@
 Resolving what a tool call names: public keys to rows, and the project of a
 project-level call.
 
-A key that is malformed or resolves to nothing is reported the same way,
-"not found: <key>". A project is found by explicit alias, then by the
+A well-formed key that resolves to nothing is reported as "not found: <key>";
+a malformed key as "not found: malformed key", since echoing arbitrary input
+is unsafe. A project is found by explicit alias, then by the
 client's roots, then by the server's working directory; failing all three,
 the error lists the known aliases.
 """
