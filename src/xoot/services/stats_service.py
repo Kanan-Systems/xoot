@@ -1,0 +1,57 @@
+"""
+Read-only statistics about the database file: pages, sizes and row counts.
+
+Everything is read from one snapshot, so the row counts agree with each
+other; file sizes come from the filesystem and are reported as found.
+"""
+
+import os
+from pathlib import Path
+
+from xoot.models.store.db_stats import DbStats
+from xoot.store.store import Store
+
+
+def db_stats(store: Store) -> DbStats:
+    """
+    Describe the database: page and free-page counts, file sizes, row counts.
+
+    Args:
+        - store (Store): the database.
+
+    Returns:
+        - stats (DbStats): the snapshot.
+
+    Raises:
+        - DatabaseAccessError: SQLite could not read the database.
+    """
+    with store.read() as conn:
+        page_count = int(conn.execute("PRAGMA page_count").fetchone()[0])
+        freelist_count = int(conn.execute("PRAGMA freelist_count").fetchone()[0])
+        tables = [
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_schema WHERE type = 'table' "
+                "AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY name"
+            )
+        ]
+        # Table names come from sqlite_schema itself, never from input.
+        rows = {
+            table: int(conn.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0])
+            for table in tables
+        }
+    return DbStats(
+        path=str(store.path),
+        page_count=page_count,
+        freelist_count=freelist_count,
+        db_bytes=_size(store.path),
+        wal_bytes=_size(store.path.with_name(store.path.name + "-wal")),
+        rows=rows,
+    )
+
+
+def _size(path: Path) -> int:
+    try:
+        return os.stat(path).st_size
+    except FileNotFoundError:
+        return 0

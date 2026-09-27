@@ -3,7 +3,6 @@ The per-transaction write scope: connection, actor context, one timestamp,
 and the event recording every mutation must do in the same transaction.
 """
 
-import hashlib
 import sqlite3
 from datetime import UTC, datetime
 from typing import Any, Self
@@ -22,6 +21,7 @@ from xoot.models.project.project import Project
 from xoot.models.session.session import Session
 from xoot.models.workflow.workflow import Workflow
 from xoot.repositories.event import event_db
+from xoot.utils.utils import body_digest
 
 type Tracked = Project | Workflow | Item | Session | Decision
 
@@ -124,7 +124,7 @@ class WriteScope:
         snapshot = entity.model_dump(mode="json")
         if isinstance(entity, (Item, Decision)):
             body = snapshot.pop("body")
-            snapshot["body_sha256"] = hashlib.sha256(body.encode()).hexdigest()
+            snapshot["body_sha256"] = body_digest(body)
             snapshot["body_len"] = len(body)
         self._append(entity, EventAction.CREATE, None, snapshot)
 

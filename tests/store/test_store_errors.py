@@ -44,7 +44,7 @@ def test_service_constraint_failure_is_translated(
     ctx: WriteContext,
 ) -> None:
     """With the service's own check bypassed, the schema's refusal is an XootError."""
-    monkeypatch.setattr(project_service, "_require_free_alias", lambda *_: None)
+    monkeypatch.setattr(project_service, "require_free_alias", lambda *_: None)
     with pytest.raises(IntegrityViolationError) as caught:
         project_service.add_alias(store, project.id, "xo", ctx)
     assert isinstance(caught.value.__cause__, sqlite3.IntegrityError)

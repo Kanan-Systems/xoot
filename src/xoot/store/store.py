@@ -15,6 +15,7 @@ from types import TracebackType
 from typing import Self
 
 from xoot.exceptions.database_access_error import DatabaseAccessError
+from xoot.exceptions.database_busy_error import DatabaseBusyError
 from xoot.exceptions.integrity_violation_error import IntegrityViolationError
 from xoot.exceptions.store_open_error import StoreOpenError
 from xoot.store.connection import connect
@@ -128,6 +129,34 @@ class Store(AbstractContextManager["Store"]):
             busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
         return busy == 0
 
+    def vacuum(self) -> bool:
+        """
+        Rebuild the database file without free pages.
+
+        A checkpoint first moves the WAL into the file; VACUUM then runs
+        outside any transaction (SQLite refuses it inside one), and a final
+        TRUNCATE checkpoint empties the WAL the rebuild went through.
+
+        Returns:
+            - complete (bool): False when another connection kept the final
+              checkpoint from truncating the WAL; the rebuild is committed.
+
+        Raises:
+            - DatabaseBusyError: another connection kept the first
+              checkpoint or the VACUUM from running.
+            - DatabaseAccessError: any other sqlite3 error.
+        """
+        if not self.checkpoint():
+            raise DatabaseBusyError()
+        try:
+            with _translated(nullcontext(self._conn)) as conn:
+                conn.execute("VACUUM")
+        except DatabaseAccessError as exc:
+            if _is_busy(exc.__cause__):
+                raise DatabaseBusyError() from exc
+            raise
+        return self.checkpoint()
+
     def close(self) -> None:
         """Close the connection."""
         self._conn.close()
@@ -154,3 +183,12 @@ def _translated(
         raise IntegrityViolationError(exc) from exc
     except sqlite3.Error as exc:
         raise DatabaseAccessError(exc) from exc
+
+
+def _is_busy(error: BaseException | None) -> bool:
+    """Tell whether a driver error is SQLITE_BUSY or SQLITE_LOCKED."""
+    code = getattr(error, "sqlite_errorcode", None)
+    return code is not None and code & 0xFF in (
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+    )

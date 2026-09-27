@@ -6,7 +6,6 @@ plan pins the same columns in the same form, and a preview and its apply can
 only match when they would leave every affected item identical.
 """
 
-import hashlib
 import sqlite3
 from typing import Any
 
@@ -19,7 +18,7 @@ from xoot.services.lookups import (
     require_project,
     require_session,
 )
-from xoot.utils.utils import session_key
+from xoot.utils.utils import body_digest, session_key
 
 
 def item_entry(
@@ -65,19 +64,6 @@ def item_entry(
         awaiting_decision_key=decision_key,
         disposition=disposition,
     )
-
-
-def body_digest(body: str) -> str:
-    """
-    Digest an item body, so a plan pins it without carrying it.
-
-    Args:
-        - body (str): the body text.
-
-    Returns:
-        - digest (str): lowercase hex SHA-256 of its UTF-8 bytes.
-    """
-    return hashlib.sha256(body.encode()).hexdigest()
 
 
 def _session_key(conn: sqlite3.Connection, item: Item) -> str | None:

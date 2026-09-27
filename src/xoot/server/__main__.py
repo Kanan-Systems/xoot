@@ -11,14 +11,13 @@ import os
 import signal
 import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 import anyio
 import anyio.abc
 
 from xoot.server.app import build_server
 from xoot.server.xoot_server import XootServer
-from xoot.store.paths import default_db_path
+from xoot.store.paths import db_path_from_arg
 
 LOG_FORMAT = "%(name)s %(levelname)s: %(message)s"
 # Bounded so a signal always ends the process within two seconds.
@@ -35,7 +34,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         - argv (Sequence[str] | None): arguments; sys.argv[1:] when None.
     """
     args = _parser().parse_args(argv)
-    db_path = default_db_path() if args.db is None else _absolute(args.db)
+    db_path = db_path_from_arg(args.db)
     _configure_logging()
     logging.getLogger("xoot.server").info("database: %s", db_path)
     anyio.run(_serve, build_server(db_path))
@@ -90,12 +89,6 @@ def _parser() -> argparse.ArgumentParser:
         help="database file (default: $XDG_DATA_HOME/xoot/xoot.db)",
     )
     return parser
-
-
-def _absolute(path: str) -> Path:
-    # abspath, not resolve(): following a symlink here would hide it from
-    # the store's symlink refusal.
-    return Path(os.path.abspath(os.path.expanduser(path)))
 
 
 def _configure_logging() -> None:

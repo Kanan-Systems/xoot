@@ -4,10 +4,12 @@ session titles and summaries, and project names.
 
 Redaction is the one sanctioned rewrite of history. In one transaction the
 row's field becomes "[redacted]" (items and decisions also get a version
-bump), every event of the entity loses that field's content, and a 'redact'
-event records the field name and any version change, never the content.
-Every connection runs with secure_delete on, and a WAL checkpoint follows,
-so the old text is gone from the files, not just from the rows.
+bump), every event of the entity loses that field's content, a 'redact'
+event records the field name and any version change, never the content, and
+every confirm token is deleted: a plan digest pins titles and body digests,
+so a stored one could confirm a guess at short redacted text. Every
+connection runs with secure_delete on, and a WAL checkpoint follows, so the
+old text is gone from the files, not just from the rows.
 """
 
 from typing import Any
@@ -24,6 +26,7 @@ from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
 from xoot.models.project.project import Project
 from xoot.models.session.session import Session
+from xoot.repositories.confirm import confirm_token_db
 from xoot.repositories.decision import decision_db
 from xoot.repositories.event import event_db
 from xoot.repositories.item import item_db
@@ -61,7 +64,8 @@ def redact_field(
     actor: Actor,
 ) -> RedactionResult:
     """
-    Replace a free-text field with "[redacted]" in the row and its history.
+    Replace a free-text field with "[redacted]" in the row and its history,
+    and delete every confirm token in the same transaction.
 
     The id, entity, field and actor are checked before any SQL. A field that
     is NULL or empty holds nothing to redact and is refused; one that
@@ -85,7 +89,7 @@ def redact_field(
         - NotFoundError: no such row.
     """
     check_id("entity_id", entity_id)
-    entity_type, target = _target(entity, field)
+    entity_type, target = redaction_target(entity, field)
     if actor.kind is not ActorKind.USER:
         raise RedactionError(f"only the user may redact, not {actor.kind}")
     with store.write() as conn:
@@ -97,6 +101,7 @@ def redact_field(
         event_ids = _redact_events(scope, entity_type, entity_id, target)
         before, after = _redact_record(row, target)
         scope.noted(redacted, EventAction.REDACT, after, before)
+        confirm_token_db.delete_all(conn)
     purged = store.checkpoint()
     return RedactionResult(
         entity_type=entity_type,
@@ -108,9 +113,22 @@ def redact_field(
     )
 
 
-def _target(
+def redaction_target(
     entity: EntityType | str, field: RedactableField | str
 ) -> tuple[EntityType, RedactableField]:
+    """
+    Check that an entity type allows a field to be redacted, before any SQL.
+
+    Args:
+        - entity (EntityType | str): item, decision, session or project.
+        - field (RedactableField | str): the field to redact.
+
+    Returns:
+        - target (tuple[EntityType, RedactableField]): the parsed pair.
+
+    Raises:
+        - RedactionError: the pair cannot be redacted.
+    """
     try:
         entity_type = EntityType(entity)
         target = RedactableField(field)

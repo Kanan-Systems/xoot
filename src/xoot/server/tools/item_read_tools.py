@@ -13,7 +13,12 @@ from xoot.repositories.event import event_db
 from xoot.repositories.item import item_db
 from xoot.server.db_call import run_db
 from xoot.server.key_book import KeyBook
-from xoot.server.render import event_entry, item_detail, item_summary
+from xoot.server.render import (
+    event_entry,
+    item_detail,
+    item_summary,
+    tree_entries,
+)
 from xoot.server.resolution import item_by_key, optional_item_id, resolve_project
 from xoot.server.roots import root_paths
 from xoot.server.schemas.arguments import ItemKey, ProjectAlias
@@ -21,7 +26,6 @@ from xoot.server.schemas.backlog_output import BacklogOutput
 from xoot.server.schemas.children_summary import ChildrenSummary
 from xoot.server.schemas.item_get_output import ItemGetOutput
 from xoot.server.schemas.literals import BacklogScope
-from xoot.server.schemas.tree_entry import TreeEntry
 from xoot.server.schemas.tree_output import TreeOutput
 from xoot.server.tool_meta import READ, RESOLUTION, describe
 from xoot.services.tree_service import tree
@@ -74,15 +78,7 @@ async def tree_get(  # pylint: disable=too-many-arguments
         )
         result = tree(store, found.id, query)
         with store.read() as conn:
-            book = KeyBook(conn)
-            nodes = [
-                TreeEntry(
-                    depth=node.depth,
-                    unfiled=node.unfiled,
-                    item=item_summary(book, node.item),
-                )
-                for node in result.nodes
-            ]
+            nodes = tree_entries(KeyBook(conn), result)
         return TreeOutput(
             project=found.key_prefix,
             resolved_by=resolved_by,

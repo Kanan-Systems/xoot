@@ -12,6 +12,7 @@ from xoot.models.event.event import Event
 from xoot.models.fields import format_timestamp
 from xoot.models.item.item import Item
 from xoot.models.item.item_change import ItemChange
+from xoot.models.item.tree_result import TreeResult
 from xoot.models.session.session import Session
 from xoot.server.errors import PUBLIC_NAMES
 from xoot.server.key_book import KeyBook
@@ -22,6 +23,7 @@ from xoot.server.schemas.event_entry import EventEntry
 from xoot.server.schemas.item_detail import ItemDetail
 from xoot.server.schemas.item_summary import ItemSummary
 from xoot.server.schemas.session_summary import SessionSummary
+from xoot.server.schemas.tree_entry import TreeEntry
 from xoot.utils.utils import session_key
 
 _INTERNAL = frozenset({"id", "project_id", "number"})
@@ -52,6 +54,25 @@ def item_summary(book: KeyBook, item: Item) -> ItemSummary:
         backlog_session=book.session_key(item.backlog_session_id),
         version=item.version,
     )
+
+
+def tree_entries(book: KeyBook, result: TreeResult) -> list[TreeEntry]:
+    """
+    Render a tree query's nodes, keeping their pre-order.
+
+    Args:
+        - book (KeyBook): lookups for the current transaction.
+        - result (TreeResult): the query result.
+
+    Returns:
+        - entries (list[TreeEntry]): one entry per node.
+    """
+    return [
+        TreeEntry(
+            depth=node.depth, unfiled=node.unfiled, item=item_summary(book, node.item)
+        )
+        for node in result.nodes
+    ]
 
 
 def item_detail(book: KeyBook, item: Item) -> ItemDetail:

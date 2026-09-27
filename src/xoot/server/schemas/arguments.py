@@ -21,8 +21,8 @@ ProjectAlias = Annotated[
     str | None,
     Field(
         description=(
-            "Project alias. Leave it out to resolve the project from the "
-            "client's roots, then from the server's working directory."
+            "Project alias or key prefix. Leave it out to resolve the project "
+            "from the client's roots, then from the server's working directory."
         )
     ),
 ]

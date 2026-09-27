@@ -68,3 +68,40 @@ def longest_of(
         tuple(candidates),
     ).fetchone()
     return None if row is None else ProjectPath.model_validate(dict(row))
+
+
+def list_for_project(conn: sqlite3.Connection, project_id: int) -> list[str]:
+    """
+    List one project's paths, in order.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - project_id (int): project id.
+
+    Returns:
+        - paths (list[str]): the project's normalized paths.
+    """
+    rows = conn.execute(
+        "SELECT path FROM project_path WHERE project_id = ? ORDER BY path",
+        (project_id,),
+    ).fetchall()
+    return [row[0] for row in rows]
+
+
+def delete(conn: sqlite3.Connection, path: str, project_id: int) -> bool:
+    """
+    Remove a path from a project.
+
+    Args:
+        - conn (sqlite3.Connection): connection inside a write transaction.
+        - path (str): the normalized path.
+        - project_id (int): the project it must belong to.
+
+    Returns:
+        - deleted (bool): False when the project has no such path.
+    """
+    cursor = conn.execute(
+        "DELETE FROM project_path WHERE path = ? AND project_id = ?",
+        (path, project_id),
+    )
+    return cursor.rowcount == 1

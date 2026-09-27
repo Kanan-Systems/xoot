@@ -11,10 +11,12 @@ from typing import Any
 from xoot.exceptions.workflow_mapping_error import WorkflowMappingError
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
+from xoot.models.item.item_kind import ItemKind
 from xoot.models.workflow.category import Category
 from xoot.models.workflow.workflow import Workflow
 from xoot.models.workflow.workflow_change import WorkflowChange
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
+from xoot.models.workflow.workflow_plan import WorkflowPlan
 from xoot.repositories.item import item_db
 from xoot.repositories.project import project_db
 from xoot.repositories.workflow import workflow_db
@@ -44,6 +46,48 @@ def get_active_workflow(store: Store, project_id: int) -> Workflow:
     check_id("project_id", project_id)
     with store.read() as conn:
         return active_workflow(conn, require_project(conn, project_id))
+
+
+def plan_workflow_change(
+    store: Store, project_id: int, change: WorkflowChange
+) -> WorkflowPlan:
+    """
+    Show what set_workflow would do, writing nothing.
+
+    Runs the same checks as set_workflow, so a change it refuses is refused
+    here first.
+
+    Args:
+        - store (Store): the database.
+        - project_id (int): project id.
+        - change (WorkflowChange): the new definition and state mapping.
+
+    Returns:
+        - plan (WorkflowPlan): removed states and item rewrites per kind.
+
+    Raises:
+        - InvalidIdError: project_id is not an int id.
+        - WorkflowMappingError: an in-use removed state is not mapped, or
+          the mapping names a state the change does not remove.
+        - NotFoundError: no such project.
+    """
+    check_id("project_id", project_id)
+    with store.read() as conn:
+        current = active_workflow(conn, require_project(conn, project_id)).definition
+        _check_mapping_keys(current, change)
+        remaps = _plan_remaps(conn, project_id, change)
+    removed = {
+        kind: tuple(
+            spec.name
+            for spec in current.for_kind(kind).states
+            if change.definition.for_kind(kind).category_of(spec.name) is None
+        )
+        for kind in ItemKind
+    }
+    counts = {
+        kind: sum(1 for item, _ in remaps if item.kind is kind) for kind in ItemKind
+    }
+    return WorkflowPlan(removed=removed, remaps=counts)
 
 
 def set_workflow(

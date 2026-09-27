@@ -32,10 +32,10 @@ from xoot.services.lookups import (
     require_project,
     require_session,
 )
-from xoot.services.plan_entries import body_digest
 from xoot.services.session_links import link_items
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
+from xoot.utils.utils import body_digest
 
 
 def preview_bulk(store: Store, session_id: int, request: BulkCreate) -> BulkPlan:

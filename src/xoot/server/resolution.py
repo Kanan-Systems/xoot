@@ -2,39 +2,36 @@
 Resolving what a tool call names: public keys to rows, and the project of a
 project-level call.
 
-A well-formed key that resolves to nothing is reported as "not found: <key>";
-a malformed key as "not found: malformed key", since echoing arbitrary input
-is unsafe. A project is found by explicit alias, then by the
-client's roots, then by the server's working directory; failing all three,
-the error lists the known aliases.
+Key lookups are the services' key_resolver, with its NotFoundError turned
+into a ToolError. A well-formed key that resolves to nothing is reported as
+"not found: <key>"; a malformed key as "not found: malformed key", since
+echoing arbitrary input is unsafe. A project is found by explicit alias or
+key prefix, then by the client's roots, then by the server's working
+directory; failing all three, the error lists the known prefixes and aliases.
 """
 
 import os
 import sqlite3
+from collections.abc import Callable
 
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import TypeAdapter, ValidationError
 
+from xoot.exceptions.not_found_error import NotFoundError
 from xoot.models.decision.decision import Decision
 from xoot.models.event.actor import Actor
 from xoot.models.event.actor_kind import ActorKind
 from xoot.models.event.write_context import WriteContext
-from xoot.models.fields import AbsolutePath, Slug
+from xoot.models.fields import AbsolutePath
 from xoot.models.item.item import Item
 from xoot.models.project.project import Project
 from xoot.models.session.session import Session
-from xoot.repositories.decision import decision_db
-from xoot.repositories.item import item_db
-from xoot.repositories.project import project_alias_db, project_db, project_path_db
-from xoot.repositories.session import session_db
 from xoot.server.errors import not_found_message
-from xoot.server.keys import DECISION_KEY, ITEM_KEY, SESSION_KEY, parse_key
 from xoot.server.schemas.literals import ResolvedBy
-from xoot.services.lookups import require_project
-from xoot.services.project_resolver import ancestors
+from xoot.services import key_resolver
+from xoot.services.project_resolver import ancestors, by_name, by_paths, known_names
 from xoot.store.store import Store
 
-_SLUG = TypeAdapter(Slug)
 _PATH = TypeAdapter(AbsolutePath)
 
 
@@ -52,10 +49,7 @@ def item_by_key(conn: sqlite3.Connection, key: str) -> Item:
     Raises:
         - ToolError: the key is malformed or names no item.
     """
-    item = None if parse_key(ITEM_KEY, key) is None else item_db.get_by_key(conn, key)
-    if item is None:
-        raise ToolError(not_found_message(key))
-    return item
+    return _as_tool_error(key_resolver.item_by_key, conn, key)
 
 
 def optional_item_id(conn: sqlite3.Connection, key: str | None) -> int | None:
@@ -89,14 +83,7 @@ def decision_by_key(conn: sqlite3.Connection, key: str) -> Decision:
     Raises:
         - ToolError: the key is malformed or names no decision.
     """
-    decision = (
-        None
-        if parse_key(DECISION_KEY, key) is None
-        else decision_db.get_by_key(conn, key)
-    )
-    if decision is None:
-        raise ToolError(not_found_message(key))
-    return decision
+    return _as_tool_error(key_resolver.decision_by_key, conn, key)
 
 
 def session_by_key(conn: sqlite3.Connection, key: str) -> Session:
@@ -113,16 +100,7 @@ def session_by_key(conn: sqlite3.Connection, key: str) -> Session:
     Raises:
         - ToolError: the key is malformed or names no session.
     """
-    parts = parse_key(SESSION_KEY, key)
-    project = None if parts is None else project_db.get_by_prefix(conn, parts[0])
-    session = (
-        None
-        if parts is None or project is None
-        else session_db.get_by_number(conn, project.id, parts[1])
-    )
-    if session is None:
-        raise ToolError(not_found_message(key))
-    return session
+    return _as_tool_error(key_resolver.session_by_key, conn, key)
 
 
 def session_writer(store: Store, key: str) -> tuple[Session, WriteContext]:
@@ -156,8 +134,8 @@ def resolve_project(
 
     Args:
         - store (Store): the database.
-        - alias (str | None): an explicit alias; roots and cwd are not
-          consulted when it is given.
+        - alias (str | None): an explicit alias or key prefix; roots and cwd
+          are not consulted when it is given.
         - root_paths (list[str]): the client's roots as absolute paths.
 
     Returns:
@@ -165,13 +143,14 @@ def resolve_project(
           that found it.
 
     Raises:
-        - ToolError: nothing matched; the message lists the known aliases.
+        - ToolError: nothing matched; the message lists the known prefixes
+          and aliases.
     """
     with store.read() as conn:
         if alias is not None:
-            project_id = _by_alias(conn, alias)
-            if project_id is not None:
-                return require_project(conn, project_id), "alias"
+            found = by_name(conn, alias)
+            if found is not None:
+                return found, "alias"
             raise ToolError(_unresolved(conn))
         steps: list[tuple[list[str], ResolvedBy]] = [
             (root_paths, "roots"),
@@ -179,19 +158,19 @@ def resolve_project(
         ]
         for paths, resolved_by in steps:
             candidates = sorted({c for path in paths for c in ancestors(path)})
-            match = project_path_db.longest_of(conn, candidates)
+            match = by_paths(conn, candidates)
             if match is not None:
-                return require_project(conn, match.project_id), resolved_by
+                return match, resolved_by
         raise ToolError(_unresolved(conn))
 
 
-def _by_alias(conn: sqlite3.Connection, alias: str) -> int | None:
+def _as_tool_error[T](
+    lookup: Callable[[sqlite3.Connection, str], T], conn: sqlite3.Connection, key: str
+) -> T:
     try:
-        name = _SLUG.validate_python(alias)
-    except ValidationError:
-        return None
-    match = project_alias_db.get(conn, name)
-    return None if match is None else match.project_id
+        return lookup(conn, key)
+    except NotFoundError as exc:
+        raise ToolError(not_found_message(key)) from exc
 
 
 def _cwd() -> list[str]:
@@ -202,7 +181,10 @@ def _cwd() -> list[str]:
 
 
 def _unresolved(conn: sqlite3.Connection) -> str:
-    aliases = [entry.alias for entry in project_alias_db.list_all(conn)]
-    if not aliases:
-        return "project not resolved and no aliases are registered"
-    return f"project not resolved; pass project=<alias>, one of: {', '.join(aliases)}"
+    names = known_names(conn)
+    if not names:
+        return "project not resolved and no projects are registered"
+    return (
+        "project not resolved; pass project=<alias or prefix>, "
+        f"one of: {', '.join(names)}"
+    )

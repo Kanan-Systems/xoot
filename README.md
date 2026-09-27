@@ -10,6 +10,29 @@ clients over stdio. It opens the database below, or the file given with
 (`xoot-12`, `xoot-D3`, `xoot-S4`); bulk creates, subtree drops and moves, and
 session closes are previewed first and applied with a single-use token.
 
+## CLI
+
+`xoot` (or `python -m xoot.cli`) is the user's own entry point. Every write
+is recorded as the user, client `cli`, outside any session.
+
+```sh
+xoot init [PATH] --prefix xoot [--name N] [--alias A]...
+xoot project list | show | add-alias A | remove-alias A | add-path P | remove-path P
+xoot brief | tree [--root KEY] [--depth N] [--all]
+xoot workflow export [-o FILE] | import FILE [--map kind:old=new]... [--yes]
+xoot redact KEY FIELD [--yes]      # KEY: item, decision or session key, or a prefix
+xoot db stats | vacuum
+```
+
+`--project NAME` takes an alias or a key prefix; without it the project is
+the one whose path contains the working directory. `--db PATH` and `--json`
+work before or after the command; `--json` prints the same models the MCP
+tools return. Results go to stdout, errors, warnings and prompts to stderr.
+`workflow import`, `redact`, `remove-alias` and `remove-path` show what will
+change and ask y/N; without a terminal they need `--yes`. Exit codes: 0 ok,
+1 refused, 2 usage, 3 database unavailable (unsafe path, open failure, busy,
+or a redaction whose purge did not complete: close clients and redo it).
+
 ## Data
 
 State lives in a local SQLite database at `$XDG_DATA_HOME/xoot/xoot.db`

@@ -69,6 +69,27 @@ def normalize_absolute_path(value: str) -> str:
     return "/" + posixpath.normpath(value).lstrip("/")
 
 
+def reject_root(value: str) -> str:
+    """
+    Reject the filesystem root as a project directory.
+
+    Runs after normalization, so "/..", "//" and "/." are refused too. A
+    project at "/" would claim every directory on the machine.
+
+    Args:
+        - value (str): a normalized absolute path.
+
+    Returns:
+        - value (str): the same path, unchanged.
+
+    Raises:
+        - ValueError: the path is "/".
+    """
+    if value == "/":
+        raise ValueError("a project directory cannot be the root directory")
+    return value
+
+
 def format_timestamp(value: datetime) -> str:
     """
     Render a datetime in the fixed-width UTC storage format.
@@ -140,6 +161,8 @@ AbsolutePath = Annotated[
     AfterValidator(reject_nul),
     AfterValidator(normalize_absolute_path),
 ]
+# A directory a project may claim: any absolute path except "/".
+ProjectDir = Annotated[AbsolutePath, AfterValidator(reject_root)]
 Timestamp = Annotated[
     AwareDatetime,
     AfterValidator(_as_utc),

@@ -13,6 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
+xoot = "xoot.cli.__main__:main"
 xoot-mcp = "xoot.server.__main__:main"
 
 [dependency-groups]

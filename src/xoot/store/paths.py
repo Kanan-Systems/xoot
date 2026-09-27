@@ -27,6 +27,25 @@ def default_db_path() -> Path:
     return root / "xoot" / "xoot.db"
 
 
+def db_path_from_arg(value: str | None) -> Path:
+    """
+    Turn a --db option into the database path both entry points use.
+
+    Uses abspath, not resolve(): following a symlink here would hide it from
+    the store's symlink refusal.
+
+    Args:
+        - value (str | None): the option as given, "~" allowed; None for
+          the default.
+
+    Returns:
+        - path (Path): an absolute path, or default_db_path() for None.
+    """
+    if value is None:
+        return default_db_path()
+    return Path(os.path.abspath(os.path.expanduser(value)))
+
+
 def prepare_db_file(path: Path) -> None:
     """
     Create the database directory and file if they do not exist yet.

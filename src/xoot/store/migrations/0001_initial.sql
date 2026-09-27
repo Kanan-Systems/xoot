@@ -44,21 +44,58 @@ CREATE TABLE project_alias (
 
 CREATE INDEX project_alias_project ON project_alias (project_id);
 
+-- Prefixes and aliases share one namespace: every name resolves to exactly
+-- one project. Alias against alias is the primary key above; these triggers
+-- refuse a name that already names another project. An alias equal to its
+-- own project's prefix is redundant but unambiguous, so it is allowed.
+CREATE TRIGGER project_alias_not_other_prefix
+BEFORE INSERT ON project_alias
+WHEN EXISTS (
+    SELECT 1 FROM project WHERE key_prefix = NEW.alias AND id <> NEW.project_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'alias names another project');
+END;
+
+CREATE TRIGGER project_alias_update_not_other_prefix
+BEFORE UPDATE OF alias, project_id ON project_alias
+WHEN EXISTS (
+    SELECT 1 FROM project WHERE key_prefix = NEW.alias AND id <> NEW.project_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'alias names another project');
+END;
+
+CREATE TRIGGER project_prefix_not_other_alias
+BEFORE INSERT ON project
+WHEN EXISTS (
+    SELECT 1 FROM project_alias WHERE alias = NEW.key_prefix
+)
+BEGIN
+    SELECT RAISE(ABORT, 'key prefix names another project');
+END;
+
+CREATE TRIGGER project_prefix_update_not_other_alias
+BEFORE UPDATE OF key_prefix ON project
+WHEN EXISTS (
+    SELECT 1 FROM project_alias
+    WHERE alias = NEW.key_prefix AND project_id <> NEW.id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'key prefix names another project');
+END;
+
 CREATE TABLE project_path (
+    -- "/" is refused: it would claim every directory on the machine.
     path TEXT NOT NULL PRIMARY KEY CHECK (
-        length(path) BETWEEN 1 AND 4096
-        AND (
-            path = '/'
-            OR (
-                path GLOB '/*'
-                AND path NOT GLOB '*/'
-                AND path NOT GLOB '*//*'
-                AND path NOT GLOB '*/./*'
-                AND path NOT GLOB '*/../*'
-                AND path NOT GLOB '*/.'
-                AND path NOT GLOB '*/..'
-            )
-        )
+        length(path) BETWEEN 2 AND 4096
+        AND path GLOB '/*'
+        AND path NOT GLOB '*/'
+        AND path NOT GLOB '*//*'
+        AND path NOT GLOB '*/./*'
+        AND path NOT GLOB '*/../*'
+        AND path NOT GLOB '*/.'
+        AND path NOT GLOB '*/..'
     ),
     project_id INTEGER NOT NULL REFERENCES project (id)
 ) STRICT;
@@ -200,7 +237,7 @@ CREATE TABLE event (
     action TEXT NOT NULL CHECK (
         action IN (
             'create', 'update', 'link', 'dispose', 'close',
-            'add_alias', 'add_path', 'redact'
+            'add_alias', 'add_path', 'remove_alias', 'remove_path', 'redact'
         )
     ),
     -- 'system' marks changes xoot makes on its own (stale backlog moves,
@@ -270,8 +307,10 @@ CREATE TABLE confirm_token (
     args_sha256 TEXT NOT NULL CHECK (
         length(args_sha256) = 64 AND args_sha256 NOT GLOB '*[^0-9a-f]*'
     ),
-    -- Digest of the previewed plan (affected keys and target states); the
-    -- apply recomputes it under the write lock and refuses a different plan.
+    -- Digest of the previewed plan: the full post-apply row of every item it
+    -- touches (key, kind, title, body digest, state, parent, backlog session,
+    -- awaiting decision, disposition). The apply recomputes it under the write
+    -- lock and refuses a plan that would leave any of those rows different.
     plan_sha256 TEXT NOT NULL CHECK (
         length(plan_sha256) = 64 AND plan_sha256 NOT GLOB '*[^0-9a-f]*'
     ),

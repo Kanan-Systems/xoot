@@ -99,3 +99,16 @@ def delete_spent(
         (format_timestamp(now), format_timestamp(expires_before)),
     )
     return cursor.rowcount
+
+
+def delete_all(conn: sqlite3.Connection) -> int:
+    """
+    Delete every token, used or not.
+
+    Args:
+        - conn (sqlite3.Connection): connection inside a write transaction.
+
+    Returns:
+        - deleted (int): the number of rows removed.
+    """
+    return conn.execute("DELETE FROM confirm_token").rowcount

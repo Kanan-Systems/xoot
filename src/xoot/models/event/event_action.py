@@ -13,4 +13,6 @@ class EventAction(StrEnum):
     CLOSE = "close"
     ADD_ALIAS = "add_alias"
     ADD_PATH = "add_path"
+    REMOVE_ALIAS = "remove_alias"
+    REMOVE_PATH = "remove_path"
     REDACT = "redact"
