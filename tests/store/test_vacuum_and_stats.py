@@ -9,6 +9,7 @@ from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
 from xoot.services.redaction_service import redact_field
 from xoot.services.stats_service import db_stats
+from xoot.store.migrator import latest_version, user_version
 from xoot.store.store import Store
 
 BIG = "b" * 30000
@@ -55,3 +56,14 @@ def test_vacuum_shrinks_the_freelist(
     assert after.page_count < before.page_count
     assert after.rows == before.rows
     assert os.stat(f"{store.path}-wal").st_size == 0
+
+
+def test_stats_report_the_schema_version(store: Store) -> None:
+    """The DB's user_version and the newest known migration, read separately."""
+    stats = db_stats(store)
+    assert stats.schema_version == user_version(store.conn) == latest_version()
+    assert stats.known_schema_version == latest_version()
+    store.conn.execute("PRAGMA user_version = 0")
+    behind = db_stats(store)
+    assert behind.schema_version == 0
+    assert behind.known_schema_version == latest_version()

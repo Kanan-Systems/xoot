@@ -13,12 +13,15 @@ def render_stats(stats: DbStats) -> str:
         - stats (DbStats): the statistics.
 
     Returns:
-        - text (str): file sizes, page counts and a row-count table.
+        - text (str): the schema version, file sizes, page counts and a
+          row-count table.
     """
     rows = [(name, str(count)) for name, count in stats.rows.items()]
     return "\n".join(
         [
             f"database: {clean(stats.path)}",
+            f"schema version: {stats.schema_version}"
+            f" (latest known: {stats.known_schema_version})",
             f"db bytes: {stats.db_bytes}",
             f"wal bytes: {stats.wal_bytes}",
             f"pages: {stats.page_count}",

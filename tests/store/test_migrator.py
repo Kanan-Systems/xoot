@@ -12,7 +12,13 @@ from xoot.exceptions.migration_failed_error import MigrationFailedError
 from xoot.exceptions.schema_version_error import SchemaVersionError
 from xoot.store import migrator
 from xoot.store.connection import connect
-from xoot.store.migrator import load_migrations, migrate, order_migrations, user_version
+from xoot.store.migrator import (
+    latest_version,
+    load_migrations,
+    migrate,
+    order_migrations,
+    user_version,
+)
 from xoot.store.paths import prepare_db_file
 from xoot.store.store import Store
 
@@ -196,3 +202,14 @@ def test_newer_database_is_refused(db_path: Path) -> None:
         Store.open(db_path)
     assert caught.value.found == 999
     assert caught.value.known == load_migrations()[-1][0]
+
+
+def test_latest_version_is_the_newest_shipped() -> None:
+    """latest_version names the last shipped migration, which a fresh DB reaches."""
+    assert latest_version() == load_migrations()[-1][0] >= 1
+
+
+def test_latest_version_without_migrations(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no migration shipped the newest known version is 0."""
+    monkeypatch.setattr(migrator, "load_migrations", lambda: [])
+    assert latest_version() == 0

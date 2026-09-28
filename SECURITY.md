@@ -59,6 +59,11 @@ that is removed on exit. It edits no shell rc files and writes no Windows
 files; the Claude Desktop snippet is only printed. Installing the Claude
 Code plugin asks first unless `--yes` is given.
 
+The installed versions match `uv.lock` (verified with uv 0.9.8). Its hashes
+are not guaranteed to be enforced: `uv tool install --constraints` does not
+promise to check them, and the tool's uv receipt keeps versions only, so the
+lock does not rule out a tampered file of a pinned version.
+
 ## No telemetry
 
 xoot collects no telemetry and makes no network requests. Adoption is

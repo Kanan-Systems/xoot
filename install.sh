@@ -96,8 +96,29 @@ remove_constraints() {
     fi
 }
 
+# An absolute directory as its physical path, without "." or ".." parts,
+# using only the cd and pwd builtins. uv prints $XDG_DATA_HOME/../bin as is,
+# and PATH may spell the same directory another way. Anything that is not an
+# existing absolute directory comes back unchanged.
+normalize_dir() {
+    local dir=""
+    if [[ $1 == /* ]]; then
+        dir=$(CDPATH='' cd -- "$1" 2>/dev/null && pwd -P) || dir=""
+    fi
+    printf '%s' "${dir:-$1}"
+}
+
+# $1 must already be normalized; each PATH entry is normalized to match.
 on_path() {
-    [[ ":$PATH:" == *":$1:"* ]]
+    local entry
+    local -a entries=()
+    IFS=: read -r -a entries <<<"$PATH"
+    for entry in "${entries[@]}"; do
+        if [[ -n $entry && $(normalize_dir "$entry") == "$1" ]]; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 parse_args() {
@@ -152,13 +173,17 @@ install_tool() {
     run uv tool install --reinstall --constraints "$file" .
 }
 
-# main prints the action: whatever this writes to stdout is captured.
+# main prints the action: whatever this writes to stdout is captured. The
+# directory is normalized here, before the PATH check, the Claude Code
+# registration and the Desktop snippet see it.
 tool_bin_dir() {
+    local dir
     if ((dry_run)); then
         printf '%s' '<uv tool dir --bin>'
         return 0
     fi
-    uv tool dir --bin
+    dir=$(uv tool dir --bin) || return
+    normalize_dir "$dir"
 }
 
 check_install() {

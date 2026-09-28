@@ -34,7 +34,8 @@ git checkout v0.1.0
 `xoot --version`, offers the Claude Code plugin (skipped if xoot is already
 registered either way) and on WSL prints the Claude Desktop snippet. It
 never uses sudo, downloads nothing itself and edits no rc or Windows files.
-Manual alternative, from the same checkout:
+Keep the checkout in place: the plugin marketplace and the uv install point
+at it; after moving it, run `install.sh` again. Manual alternative, from it:
 
 ```sh
 pins=$(mktemp)
@@ -134,7 +135,7 @@ never chmod-ed. The database never lives in this repository.
 ## Uninstall
 
 ```sh
-# Claude Code, installed as the plugin:
+# Claude Code, installed as the plugin (claude mcp list shows plugin:xoot:xoot):
 claude plugin uninstall xoot@xoot
 claude plugin marketplace remove xoot
 # Claude Code, registered with claude mcp add instead:
@@ -143,8 +144,8 @@ claude mcp remove xoot
 uv tool uninstall xoot
 ```
 
-Remove the `xoot` entry from Claude Desktop's config too. The database is
-kept; delete `~/.local/share/xoot/` (or your `--db` file) to remove it.
+Also remove `xoot` from Claude Desktop's config. The database is kept: delete
+`$XDG_DATA_HOME/xoot/` (default `~/.local/share/xoot/`) or your `--db` file.
 
 ## Screenshots
 

@@ -1,4 +1,7 @@
-"""db stats agrees with the real row counts; vacuum shrinks the freelist."""
+"""
+db stats agrees with the real row counts and shows the schema version;
+vacuum shrinks the freelist.
+"""
 
 from collections.abc import Callable
 from typing import Any
@@ -8,6 +11,7 @@ from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
 from xoot.services.redaction_service import redact_field
+from xoot.store.migrator import latest_version
 from xoot.store.store import Store
 
 
@@ -24,6 +28,16 @@ def test_stats_match_row_counts(
     assert stats["page_count"] > stats["freelist_count"] >= 0
     text = xoot("db", "stats").out
     assert "item              3" in text
+
+
+def test_stats_show_the_schema_version(xoot: Any) -> None:
+    """Both output modes carry user_version and the newest known migration."""
+    latest = latest_version()
+    stats = xoot("db", "stats", "--json").json()
+    assert stats["schema_version"] == latest
+    assert stats["known_schema_version"] == latest
+    text = xoot("db", "stats").out
+    assert f"schema version: {latest} (latest known: {latest})\n" in text
 
 
 def test_vacuum_after_deletes(

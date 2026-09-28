@@ -1,5 +1,6 @@
 """
-Read-only statistics about the database file: pages, sizes and row counts.
+Read-only statistics about the database file: pages, sizes, row counts and
+the schema version.
 
 Everything is read from one snapshot, so the row counts agree with each
 other; file sizes come from the filesystem and are reported as found.
@@ -9,12 +10,14 @@ import os
 from pathlib import Path
 
 from xoot.models.store.db_stats import DbStats
+from xoot.store.migrator import latest_version
 from xoot.store.store import Store
 
 
 def db_stats(store: Store) -> DbStats:
     """
-    Describe the database: page and free-page counts, file sizes, row counts.
+    Describe the database: page and free-page counts, file sizes, row counts,
+    and its schema version beside the newest one this code knows.
 
     Args:
         - store (Store): the database.
@@ -24,10 +27,12 @@ def db_stats(store: Store) -> DbStats:
 
     Raises:
         - DatabaseAccessError: SQLite could not read the database.
+        - MigrationError: the shipped migration files are malformed.
     """
     with store.read() as conn:
         page_count = int(conn.execute("PRAGMA page_count").fetchone()[0])
         freelist_count = int(conn.execute("PRAGMA freelist_count").fetchone()[0])
+        schema_version = int(conn.execute("PRAGMA user_version").fetchone()[0])
         tables = [
             row[0]
             for row in conn.execute(
@@ -47,6 +52,8 @@ def db_stats(store: Store) -> DbStats:
         db_bytes=_size(store.path),
         wal_bytes=_size(store.path.with_name(store.path.name + "-wal")),
         rows=rows,
+        schema_version=schema_version,
+        known_schema_version=latest_version(),
     )
 
 

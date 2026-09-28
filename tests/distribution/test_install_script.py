@@ -23,7 +23,8 @@ TIMEOUT_S = 30.0
 PIN = "anyio==4.15.1"
 
 # export writes a pin to its -o file; tool install logs the constraints it
-# was given, while the file still exists, and fails on request.
+# was given, while the file still exists, and fails on request; tool dir
+# --bin prints STUB_BIN_DIR when set, as uv does for a custom XDG_DATA_HOME.
 UV_STUB = """#!{bash}
 printf '%s\\n' "uv $*" >> {log}
 if [[ $1 == export ]]; then
@@ -35,7 +36,7 @@ elif [[ "$1 $2" == "tool install" ]]; then
     done
     [[ ${{STUB_INSTALL_FAIL:-0}} != 1 ]]
 elif [[ "$*" == "tool dir --bin" ]]; then
-    printf '%s\\n' {bin_dir}
+    printf '%s\\n' "${{STUB_BIN_DIR:-{bin_dir}}}"
 fi
 """
 CLAUDE_STUB = """#!{bash}
@@ -382,3 +383,51 @@ def test_unknown_option_is_usage_error(sandbox: Sandbox) -> None:
     assert result.code == 2
     assert "unknown option: --force" in result.err
     assert not result.calls
+
+
+def test_dotted_bin_dir_on_path_is_normalized(sandbox: Sandbox, tmp_path: Path) -> None:
+    """uv's <data>/../bin matches its plain spelling on PATH and in the snippet."""
+    (tmp_path / "data").mkdir()
+    real = (tmp_path / "tool-bin").resolve()
+    result = sandbox.run(
+        "--yes",
+        STUB_BIN_DIR=f"{tmp_path}/data/../tool-bin",
+        PATH=f"{sandbox.path}:{sandbox.bin_dir}",
+        WSL_DISTRO_NAME="Ubuntu",
+    )
+    assert result.code == 0, result.err
+    assert "not on PATH" not in result.err
+    assert f"{real}/xoot --version" in _actions(result.out)
+    entry = _snippet(result.out)["mcpServers"]["xoot"]
+    assert isinstance(entry, dict) and entry["args"][2] == f"{real}/xoot-mcp"
+    assert ".." not in result.out
+
+
+def test_dotted_path_entry_matches_bin_dir(sandbox: Sandbox, tmp_path: Path) -> None:
+    """A PATH entry spelled with .. is normalized before the comparison."""
+    (tmp_path / "data").mkdir()
+    dotted = f"{tmp_path}/data/../tool-bin/"
+    result = sandbox.run("--yes", PATH=f"{sandbox.path}:{dotted}")
+    assert result.code == 0, result.err
+    assert "not on PATH" not in result.err
+
+
+def test_dotted_bin_dir_off_path_warns(sandbox: Sandbox, tmp_path: Path) -> None:
+    """Off PATH, the warning names the normalized directory."""
+    (tmp_path / "data").mkdir()
+    real = (tmp_path / "tool-bin").resolve()
+    result = sandbox.run("--yes", STUB_BIN_DIR=f"{tmp_path}/data/../tool-bin")
+    assert result.code == 0, result.err
+    assert f"warning: {real} is not on PATH" in result.err
+    assert ".." not in result.err
+
+
+def test_failed_bin_dir_lookup_stops(sandbox: Sandbox) -> None:
+    """If uv cannot name its bin directory, nothing is checked or registered."""
+    (sandbox.stubs / "uv").write_text(
+        f"#!{BASH}\n[[ $1 != tool || $2 != dir ]]\n", encoding="utf-8"
+    )
+    result = sandbox.run("--yes")
+    assert result.code != 0
+    assert not any(call.startswith("claude") for call in result.calls)
+    assert "--version" not in result.out

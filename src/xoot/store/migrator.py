@@ -40,6 +40,20 @@ def load_migrations() -> list[tuple[int, str]]:
     return order_migrations(entries)
 
 
+def latest_version() -> int:
+    """
+    The newest schema version the shipped migrations reach.
+
+    Returns:
+        - version (int): the highest migration number, 0 when none ship.
+
+    Raises:
+        - MigrationError: the shipped files are misnamed or not contiguous.
+    """
+    migrations = load_migrations()
+    return migrations[-1][0] if migrations else 0
+
+
 def order_migrations(entries: Iterable[tuple[str, str]]) -> list[tuple[int, str]]:
     """
     Validate migration file names and order them.
