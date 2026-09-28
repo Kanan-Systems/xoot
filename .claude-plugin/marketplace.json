@@ -1,0 +1,19 @@
+{
+  "name": "xoot",
+  "description": "The xoot plugin, served from a local xoot checkout.",
+  "owner": {
+    "name": "Kanan Systems"
+  },
+  "plugins": [
+    {
+      "name": "xoot",
+      "description": "The xoot MCP server (the installed xoot-mcp) and the xoot-session skill.",
+      "author": {
+        "name": "Kanan Systems"
+      },
+      "source": "./plugin",
+      "category": "productivity",
+      "homepage": "https://github.com/Kanan-Systems/xoot"
+    }
+  ]
+}

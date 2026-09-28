@@ -42,5 +42,8 @@ jobs:
       - name: pylint
         run: uv run pylint src tests --fail-under=10
 
+      # Coverage is a report in the job summary, never a gate: no threshold.
       - name: pytest
-        run: uv run pytest
+        run: |
+          uv run pytest --cov=xoot --cov-report=term
+          uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"

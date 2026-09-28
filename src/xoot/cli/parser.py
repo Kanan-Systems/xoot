@@ -8,6 +8,7 @@ overrides the top-level default and an absent one leaves it alone.
 
 import argparse
 
+from xoot import __version__
 from xoot.cli.commands import brief, db, init, paste, project, redact, workflow
 from xoot.models.event.redactable_field import RedactableField
 from xoot.models.item.tree_query import MAX_DEPTH
@@ -32,6 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Local tracker for goals, batches and subtasks.",
         parents=[_global_options(None)],
     )
+    parser.add_argument("--version", action="version", version=f"xoot {__version__}")
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
     _init(commands, common)
     _project(commands, common)

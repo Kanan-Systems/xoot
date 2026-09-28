@@ -1,0 +1,10 @@
+{
+  "name": "xoot",
+  "version": "0.1.0",
+  "description": "Track goals, batches and subtasks across Claude sessions with the local xoot MCP server, plus a skill for session discipline.",
+  "author": {
+    "name": "Kanan Systems"
+  },
+  "license": "MIT",
+  "keywords": ["mcp", "tracker", "sessions", "backlog", "decisions", "local"]
+}

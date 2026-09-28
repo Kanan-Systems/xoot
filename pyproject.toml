@@ -1,16 +1,30 @@
 [project]
 name = "xoot"
-version = "0.0.0"
+version = "0.1.0"
 description = "Local-only tracker for goals, batches and subtasks across Claude sessions."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [{ name = "Kanan Systems" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+]
 dependencies = [
     "anyio>=4.15.1,<5",
     "mcp>=2.2,<3",
     "pydantic>=2.13.5,<3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Kanan-Systems/xoot"
+Repository = "https://github.com/Kanan-Systems/xoot"
+Issues = "https://github.com/Kanan-Systems/xoot/issues"
 
 [project.scripts]
 xoot = "xoot.cli.__main__:main"
@@ -23,6 +37,7 @@ dev = [
     "pylint>=4.0.9,<5",
     "pytest>=9.1.1,<10",
     "pre-commit>=4.6.2,<5",
+    "pytest-cov>=7.1.0,<8",
 ]
 
 [build-system]

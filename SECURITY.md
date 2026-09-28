@@ -2,7 +2,9 @@
 
 ## Supported versions
 
-None yet. xoot is pre-alpha and has no released versions.
+| Version | Supported |
+|---|---|
+| 0.1.x | Yes |
 
 ## Reporting a vulnerability
 
@@ -41,5 +43,22 @@ Stored titles, bodies and summaries are written by users and agents. The
 server returns them as data, and every tool description says so, but a
 client model may still read them as instructions. Treat them as untrusted.
 
+## Secrets in identifiers
+
 Never put secrets in key prefixes or aliases. They are part of every key,
-appear in outputs and events, and cannot be redacted.
+appear in outputs and events, and cannot be redacted. `xoot redact` clears
+titles, bodies, summaries and project names only.
+
+## install.sh
+
+`install.sh` prints every action before running it, and `--dry-run` runs
+none. It never uses sudo and never downloads anything itself: `uv tool
+install` resolves the dependencies from the package index as usual. It edits
+no shell rc files and writes no Windows files; the Claude Desktop snippet is
+only printed. Registering with Claude Code asks first unless `--yes` is
+given.
+
+## No telemetry
+
+xoot collects no telemetry and makes no network requests. Adoption is
+judged only from public GitHub signals.

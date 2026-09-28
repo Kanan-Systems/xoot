@@ -15,6 +15,7 @@ from collections.abc import Sequence
 import anyio
 import anyio.abc
 
+from xoot import __version__
 from xoot.server.app import build_server
 from xoot.server.xoot_server import XootServer
 from xoot.store.paths import db_path_from_arg
@@ -83,6 +84,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="xoot-mcp", description="Serve the xoot tracker over MCP stdio."
     )
+    # argparse exits after printing, so --version never reaches the server.
+    parser.add_argument("--version", action="version", version=f"xoot {__version__}")
     parser.add_argument(
         "--db",
         metavar="PATH",
