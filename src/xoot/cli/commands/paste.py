@@ -2,8 +2,9 @@
 `xoot paste`: print the paste brief, or apply one xoot block from a chat.
 
 apply reads the block from a file or stdin (at most 256 KiB), dry-runs it,
-prints the plan to stderr and asks y/N on the controlling terminal, since
-stdin may be carrying the paste. The apply re-runs the block and commits
+prints the plan to stderr, with a warning section when a title or body
+looks damaged by a clipboard code page, and asks y/N on the controlling
+terminal, since stdin may be carrying the paste. The apply re-runs the block and commits
 only if it does exactly what the plan showed. Every write is Claude's,
 through client paste.
 """
@@ -17,11 +18,12 @@ from pathlib import Path
 from xoot.cli import exit_codes
 from xoot.cli.commands.common import absolute, project_of
 from xoot.cli.console import Console
-from xoot.cli.render.paste import plan_lines, render_receipt
+from xoot.cli.render.paste import encoding_lines, plan_lines, render_receipt
 from xoot.cli.render.paste_brief import render_paste_brief
 from xoot.cli.schemas.paste_brief_output import PasteBriefOutput
 from xoot.exceptions.paste_error import PasteError
 from xoot.server.brief import build_brief
+from xoot.services.paste.encoding_check import encoding_warnings
 from xoot.services.paste.executor import apply, dry_run, result_digest
 from xoot.services.paste.parser import MAX_BYTES, decode_paste, parse_paste
 from xoot.store.store import Store
@@ -72,12 +74,13 @@ def run_apply(args: argparse.Namespace, store: Store, console: Console) -> int:
         - ConfirmationError: the plan was not confirmed.
     """
     block = parse_paste(decode_paste(read_source(args.source)))
+    warnings = encoding_warnings(block)
     preview = dry_run(store, block)
-    for line in plan_lines(preview):
+    for line in [*plan_lines(preview), *encoding_lines(warnings)]:
         print(line, file=sys.stderr)
     console.confirm_on_terminal(args.yes)
     applied = apply(store, block, result_digest(preview))
-    console.result(applied, render_receipt)
+    console.result(applied.model_copy(update={"warnings": warnings}), render_receipt)
     return exit_codes.OK
 
 

@@ -49,15 +49,19 @@ the workflow, open sessions, items in flight with their versions, recent
 decisions and the reply protocol. Paste it into the chat; Claude replies with
 at most one fenced ```` ```xoot ```` JSON block of ops (session_start,
 capture, item_create, item_update, decision_record, decision_update,
-session_close). Then:
+session_close). Copy the reply with the copy button under the whole message:
+a code block's own copy button drops the fence lines. Then:
 
 ```sh
 xoot paste apply reply.md        # or "-" to read stdin; at most 256 KiB
-powershell.exe -NoProfile -Command \
-  '[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw' \
-  | xoot paste apply -           # WSL, from the Windows clipboard
+# WSL: define once, so no command is copied after copying the reply
+alias xpaste='powershell.exe -NoProfile -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw" | xoot paste apply -'
+xpaste                           # applies the reply on the Windows clipboard
 ```
-Without the UTF-8 setting PowerShell writes the legacy code page, which xoot refuses.
+
+Known limit: legacy code-page bytes are refused, but a code page can also
+silently turn "—" into "-", or accents into "?". The plan warns about the
+second (POSSIBLE ENCODING DAMAGE), so always read the titles in the plan.
 
 `apply` dry-runs the whole block, prints the plan and a SIDE EFFECTS
 section (auto-backlog moves) to stderr, and asks y/N on the terminal

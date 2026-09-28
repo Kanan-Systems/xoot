@@ -107,7 +107,7 @@ def apply(store: Store, block: PasteBlock, expected_digest: str) -> PasteResult:
 
 def result_digest(result: PasteResult) -> str:
     """
-    Digest a result canonically.
+    Digest a result canonically, leaving out its encoding warnings.
 
     Args:
         - result (PasteResult): a dry run's or an apply's result.
@@ -115,7 +115,7 @@ def result_digest(result: PasteResult) -> str:
     Returns:
         - digest (str): lowercase hex SHA-256.
     """
-    return canonical_sha256(result.model_dump(mode="json"))
+    return canonical_sha256(result.model_dump(mode="json", exclude={"warnings"}))
 
 
 def _execute(conn: sqlite3.Connection, block: PasteBlock) -> PasteResult:
