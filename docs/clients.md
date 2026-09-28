@@ -5,25 +5,29 @@ starts the server. Install xoot first (see the [README](../README.md#install)).
 
 ## Claude Code
 
-Register the installed server once, at user scope, in one of two ways. Use
-one, not both.
+Register xoot once, at user scope, one way or the other: never both, or
+Claude Code gets the same tools twice.
 
-- **claude mcp add** (what `install.sh` offers):
+- **The plugin** (recommended, and what `install.sh` offers): the xoot MCP
+  server plus the `xoot-session` skill. The checkout is a local plugin
+  marketplace:
+
+  ```sh
+  claude plugin marketplace add --scope user /path/to/xoot
+  claude plugin install --scope user xoot@xoot
+  ```
+
+  The plugin runs `xoot-mcp` by name, so the uv tool bin directory
+  (`uv tool dir --bin`) must be on the PATH Claude Code starts with.
+
+- **claude mcp add**: the server alone, without the skill:
 
   ```sh
   claude mcp add xoot --scope user -- "$(uv tool dir --bin)/xoot-mcp"
   ```
 
-- **The plugin**, which adds the same server plus the `xoot-session` skill.
-  The checkout is a local plugin marketplace:
-
-  ```sh
-  claude plugin marketplace add /path/to/xoot
-  claude plugin install xoot@xoot
-  ```
-
-  The plugin runs `xoot-mcp` by name, so the uv tool bin directory
-  (`uv tool dir --bin`) must be on the PATH Claude Code starts with.
+`install.sh` skips registration when it finds either one (`claude plugin
+list` or `claude mcp get xoot`).
 
 Claude Code sends its launch directory as the MCP root, and xoot resolves
 the project from the roots. Launch it inside a registered project directory
@@ -83,30 +87,37 @@ Chats without MCP use paste mode (see the
 
 Clients do not start the server from your shell, so do not rely on your
 shell's variables reaching it. Measured: Claude Desktop, through `wsl.exe`,
-passed only the fixed set of variables in the table below, and no
-`XDG_DATA_HOME`. Claude Code passed through the environment it was started
-with.
+passed only the minimal set of variables in the table below, with no
+`CLAUDE_*` and no `XDG_DATA_HOME`. Claude Code passed through the
+environment it was started with.
 
 If you set `XDG_DATA_HOME`, the server and the CLI can end up on different
-databases. Pass the database explicitly in every client config:
+databases:
 
-```sh
-claude mcp add xoot --scope user -- "$(uv tool dir --bin)/xoot-mcp" --db "$XDG_DATA_HOME/xoot/xoot.db"
-```
+- Claude Desktop: append `"--db", "<path>/xoot/xoot.db"` to the entry's
+  `args`; `install.sh` prints that line when `XDG_DATA_HOME` is set.
+- Claude Code with `claude mcp add`: add `--db` after the command:
 
-In Desktop's entry, append `"--db", "<the same path>"` to `args`;
-`install.sh` prints that line when `XDG_DATA_HOME` is set. The server logs
-the database path it uses to stderr once at start.
+  ```sh
+  claude mcp add xoot --scope user -- "$(uv tool dir --bin)/xoot-mcp" --db "$XDG_DATA_HOME/xoot/xoot.db"
+  ```
+
+- Claude Code with the plugin: the plugin passes no `--db`, so start Claude
+  Code from a shell where `XDG_DATA_HOME` is set.
+
+The server logs the database path it uses to stderr once at start.
 
 ## Measured facts
 
-Observed on 2026-09-28 on Windows with WSL2, by inspecting the running
-`xoot-mcp` processes and the results of `session_start`.
+Observed on Windows with WSL2 in live verifications of the server (2026-09):
+by inspecting the running `xoot-mcp` processes and from what the server
+received at initialization and in `session_start`.
 
 | | Claude Code 2.1.283 (in WSL) | Claude Desktop (Windows, via `wsl.exe`) |
 |---|---|---|
 | Working directory | The directory Claude Code was launched in | `/mnt/c/WINDOWS/System32` |
-| Environment | The environment Claude Code was started with | `DBUS_SESSION_BUS_ADDRESS`, `DISPLAY`, `HOME`, `HOSTTYPE`, `LANG`, `LOGNAME`, `NAME`, `PATH`, `PULSE_SERVER`, `PWD`, `SHELL`, `SHLVL`, `TERM`, `USER`, `WAYLAND_DISPLAY`, `WSL2_GUI_APPS_ENABLED`, `WSLENV`, `WSL_DISTRO_NAME`, `WSL_INTEROP`, `XDG_RUNTIME_DIR` |
-| Roots | Sent; the project resolved by roots (`resolved_by: roots`) | Not measured |
-| `client_info` name | `claude-code`, so sessions record client `code` | Does not contain `claude-code`, so sessions record client `chat` |
+| Environment | The environment Claude Code was started with | 21 variable names, minimal, no `CLAUDE_*`, no `XDG_DATA_HOME`: `DBUS_SESSION_BUS_ADDRESS`, `DISPLAY`, `HOME`, `HOSTTYPE`, `LANG`, `LOGNAME`, `NAME`, `PATH`, `PULSE_SERVER`, `PWD`, `SHELL`, `SHLVL`, `TERM`, `USER`, `WAYLAND_DISPLAY`, `WSL2_GUI_APPS_ENABLED`, `WSLENV`, `WSL_DISTRO_NAME`, `WSL_INTEROP`, `XDG_RUNTIME_DIR`, `_` |
+| Roots | Sent; the project resolved by roots (`resolved_by: roots`) | Never matched a project; values not measured |
+| `client_info` | `claude-code` 2.1.283, so sessions record client `code` | `claude-ai` 0.1.0, so sessions record client `chat` |
+| Protocol version | `2025-11-25` | Not measured |
 | Server processes | One per Claude Code session | Two per Desktop launch |

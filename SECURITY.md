@@ -53,10 +53,11 @@ titles, bodies, summaries and project names only.
 
 `install.sh` prints every action before running it, and `--dry-run` runs
 none. It never uses sudo and never downloads anything itself: `uv tool
-install` resolves the dependencies from the package index as usual. It edits
-no shell rc files and writes no Windows files; the Claude Desktop snippet is
-only printed. Registering with Claude Code asks first unless `--yes` is
-given.
+install` fetches the dependencies from the package index, constrained to
+the versions pinned in `uv.lock`, exported to a temporary file
+that is removed on exit. It edits no shell rc files and writes no Windows
+files; the Claude Desktop snippet is only printed. Installing the Claude
+Code plugin asks first unless `--yes` is given.
 
 ## No telemetry
 

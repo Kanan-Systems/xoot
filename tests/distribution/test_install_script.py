@@ -1,12 +1,14 @@
 """
 install.sh, run against stub uv, claude and xoot executables.
 
-PATH holds only the stubs (the script uses bash builtins otherwise), so no
-test can reach the real uv or claude, install anything or change a client's
-configuration. Each stub appends its arguments to one log file.
+PATH holds only the stubs plus the real mktemp and rm (the script uses bash
+builtins otherwise), so no test can reach the real uv or claude, install
+anything or change a client's configuration. Each stub appends its
+arguments to one log file; TMPDIR is private, so leftover temp files show.
 """
 
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -16,20 +18,41 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 BASH = shutil.which("bash")
+SYSTEM_TOOLS = ("mktemp", "rm")
 TIMEOUT_S = 30.0
+PIN = "anyio==4.15.1"
 
+# export writes a pin to its -o file; tool install logs the constraints it
+# was given, while the file still exists, and fails on request.
 UV_STUB = """#!{bash}
 printf '%s\\n' "uv $*" >> {log}
-if [[ "$*" == "tool dir --bin" ]]; then printf '%s\\n' {bin_dir}; fi
+if [[ $1 == export ]]; then
+    while (($#)); do [[ $1 == -o ]] && printf '{pin}\\n' > "$2"; shift; done
+elif [[ "$1 $2" == "tool install" ]]; then
+    while (($#)); do
+        [[ $1 == --constraints ]] && printf 'constraints: %s\\n' "$(<"$2")" >> {log}
+        shift
+    done
+    [[ ${{STUB_INSTALL_FAIL:-0}} != 1 ]]
+elif [[ "$*" == "tool dir --bin" ]]; then
+    printf '%s\\n' {bin_dir}
+fi
 """
 CLAUDE_STUB = """#!{bash}
 printf '%s\\n' "claude $*" >> {log}
-if [[ "$1 $2" == "mcp get" ]]; then [[ ${{STUB_REGISTERED:-0}} == 1 ]]; fi
+if [[ "$1 $2" == "plugin list" ]]; then printf '%s\\n' "${{STUB_PLUGINS:-}}"; fi
+if [[ "$1 $2" == "mcp get" ]]; then [[ ${{STUB_MCP:-0}} == 1 ]]; fi
 """
 XOOT_STUB = """#!{bash}
 printf '%s\\n' "xoot $*" >> {log}
 printf 'xoot 0.1.0\\n'
 """
+OTHER_PLUGINS = "Installed plugins:\n  code-review@claude-plugins-official"
+EXPORT = (
+    "uv export --quiet --frozen --no-dev --no-emit-project "
+    "--format requirements-txt -o {file}"
+)
+INSTALL = "uv tool install --reinstall --constraints {file} ."
 
 
 @dataclass(frozen=True)
@@ -44,16 +67,25 @@ class Result:
 
 @dataclass(frozen=True)
 class Sandbox:
-    """A fake checkout, the stubs' PATH directory and the tool bin directory."""
+    """A fake checkout, stub and tool directories, the log and a private TMPDIR."""
 
     checkout: Path
     stubs: Path
+    system: Path
     bin_dir: Path
     log: Path
+    tmp: Path
+
+    @property
+    def path(self) -> str:
+        """The PATH install.sh runs with: stubs, then mktemp and rm."""
+        return f"{self.stubs}:{self.system}"
 
     def run(self, *args: str, cwd: Path | None = None, **env: str) -> Result:
         """
-        Run install.sh with only the stubs on PATH.
+        Run install.sh with only the stubs, mktemp and rm on PATH.
+
+        Temp-file paths in the output and the log read as <tmp>.
 
         Args:
             - args (str): install.sh options.
@@ -64,7 +96,12 @@ class Sandbox:
             - result (Result): the exit code, output and logged calls.
         """
         assert BASH is not None
-        environment = {"PATH": str(self.stubs), "HOME": str(self.checkout.parent)}
+        environment = {
+            "PATH": self.path,
+            "HOME": str(self.checkout.parent),
+            "TMPDIR": str(self.tmp),
+            "STUB_PLUGINS": OTHER_PLUGINS,
+        }
         environment.update(env)
         done = subprocess.run(
             [BASH, str(self.checkout / "install.sh"), *args],
@@ -76,12 +113,16 @@ class Sandbox:
             timeout=TIMEOUT_S,
             check=False,
         )
-        calls = (
-            self.log.read_text(encoding="utf-8").splitlines()
-            if self.log.exists()
-            else []
+        log = self.log.read_text(encoding="utf-8") if self.log.exists() else ""
+        return Result(
+            done.returncode,
+            self._mask(done.stdout),
+            done.stderr,
+            self._mask(log).splitlines(),
         )
-        return Result(done.returncode, done.stdout, done.stderr, calls)
+
+    def _mask(self, text: str) -> str:
+        return re.sub(re.escape(str(self.tmp)) + r"/\S+", "<tmp>", text)
 
 
 def _stub(path: Path, template: str, **values: str) -> None:
@@ -92,16 +133,21 @@ def _stub(path: Path, template: str, **values: str) -> None:
 @pytest.fixture(name="sandbox")
 def fixture_sandbox(tmp_path: Path) -> Sandbox:
     """A checkout holding the real install.sh and pyproject.toml, plus stubs."""
-    checkout, stubs, bin_dir = (tmp_path / d for d in ("xoot", "stubs", "tool-bin"))
-    for directory in (checkout, stubs, bin_dir):
+    names = ("xoot", "stubs", "system", "tool-bin", "tmp")
+    checkout, stubs, system, bin_dir, tmp = (tmp_path / name for name in names)
+    for directory in (checkout, stubs, system, bin_dir, tmp):
         directory.mkdir()
     for name in ("install.sh", "pyproject.toml"):
         shutil.copy2(REPO / name, checkout / name)
+    for tool in SYSTEM_TOOLS:
+        real = shutil.which(tool)
+        assert real is not None, f"{tool} is not installed"
+        (system / tool).symlink_to(real)
     log = tmp_path / "calls.log"
-    _stub(stubs / "uv", UV_STUB, log=str(log), bin_dir=str(bin_dir))
+    _stub(stubs / "uv", UV_STUB, log=str(log), bin_dir=str(bin_dir), pin=PIN)
     _stub(stubs / "claude", CLAUDE_STUB, log=str(log))
     _stub(bin_dir / "xoot", XOOT_STUB, log=str(log))
-    return Sandbox(checkout, stubs, bin_dir, log)
+    return Sandbox(checkout, stubs, system, bin_dir, log, tmp)
 
 
 def _actions(out: str) -> list[str]:
@@ -116,59 +162,121 @@ def _snippet(out: str) -> dict[str, dict[str, object]]:
     return json.loads("{" + "\n".join(lines[start : end + 1]) + "}")
 
 
+def _plugin_install(checkout: Path) -> list[str]:
+    return [
+        f"claude plugin marketplace add --scope user {checkout}",
+        "claude plugin install --scope user xoot@xoot",
+    ]
+
+
+def _no_mcp_add(result: Result) -> bool:
+    return not any(call.startswith("claude mcp add") for call in result.calls)
+
+
 def test_dry_run_prints_every_action_and_runs_nothing(sandbox: Sandbox) -> None:
-    """--dry-run calls no stub and prints each command it would run."""
+    """--dry-run calls no stub, creates no temp file and prints each command."""
     result = sandbox.run("--dry-run")
     assert result.code == 0, result.err
     assert not result.calls
+    assert not list(sandbox.tmp.iterdir())
     assert _actions(result.out) == [
-        "uv tool install --reinstall .",
+        "mktemp",
+        EXPORT.format(file="<temp file>"),
+        INSTALL.format(file="<temp file>"),
         "uv tool dir --bin",
         "<uv tool dir --bin>/xoot --version",
+        "claude plugin list",
         "claude mcp get xoot",
-        "claude mcp add xoot --scope user -- <uv tool dir --bin>/xoot-mcp",
+        *_plugin_install(sandbox.checkout),
     ]
 
 
-def test_yes_installs_and_registers(sandbox: Sandbox) -> None:
-    """--yes installs the checkout and registers xoot-mcp at user scope."""
+def test_yes_installs_locked_and_adds_plugin(sandbox: Sandbox) -> None:
+    """--yes exports the lock, installs with it, then installs the plugin."""
     result = sandbox.run("--yes")
     assert result.code == 0, result.err
-    expected = [
-        "uv tool install --reinstall .",
-        "uv tool dir --bin",
-        f"{sandbox.bin_dir}/xoot --version",
-        "claude mcp get xoot",
-        f"claude mcp add xoot --scope user -- {sandbox.bin_dir}/xoot-mcp",
-    ]
     assert result.calls == [
-        "uv tool install --reinstall .",
+        EXPORT.format(file="<tmp>"),
+        INSTALL.format(file="<tmp>"),
+        f"constraints: {PIN}",
         "uv tool dir --bin",
         "xoot --version",
+        "claude plugin list",
         "claude mcp get xoot",
-        f"claude mcp add xoot --scope user -- {sandbox.bin_dir}/xoot-mcp",
+        *_plugin_install(sandbox.checkout),
     ]
-    assert _actions(result.out) == expected
+    assert _actions(result.out) == [
+        "mktemp",
+        EXPORT.format(file="<tmp>"),
+        INSTALL.format(file="<tmp>"),
+        "uv tool dir --bin",
+        f"{sandbox.bin_dir}/xoot --version",
+        "claude plugin list",
+        "claude mcp get xoot",
+        *_plugin_install(sandbox.checkout),
+        "rm -f <tmp>",
+    ]
     assert "xoot init" in result.out and "docs/clients.md" in result.out
 
 
-def test_already_registered_is_skipped(sandbox: Sandbox) -> None:
-    """When claude mcp get finds xoot, nothing is added."""
-    result = sandbox.run("--yes", STUB_REGISTERED="1")
+def test_constraints_file_is_removed(sandbox: Sandbox) -> None:
+    """The exported constraints file is gone once the script ends."""
+    result = sandbox.run("--yes")
+    assert result.code == 0, result.err
+    assert not list(sandbox.tmp.iterdir())
+
+
+def test_constraints_file_is_removed_on_failure(sandbox: Sandbox) -> None:
+    """A failed install stops the script and still removes the temp file."""
+    result = sandbox.run("--yes", STUB_INSTALL_FAIL="1")
+    assert result.code == 1
+    assert result.calls[-1] == f"constraints: {PIN}"
+    assert _actions(result.out)[-1] == "rm -f <tmp>"
+    assert not list(sandbox.tmp.iterdir())
+
+
+def test_existing_plugin_is_skipped(sandbox: Sandbox) -> None:
+    """A xoot plugin in claude plugin list means nothing else is registered."""
+    plugins = f"{OTHER_PLUGINS}\n  xoot@xoot"
+    result = sandbox.run("--yes", STUB_PLUGINS=plugins)
+    assert result.code == 0, result.err
+    assert result.calls[-1] == "claude plugin list"
+    assert "already installed as a Claude Code plugin" in result.out
+
+
+def test_similar_plugin_name_is_not_xoot(sandbox: Sandbox) -> None:
+    """A plugin whose name merely ends in xoot does not count."""
+    result = sandbox.run("--yes", STUB_PLUGINS="  myxoot@elsewhere")
+    assert result.code == 0, result.err
+    assert result.calls[-2:] == _plugin_install(sandbox.checkout)
+
+
+def test_existing_mcp_server_is_skipped(sandbox: Sandbox) -> None:
+    """A server registered with claude mcp add means no plugin is installed."""
+    result = sandbox.run("--yes", STUB_MCP="1")
     assert result.code == 0, result.err
     assert result.calls[-1] == "claude mcp get xoot"
-    assert not any(call.startswith("claude mcp add") for call in result.calls)
-    assert "already registered" in result.out
+    assert "already registered as a Claude Code MCP server" in result.out
+    assert _no_mcp_add(result)
 
 
-def test_no_terminal_without_yes_does_not_register(sandbox: Sandbox) -> None:
-    """Without --yes and a terminal the answer is no; the command is shown."""
+def test_claude_mcp_add_is_never_called(sandbox: Sandbox) -> None:
+    """Neither a fresh install nor a dry run registers with claude mcp add."""
+    for args in (("--yes",), ("--dry-run",), ()):
+        result = sandbox.run(*args)
+        assert _no_mcp_add(result)
+        assert "claude mcp add" not in result.out
+
+
+def test_no_terminal_without_yes_does_not_install(sandbox: Sandbox) -> None:
+    """Without --yes and a terminal the answer is no; the commands are shown."""
     result = sandbox.run()
     assert result.code == 0, result.err
-    assert not any(call.startswith("claude mcp add") for call in result.calls)
-    assert f"claude mcp add xoot --scope user -- {sandbox.bin_dir}/xoot-mcp" in (
-        result.out
+    assert not any(
+        call.startswith("claude plugin marketplace") for call in result.calls
     )
+    for command in _plugin_install(sandbox.checkout):
+        assert f"  {command}" in result.out
 
 
 def test_missing_uv_exits_with_instructions(sandbox: Sandbox) -> None:
@@ -255,7 +363,7 @@ def test_bin_dir_off_path_warns(sandbox: Sandbox) -> None:
 
 def test_bin_dir_on_path_does_not_warn(sandbox: Sandbox) -> None:
     """With the tool bin directory on PATH there is no warning."""
-    result = sandbox.run("--yes", PATH=f"{sandbox.stubs}:{sandbox.bin_dir}")
+    result = sandbox.run("--yes", PATH=f"{sandbox.path}:{sandbox.bin_dir}")
     assert result.code == 0
     assert "not on PATH" not in result.err
 

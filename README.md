@@ -27,28 +27,33 @@ git clone https://github.com/Kanan-Systems/xoot.git
 cd xoot
 git checkout v0.1.0
 ./install.sh --dry-run     # prints every action, runs none
-./install.sh               # --yes registers with Claude Code without asking
+./install.sh               # --yes installs the Claude Code plugin without asking
 ```
 
-`install.sh` runs `uv tool install --reinstall .`, checks `xoot --version`,
-offers to register `xoot-mcp` with Claude Code at user scope, and on WSL
-prints the Claude Desktop config snippet. It never uses sudo, downloads
-nothing itself and edits no shell rc or Windows files.
-
+`install.sh` runs `uv tool install --reinstall` pinned to `uv.lock`, checks
+`xoot --version`, offers the Claude Code plugin (skipped if xoot is already
+registered either way) and on WSL prints the Claude Desktop snippet. It
+never uses sudo, downloads nothing itself and edits no rc or Windows files.
 Manual alternative, from the same checkout:
 
 ```sh
-uv tool install --reinstall .
-claude mcp add xoot --scope user -- "$(uv tool dir --bin)/xoot-mcp"
+pins=$(mktemp)
+uv export --quiet --frozen --no-dev --no-emit-project --format requirements-txt -o "$pins"
+uv tool install --reinstall --constraints "$pins" .; rm -f "$pins"
+claude plugin marketplace add --scope user "$PWD"
+claude plugin install --scope user xoot@xoot
 ```
+
+Or, without the skill (never both):
+`claude mcp add xoot --scope user -- "$(uv tool dir --bin)/xoot-mcp"`.
 
 ## Quickstart
 
 Register the project once, from its directory: `xoot init --prefix myapp`.
 
-- **Claude Code**: registered by `install.sh`, `claude mcp add` or the
-  [plugin](docs/clients.md#claude-code). Launch it inside the project
-  directory; the project resolves from there.
+- **Claude Code**: the [plugin](docs/clients.md#claude-code) that
+  `install.sh` offers (or `claude mcp add`, without the skill). Launch it
+  inside the project directory; the project resolves from there.
 - **Claude Desktop** (Windows with WSL): add the snippet `install.sh` prints
   to the config, then fully quit Desktop. Always pass the project. See
   [Claude Desktop on Windows](docs/clients.md#claude-desktop-on-windows-wsl).
@@ -129,9 +134,13 @@ never chmod-ed. The database never lives in this repository.
 ## Uninstall
 
 ```sh
+# Claude Code, installed as the plugin:
+claude plugin uninstall xoot@xoot
+claude plugin marketplace remove xoot
+# Claude Code, registered with claude mcp add instead:
+claude mcp remove xoot
+# Then the tool itself:
 uv tool uninstall xoot
-claude mcp remove xoot                # if registered with Claude Code
-claude plugin uninstall xoot          # if installed as the plugin
 ```
 
 Remove the `xoot` entry from Claude Desktop's config too. The database is

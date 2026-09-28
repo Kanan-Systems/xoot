@@ -1,30 +1,34 @@
 #!/usr/bin/env bash
-# Install xoot from this checkout as a uv tool and optionally register it
-# with Claude Code.
+# Install xoot from this checkout as a uv tool, with the dependency versions
+# pinned in uv.lock, and optionally install the Claude Code plugin.
 #
 # Every action is printed before it runs. The script never uses sudo, never
 # downloads anything itself (uv resolves the dependencies), never edits shell
 # rc files and never writes Windows files: the Claude Desktop snippet is only
-# printed. It uses bash builtins only, besides uv, claude and xoot.
+# printed. Besides uv, claude and xoot it runs only mktemp and rm; everything
+# else is a bash builtin.
 
 set -euo pipefail
 
 readonly UV_INSTALL_URL="https://docs.astral.sh/uv/getting-started/installation/"
+# A xoot plugin from any marketplace, as `claude plugin list` names it.
+readonly PLUGIN_RE='(^|[^[:alnum:]_.-])xoot@[[:alnum:]_.-]+'
 
 dry_run=0
 assume_yes=0
+constraints=""
 
 usage() {
     printf '%s\n' \
         "Usage: ./install.sh [--dry-run] [--yes] [--help]" \
         "" \
         "Run from the root of a xoot checkout (ideally a release tag). Installs" \
-        "the checkout with 'uv tool install', checks 'xoot --version', and, when" \
-        "'claude' is on PATH, offers to register xoot-mcp with Claude Code at" \
-        "user scope." \
+        "the checkout with 'uv tool install', pinned to uv.lock, checks" \
+        "'xoot --version', and, when 'claude' is on PATH, offers to install the" \
+        "xoot plugin for Claude Code at user scope." \
         "" \
         "  --dry-run  print every action, execute none" \
-        "  --yes      register with Claude Code without asking" \
+        "  --yes      install the Claude Code plugin without asking" \
         "  --help     show this help"
 }
 
@@ -56,7 +60,7 @@ confirm() {
         return 0
     fi
     if [[ ! -t 0 ]]; then
-        say "No terminal to ask on; skipping. Pass --yes to register."
+        say "No terminal to ask on; skipping. Pass --yes to install it."
         return 1
     fi
     read -r -p "$1 [y/N] " answer
@@ -83,6 +87,13 @@ project_name() {
             return 0
         fi
     done <pyproject.toml
+}
+
+remove_constraints() {
+    if [[ -n $constraints ]]; then
+        say "+ rm -f $constraints"
+        rm -f -- "$constraints"
+    fi
 }
 
 on_path() {
@@ -124,12 +135,21 @@ check_uv() {
     fi
 }
 
-# --reinstall rebuilds from the checkout even when a tool of the same name
-# and version is installed, so rerunning after checking out a new tag
-# always installs what is on disk.
+# uv tool install has no --locked, so the runtime dependencies uv.lock pins
+# (the versions CI tests) go in as constraints. --reinstall rebuilds from the
+# checkout even when a tool of the same name and version is installed, so
+# rerunning after checking out a new tag always installs what is on disk.
 install_tool() {
-    say "Installing xoot from $PWD"
-    run uv tool install --reinstall .
+    local file='<temp file>'
+    say "Installing xoot from $PWD with the dependency versions in uv.lock"
+    say "+ mktemp"
+    if ! ((dry_run)); then
+        constraints=$(mktemp)
+        file=$constraints
+    fi
+    run uv export --quiet --frozen --no-dev --no-emit-project \
+        --format requirements-txt -o "$file"
+    run uv tool install --reinstall --constraints "$file" .
 }
 
 # main prints the action: whatever this writes to stdout is captured.
@@ -147,32 +167,48 @@ check_install() {
     if ((dry_run)); then
         say "(dry run) would check that $bin_dir is on PATH"
     elif ! on_path "$bin_dir"; then
-        warn "$bin_dir is not on PATH; add it to use xoot and xoot-mcp by name." \
-            "This script does not edit shell rc files."
+        warn "$bin_dir is not on PATH; add it so xoot, and xoot-mcp for the" \
+            "Claude Code plugin, are found by name. This script does not edit" \
+            "shell rc files."
     fi
 }
 
+install_plugin() {
+    run claude plugin marketplace add --scope user "$PWD"
+    run claude plugin install --scope user xoot@xoot
+}
+
+# Either registration counts: two would serve the same tools twice.
 register_claude_code() {
-    local bin_dir=$1
+    local plugins=""
     if ! command -v claude >/dev/null 2>&1; then
         say "claude is not on PATH; skipping Claude Code registration."
         return 0
     fi
     if ((dry_run)); then
+        run claude plugin list
         run claude mcp get xoot
-        run claude mcp add xoot --scope user -- "$bin_dir/xoot-mcp"
+        install_plugin
+        return 0
+    fi
+    say "+ claude plugin list"
+    plugins=$(claude plugin list 2>/dev/null) || plugins=""
+    if [[ $plugins =~ $PLUGIN_RE ]]; then
+        say "xoot is already installed as a Claude Code plugin; skipping."
         return 0
     fi
     say "+ claude mcp get xoot"
     if claude mcp get xoot >/dev/null 2>&1; then
-        say "xoot is already registered with Claude Code; skipping."
+        say "xoot is already registered as a Claude Code MCP server" \
+            "(claude mcp); skipping."
         return 0
     fi
-    if confirm "Register xoot-mcp with Claude Code at user scope?"; then
-        run claude mcp add xoot --scope user -- "$bin_dir/xoot-mcp"
+    if confirm "Install the xoot plugin (MCP server and skill) for Claude Code?"; then
+        install_plugin
     else
-        say "Not registered. To do it later:"
-        say "  claude mcp add xoot --scope user -- $bin_dir/xoot-mcp"
+        say "Not installed. To do it later:"
+        say "  claude plugin marketplace add --scope user $PWD"
+        say "  claude plugin install --scope user xoot@xoot"
     fi
 }
 
@@ -212,6 +248,9 @@ print_next_steps() {
 main() {
     local bin_dir
     parse_args "$@"
+    trap remove_constraints EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     check_repo_root
     check_uv
     if ((dry_run)); then
@@ -221,7 +260,7 @@ main() {
     say "+ uv tool dir --bin"
     bin_dir=$(tool_bin_dir)
     check_install "$bin_dir"
-    register_claude_code "$bin_dir"
+    register_claude_code
     print_desktop_snippet "$bin_dir"
     print_next_steps
 }
