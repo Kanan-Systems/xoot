@@ -3,6 +3,7 @@
 import { NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useProjects, useTree } from '../api/queries.ts';
+import { truncate } from '../lib/display.ts';
 import { PARAM, withParam } from '../lib/search.ts';
 import { LastUpdated } from './LastUpdated.tsx';
 import { Legend } from './Legend.tsx';
@@ -98,7 +99,7 @@ function GoalSelector({ prefix }: { prefix: string }) {
         <option value="">All goals</option>
         {goals.map((entry) => (
           <option key={entry.item.key} value={entry.item.key}>
-            {entry.item.key}: {entry.item.title} ({entry.item.state})
+            {truncate(entry.item.title).text} ({entry.item.key}, {entry.item.state})
           </option>
         ))}
       </select>

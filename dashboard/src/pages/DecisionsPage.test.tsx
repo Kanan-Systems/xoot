@@ -53,18 +53,18 @@ describe('the decisions view', () => {
     renderApp('/x/decisions');
     await screen.findByRole('button', { name: /x-D2/ });
     const newer = within(row('x-D2'));
-    expect(newer.getByRole('link', { name: 'x-D1' })).toHaveAttribute(
+    expect(newer.getByRole('link', { name: 'old rule (x-D1)' })).toHaveAttribute(
       'href',
       '#decision-x-D1',
     );
     expect(newer.getByText('Locked')).toHaveClass('chip');
-    expect(newer.getByRole('link', { name: 'x-1' })).toHaveAttribute(
+    expect(newer.getByRole('link', { name: 'title of x-1 (x-1)' })).toHaveAttribute(
       'href',
       '/x/decisions?item=x-1',
     );
     const older = within(row('x-D1'));
     expect(older.getByText(/Superseded by/)).toBeInTheDocument();
-    expect(older.getByRole('link', { name: 'x-D2' })).toHaveAttribute(
+    expect(older.getByRole('link', { name: 'new rule (x-D2)' })).toHaveAttribute(
       'href',
       '#decision-x-D2',
     );

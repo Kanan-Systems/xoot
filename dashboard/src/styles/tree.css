@@ -14,6 +14,10 @@
   border-bottom: 1px solid var(--line);
 }
 
+.tree-toolbar .tab-help {
+  margin: 0;
+}
+
 .modes {
   display: flex;
   gap: 0.75rem;
@@ -89,6 +93,12 @@
   font-weight: 600;
 }
 
+.node-meta {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .node-focus {
   margin-left: auto;
   border: 1px solid var(--line);
@@ -102,10 +112,15 @@
   margin-left: 0;
 }
 
+/* Two lines at most, so a node keeps its laid-out height. */
 .node-title {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .node-highlighted {

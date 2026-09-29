@@ -60,7 +60,7 @@ describe('routes', () => {
 
   it('a row click opens the drawer; Back closes it', async () => {
     renderApp('/x/backlog');
-    const [link] = await screen.findAllByRole('link', { name: 'x-9' });
+    const [link] = await screen.findAllByRole('link', { name: 'title of x-9 x-9' });
     fireEvent.click(link as HTMLElement);
     await at('/x/backlog?item=x-9');
     expect(await screen.findByRole('complementary')).toBeInTheDocument();

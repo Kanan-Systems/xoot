@@ -1,4 +1,4 @@
-// One session: its summary, its linked items grouped by outcome, its
+// One session, title first: its summary, its linked items grouped by outcome, its
 // captures, and a way to see it in the tree.
 import { Link } from 'react-router-dom';
 
@@ -8,6 +8,7 @@ import { PARAM } from '../lib/search.ts';
 import { groupByOutcome } from '../lib/sessionGroups.ts';
 import { ItemTable } from './ItemTable.tsx';
 import { QueryState } from './QueryState.tsx';
+import { KeyTag } from './Titled.tsx';
 
 export function SessionDetail({
   prefix,
@@ -35,9 +36,10 @@ export function SessionBody({ prefix, view }: { prefix: string; view: SessionVie
   const captured = view.linked.filter((entry) => entry.captured).map((e) => e.item);
   return (
     <>
-      <h2>
-        {session.key}: {session.title}
-      </h2>
+      <h2 className="detail-title">{session.title}</h2>
+      <p className="detail-meta">
+        Session <KeyTag value={session.key} /> {session.status}
+      </p>
       <p>
         <Link
           className="action"

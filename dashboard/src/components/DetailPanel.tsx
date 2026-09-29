@@ -1,5 +1,6 @@
 // The detail drawer, shared by every view: full height on the right, closed
-// by its button or Escape. Every stored string is rendered as a text node:
+// by its button or Escape. The title is the heading, in full; kind and key
+// are secondary. Every stored string is rendered as a text node:
 // bodies keep their whitespace in <pre>, nothing is parsed as markdown or
 // HTML.
 import { useEffect, useRef } from 'react';
@@ -8,9 +9,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useItem } from '../api/queries.ts';
 import type { EventEntry, ItemView } from '../api/types.gen.ts';
 import { useDrawer } from '../hooks/useDrawer.ts';
+import { useTitles } from '../hooks/useTitles.ts';
 import { categoryClass, categoryGlyph, DECISION_STATUS, KIND } from '../lib/display.ts';
 import { PARAM, withParam } from '../lib/search.ts';
+import { labelOf, NO_TITLES, type Titles } from '../lib/titles.ts';
 import { QueryState } from './QueryState.tsx';
+import { KeyLabel, KeyTag, TitleRef, TitleText } from './Titled.tsx';
 
 export function DetailPanel({ prefix }: { prefix: string }) {
   const { itemKey, close } = useDrawer();
@@ -45,14 +49,21 @@ export function DetailPanel({ prefix }: { prefix: string }) {
 
 function DrawerItem({ prefix, itemKey }: { prefix: string; itemKey: string }) {
   const query = useItem(itemKey);
+  const titles = useTitles(prefix);
   return (
     <QueryState query={query} what="item">
-      {(view) => <ItemDetails prefix={prefix} view={view} />}
+      {(view) => <ItemDetails prefix={prefix} view={view} titles={titles} />}
     </QueryState>
   );
 }
 
-export function ItemDetails({ prefix, view }: { prefix: string; view: ItemView }) {
+interface ItemDetailsProps {
+  prefix: string;
+  view: ItemView;
+  titles?: Titles;
+}
+
+export function ItemDetails({ prefix, view, titles = NO_TITLES }: ItemDetailsProps) {
   const { item } = view;
   const { hrefFor } = useDrawer();
   const navigate = useNavigate();
@@ -60,11 +71,11 @@ export function ItemDetails({ prefix, view }: { prefix: string; view: ItemView }
   const focusable = item.kind === 'goal' || item.kind === 'batch';
   return (
     <>
-      <h2>
+      <h2 className="detail-title">{item.title}</h2>
+      <p className="detail-meta">
         <span aria-hidden="true">{KIND[item.kind].icon}</span> {KIND[item.kind].label}{' '}
-        {item.key}
-      </h2>
-      <p className="detail-title">{item.title}</p>
+        <KeyTag value={item.key} />
+      </p>
       {focusable && (
         <button
           type="button"
@@ -91,7 +102,9 @@ export function ItemDetails({ prefix, view }: { prefix: string; view: ItemView }
           {item.parent === null ? (
             'none'
           ) : (
-            <Link to={hrefFor(item.parent)}>{item.parent}</Link>
+            <Link to={hrefFor(item.parent)}>
+              <KeyLabel itemKey={item.parent} titles={titles} />
+            </Link>
           )}
         </dd>
       </dl>
@@ -114,9 +127,9 @@ export function ItemDetails({ prefix, view }: { prefix: string; view: ItemView }
                   search: withParam(new URLSearchParams(), PARAM.session, session.key),
                 }}
               >
-                {session.key}
+                <TitleRef title={session.title} itemKey={session.key} />
               </Link>{' '}
-              ({session.status}): {session.title}
+              {session.status}
             </li>
           ))}
         </ul>
@@ -128,8 +141,8 @@ export function ItemDetails({ prefix, view }: { prefix: string; view: ItemView }
         view.decisions.map((decision) => (
           <article key={decision.key} className="decision">
             <h4>
-              {decision.key} ({DECISION_STATUS[decision.status].label}):{' '}
-              {decision.title}
+              <TitleText title={decision.title} /> <KeyTag value={decision.key} />{' '}
+              {DECISION_STATUS[decision.status].label}
             </h4>
             <pre className="body">{decision.body}</pre>
           </article>
@@ -138,16 +151,18 @@ export function ItemDetails({ prefix, view }: { prefix: string; view: ItemView }
       <h3>Recent history</h3>
       <ol className="history">
         {view.events.map((event, index) => (
-          <li key={`${event.created_at}-${String(index)}`}>{describe(event)}</li>
+          <li key={`${event.created_at}-${String(index)}`}>
+            {describe(event, titles)}
+          </li>
         ))}
       </ol>
     </>
   );
 }
 
-function describe(event: EventEntry): string {
+function describe(event: EventEntry, titles: Titles): string {
   const who = `${event.actor_kind}/${event.client}`;
-  const where = event.session === null ? '' : ` in ${event.session}`;
+  const where = event.session === null ? '' : ` in ${labelOf(event.session, titles)}`;
   const what = event.changed.length > 0 ? `: ${event.changed.join(', ')}` : '';
   const redacted = event.redacted ? ' (redacted)' : '';
   return `${event.created_at} ${event.action} by ${who}${where}${what}${redacted}`;

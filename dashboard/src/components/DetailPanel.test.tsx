@@ -101,7 +101,7 @@ describe('ItemDetails', () => {
     expect(
       screen.getByRole('button', { name: /Focus on this goal/ }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'x-S1' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '<u>session</u> (x-S1)' })).toHaveAttribute(
       'href',
       '/x/sessions?session=x-S1',
     );

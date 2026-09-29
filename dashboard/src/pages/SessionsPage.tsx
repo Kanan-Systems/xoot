@@ -6,6 +6,8 @@ import { useSessions } from '../api/queries.ts';
 import type { SessionRow } from '../api/types.gen.ts';
 import { QueryState } from '../components/QueryState.tsx';
 import { SessionDetail } from '../components/SessionDetail.tsx';
+import { TabHelp } from '../components/TabHelp.tsx';
+import { Titled } from '../components/Titled.tsx';
 import { PARAM, withParam } from '../lib/search.ts';
 
 function when(value: string | null): string {
@@ -22,6 +24,7 @@ export function SessionsPage() {
     <div className="view view-split">
       <div>
         <h1 className="view-title">Sessions</h1>
+        <TabHelp tab="sessions" />
         <label>
           <input
             type="checkbox"
@@ -63,7 +66,6 @@ function SessionsTable({ rows, selected, search }: SessionsTableProps) {
       <caption className="visually-hidden">Sessions</caption>
       <thead>
         <tr>
-          <th scope="col">Key</th>
           <th scope="col">Title</th>
           <th scope="col">Client</th>
           <th scope="col">Status</th>
@@ -79,15 +81,14 @@ function SessionsTable({ rows, selected, search }: SessionsTableProps) {
             className={row.key === selected ? 'row row-selected' : 'row'}
             aria-current={row.key === selected ? 'true' : undefined}
           >
-            <td>
+            <td className="cell-title">
               <Link
                 className="row-link"
                 to={{ search: withParam(search, PARAM.session, row.key) }}
               >
-                {row.key}
+                <Titled title={row.title} itemKey={row.key} />
               </Link>
             </td>
-            <td className="cell-title">{row.title}</td>
             <td>{row.client}</td>
             <td>
               <span className={`status status-${row.status}`}>

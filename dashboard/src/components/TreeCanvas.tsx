@@ -153,7 +153,7 @@ function toFlow(graph: Graph): { nodes: FlowNode[]; edges: Edge[] } {
     return {
       ...node,
       position,
-      ariaLabel: `${KIND[item.kind].label} ${item.key}: ${item.title}, ${item.state}. Press Enter for details`,
+      ariaLabel: `${KIND[item.kind].label}: ${item.title} (${item.key}), ${item.state}. Press Enter for details`,
     };
   });
   const edges = graph.edges.map((edge) => ({ ...edge, selectable: false }));

@@ -5,9 +5,11 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { useDecisions, useSession, useTree } from '../api/queries.ts';
 import { QueryState } from '../components/QueryState.tsx';
+import { KeyLabel } from '../components/Titled.tsx';
 import { TreeCanvas } from '../components/TreeCanvas.tsx';
 import { TreeToolbar } from '../components/TreeToolbar.tsx';
 import { useDrawer } from '../hooks/useDrawer.ts';
+import { useTitles } from '../hooks/useTitles.ts';
 import { filterMode, PARAM, withParam } from '../lib/search.ts';
 import { applySessionFilter } from '../lib/sessionFilter.ts';
 import { countByScope } from '../lib/tree.ts';
@@ -22,6 +24,7 @@ export function TreePage({ focus }: { focus: boolean }) {
   const sessionKey = search.get(PARAM.session);
   const mode = filterMode(search.get(PARAM.mode));
   const session = useSession(project, sessionKey);
+  const titles = useTitles(project);
   const [showDone, setShowDone] = useState(false);
   const [unfiledOpen, setUnfiledOpen] = useState(false);
   const rootKey = focus ? key : search.get(PARAM.goal);
@@ -60,7 +63,7 @@ export function TreePage({ focus }: { focus: boolean }) {
       />
       {focus && key !== null && (
         <p className="focus-bar">
-          Focus: {key}{' '}
+          Focus: <KeyLabel itemKey={key} titles={titles} />{' '}
           <Link
             to={{
               pathname: `/${project}/tree`,

@@ -77,9 +77,20 @@ describe('ItemNode', () => {
     ).toHaveTextContent('2 done');
   });
 
+  it('leads with "kind · title"; the key is secondary, after it', () => {
+    renderNode({ ...BASE, item: item('x-2', 'batch', 'x-1', 'open', 'B4 dashboard') });
+    const primary = document.querySelector('.node-title');
+    expect(primary).toHaveTextContent(/^▤ batch · B4 dashboard$/);
+    const key = screen.getByText('x-2');
+    expect(key).toHaveClass('key');
+    expect(primary?.compareDocumentPosition(key)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
   it('shows the kind as a word as well as an icon', () => {
     renderNode({ ...BASE, item: item('x-2', 'batch', 'x-1') });
-    expect(screen.getByText('Batch')).toHaveClass('node-kind-label');
+    expect(screen.getByText('batch')).toHaveClass('node-kind-label');
   });
 
   it('has a focus button on goals and batches only; its click stays inside', () => {

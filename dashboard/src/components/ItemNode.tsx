@@ -1,6 +1,7 @@
 // One tree node. React Flow's node wrapper is the focusable, clickable
-// element (see TreeCanvas); the card only draws the item. The kind shows as
-// icon and word, the category as colour, icon and state name together.
+// element (see TreeCanvas); the card only draws the item. The title comes
+// first, after the kind as icon and word; the key is secondary. The category
+// shows as colour, icon and state name together.
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { MouseEvent } from 'react';
 
@@ -37,12 +38,18 @@ export function ItemNode({ data }: NodeProps<ItemFlowNode>) {
     <div className={classes}>
       <Handle type="target" position={Position.Left} isConnectable={false} />
       <div className="node-card">
-        <span className="node-head">
+        <span className="node-title">
           <span className="node-kind" aria-hidden="true" title={kind.label}>
             {kind.icon}
+          </span>{' '}
+          <span className="node-kind-label">{item.kind}</span> ·{' '}
+          <span title={title.truncated ? item.title : undefined}>{title.text}</span>
+        </span>
+        <span className="node-meta">
+          <span className="key">{item.key}</span>
+          <span className={categoryClass(item.category)}>
+            <span aria-hidden="true">{category.icon}</span> {item.state}
           </span>
-          <span className="node-kind-label">{kind.label}</span>
-          <span className="node-key">{item.key}</span>
           {decisions > 0 && (
             <span
               className="badge badge-decisions"
@@ -64,12 +71,6 @@ export function ItemNode({ data }: NodeProps<ItemFlowNode>) {
               ⌖
             </button>
           )}
-        </span>
-        <span className="node-title" title={title.truncated ? item.title : undefined}>
-          {title.text}
-        </span>
-        <span className={categoryClass(item.category)}>
-          <span aria-hidden="true">{category.icon}</span> {item.state}
         </span>
       </div>
       {hiddenDone > 0 && (

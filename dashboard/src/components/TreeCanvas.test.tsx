@@ -48,7 +48,7 @@ describe('tree node clicks', () => {
       const node = await flowNode('x-3');
       expect(node).toHaveAttribute('tabindex', '0');
       expect(node).toHaveAccessibleName(
-        /x-3: title of x-3, open\. Press Enter for details/,
+        /Subtask: title of x-3 \(x-3\), open\. Press Enter for details/,
       );
       node.focus();
       fireEvent.keyDown(node, { key });

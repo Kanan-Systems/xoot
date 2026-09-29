@@ -17,6 +17,11 @@ describe('Legend', () => {
     const states = panel.querySelectorAll('.cat');
     expect(states).toHaveLength(7);
     expect(within(panel).getByText('Awaiting input')).toBeInTheDocument();
+    expect(
+      within(panel).getByText(
+        'Unfiled: a subtask not yet placed under a batch — usually a side item captured during a session, waiting for triage.',
+      ),
+    ).toBeInTheDocument();
     fireEvent.click(toggle);
     expect(screen.queryByRole('region', { name: 'Legend' })).toBeNull();
   });

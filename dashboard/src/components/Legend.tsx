@@ -1,5 +1,5 @@
 // The legend toggle: what the kind icons and the seven category colour,
-// icon and label pairs mean, and what a session is.
+// icon and label pairs mean, what unfiled means, and what a session is.
 import { useId, useState } from 'react';
 
 import type { Category, ItemKind } from '../api/types.gen.ts';
@@ -45,6 +45,11 @@ export function Legend() {
               </li>
             ))}
           </ul>
+          <h2>Unfiled</h2>
+          <p className="muted">
+            Unfiled: a subtask not yet placed under a batch — usually a side item
+            captured during a session, waiting for triage.
+          </p>
           <h2>Sessions</h2>
           <p className="muted">
             A session is one working sitting. It links every item it focused on, touched

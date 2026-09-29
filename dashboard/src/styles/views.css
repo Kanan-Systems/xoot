@@ -123,3 +123,33 @@
 .chip-superseded {
   color: var(--dropped);
 }
+
+.group-toggle,
+.help-toggle {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.count {
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.tab-help {
+  margin: 0 0 0.5rem;
+}
+
+.help-toggle {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.help-text {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+}
