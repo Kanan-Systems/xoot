@@ -1,6 +1,6 @@
 """What brief_get returns."""
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.workflow.category import Category
@@ -18,7 +18,9 @@ class BriefOutput(BaseModel):
     what waits in backlogs and the latest decisions. Lists are capped;
     open_sessions_truncated says more sessions are open than are listed.
     workflow is the active workflow per item kind, whose state names are the
-    only ones item_update accepts.
+    only ones item_update accepts. open_session_backlog lists what open
+    sessions have parked, which pending_session_backlog (closed sessions
+    only) leaves out.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -34,5 +36,8 @@ class BriefOutput(BaseModel):
     awaiting_input: list[ItemSummary]
     pending_session_backlog: list[ItemSummary]
     project_backlog_count: int
+    # Defaulted, so the field is additive for every existing producer.
+    open_session_backlog: list[ItemSummary] = Field(default_factory=list)
+    open_session_backlog_truncated: bool = False
     recent_decisions: list[DecisionSummary]
     workflow: dict[ItemKind, WorkflowEntry]

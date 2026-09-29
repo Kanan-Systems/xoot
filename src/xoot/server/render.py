@@ -14,9 +14,11 @@ from xoot.models.item.item import Item
 from xoot.models.item.item_change import ItemChange
 from xoot.models.item.tree_result import TreeResult
 from xoot.models.session.session import Session
+from xoot.models.workflow.category import Category
 from xoot.server.errors import PUBLIC_NAMES
 from xoot.server.key_book import KeyBook
 from xoot.server.schemas.change_entry import ChangeEntry
+from xoot.server.schemas.children_summary import ChildrenSummary
 from xoot.server.schemas.decision_detail import DecisionDetail
 from xoot.server.schemas.decision_summary import DecisionSummary
 from xoot.server.schemas.event_entry import EventEntry
@@ -73,6 +75,35 @@ def tree_entries(book: KeyBook, result: TreeResult) -> list[TreeEntry]:
         )
         for node in result.nodes
     ]
+
+
+def children_summary(
+    book: KeyBook, children: list[Item], limit: int
+) -> ChildrenSummary:
+    """
+    Summarize an item's direct children: counts per category and the first
+    few of them.
+
+    Args:
+        - book (KeyBook): lookups for the current transaction.
+        - children (list[Item]): every direct child, by number.
+        - limit (int): the most children to list.
+
+    Returns:
+        - summary (ChildrenSummary): the counts, the listed children and
+          whether the list was cut.
+    """
+    by_category: dict[Category, int] = {}
+    for child in children:
+        category = book.category(child)
+        if category is not None:
+            by_category[category] = by_category.get(category, 0) + 1
+    return ChildrenSummary(
+        total=len(children),
+        by_category=by_category,
+        items=[item_summary(book, child) for child in children[:limit]],
+        truncated=len(children) > limit,
+    )
 
 
 def item_detail(book: KeyBook, item: Item) -> ItemDetail:

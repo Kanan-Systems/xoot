@@ -22,3 +22,7 @@ dist/
 *-wal
 *-shm
 *-journal
+
+# Dashboard frontend dependencies and tool caches
+dashboard/node_modules/
+dashboard/.vite/

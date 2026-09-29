@@ -95,6 +95,29 @@ def list_recent(
     return [Decision.model_validate(dict(row)) for row in rows]
 
 
+def list_for_scope(
+    conn: sqlite3.Connection, project_id: int, item_id: int, limit: int
+) -> list[Decision]:
+    """
+    List the decisions scoped to one item, newest first.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - project_id (int): the item's project id.
+        - item_id (int): the scope item id.
+        - limit (int): the most rows to return.
+
+    Returns:
+        - decisions (list[Decision]): up to limit decisions.
+    """
+    rows = conn.execute(
+        f"SELECT {_COLUMNS} FROM decision WHERE project_id = ? "
+        "AND scope_item_id = ? ORDER BY number DESC LIMIT ?",
+        (project_id, item_id, limit),
+    ).fetchall()
+    return [Decision.model_validate(dict(row)) for row in rows]
+
+
 def update(conn: sqlite3.Connection, decision: Decision, expected_version: int) -> None:
     """
     Write a decision's mutable columns, guarded by its previous version.

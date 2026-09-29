@@ -27,3 +27,28 @@ repos:
         types: [python]
         pass_filenames: false
         always_run: true
+      # Frontend gates, after the Python ones; they need `npm ci` in dashboard/.
+      - id: eslint
+        name: eslint
+        entry: npm --prefix dashboard run lint
+        language: system
+        files: ^dashboard/
+        pass_filenames: false
+      - id: prettier
+        name: prettier --check
+        entry: npm --prefix dashboard run format:check
+        language: system
+        files: ^dashboard/
+        pass_filenames: false
+      - id: tsc
+        name: tsc --noEmit
+        entry: npm --prefix dashboard run typecheck
+        language: system
+        files: ^dashboard/
+        pass_filenames: false
+      - id: vitest
+        name: vitest run
+        entry: npm --prefix dashboard run test
+        language: system
+        files: ^dashboard/
+        pass_filenames: false

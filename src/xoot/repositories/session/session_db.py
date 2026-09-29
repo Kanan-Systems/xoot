@@ -4,6 +4,7 @@ import sqlite3
 
 from xoot.models.session.new_session import NewSession
 from xoot.models.session.session import Session
+from xoot.models.session.session_status import SessionStatus
 
 _COLUMNS = (
     "id, project_id, number, client, title, status, summary, start_seq, "
@@ -86,6 +87,55 @@ def list_open(conn: sqlite3.Connection, project_id: int, limit: int) -> list[Ses
         f"SELECT {_COLUMNS} FROM session WHERE project_id = ? AND status = 'open' "
         "ORDER BY number LIMIT ?",
         (project_id, limit),
+    ).fetchall()
+    return [Session.model_validate(dict(row)) for row in rows]
+
+
+def list_for_project(
+    conn: sqlite3.Connection,
+    project_id: int,
+    status: SessionStatus | None,
+    limit: int,
+) -> list[Session]:
+    """
+    List a project's sessions, open ones first, then newest first.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - project_id (int): project id.
+        - status (SessionStatus | None): only this status; any when None.
+        - limit (int): the most rows to return.
+
+    Returns:
+        - sessions (list[Session]): up to limit sessions.
+    """
+    value = None if status is None else status.value
+    rows = conn.execute(
+        f"SELECT {_COLUMNS} FROM session WHERE project_id = ? "
+        "AND (? IS NULL OR status = ?) "
+        "ORDER BY status = 'open' DESC, number DESC LIMIT ?",
+        (project_id, value, value, limit),
+    ).fetchall()
+    return [Session.model_validate(dict(row)) for row in rows]
+
+
+def list_for_item(conn: sqlite3.Connection, item_id: int) -> list[Session]:
+    """
+    List the sessions an item is linked to, by number.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - item_id (int): item id.
+
+    Returns:
+        - sessions (list[Session]): the linked sessions.
+    """
+    columns = ", ".join(f"session.{name.strip()}" for name in _COLUMNS.split(","))
+    rows = conn.execute(
+        f"SELECT {columns} FROM session "
+        "JOIN session_item_ref ON session_item_ref.session_id = session.id "
+        "WHERE session_item_ref.item_id = ? ORDER BY session.number",
+        (item_id,),
     ).fetchall()
     return [Session.model_validate(dict(row)) for row in rows]
 

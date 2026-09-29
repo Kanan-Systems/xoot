@@ -28,7 +28,8 @@ The server speaks MCP over stdio only. The `mcp` SDK it depends on also ships
 an HTTP transport, so installing xoot pulls in starlette, uvicorn, PyJWT,
 cryptography and the SDK's HTTP client. xoot only ever starts the stdio
 transport: that stack is installed and partly imported, but no server is
-started, no port is opened, and xoot makes no network request.
+started, no port is opened, and xoot makes no network request. The one
+exception is `xoot dashboard`, below, which the user starts explicitly.
 
 Every MCP write is recorded as `claude/code` or `claude/chat`; no tool
 accepts an actor or a client. CLI admin commands write as `user/cli`.
@@ -42,6 +43,18 @@ the session and grants nothing.
 Stored titles, bodies and summaries are written by users and agents. The
 server returns them as data, and every tool description says so, but a
 client model may still read them as instructions. Treat them as untrusted.
+
+## Dashboard
+
+`xoot dashboard` binds 127.0.0.1 only and is read-only in 0.2: anything but
+GET and HEAD gets 405. Each launch makes a random token, printed once to
+stdout and never logged or written to disk; it becomes an HttpOnly,
+SameSite=Strict cookie that every API request needs (401 without it). Only
+the Host names `xoot.localhost`, `localhost` and `127.0.0.1` on the served
+port are answered (400 otherwise, against DNS rebinding), and an API request
+from a foreign Origin gets 403. A strict Content-Security-Policy allows
+scripts, styles and connections from the dashboard itself only. Uvicorn's
+access log is off, since request lines can carry the token.
 
 ## Secrets in identifiers
 

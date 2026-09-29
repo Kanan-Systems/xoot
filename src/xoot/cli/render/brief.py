@@ -44,6 +44,13 @@ def render_brief(brief: BriefOutput) -> str:
         "Awaiting input\n" + _items(brief.awaiting_input),
         "Pending session backlog\n" + _items(brief.pending_session_backlog),
         f"Project backlog: {brief.project_backlog_count}",
+        "Open session backlog\n"
+        + _items(brief.open_session_backlog)
+        + (
+            f"\n  (first {len(brief.open_session_backlog)} shown; more are held)"
+            if brief.open_session_backlog_truncated
+            else ""
+        ),
         "Recent decisions\n" + _rows(("key", "status", "title"), decisions),
         "Workflow\n" + "\n".join(workflow),
     ]

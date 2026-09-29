@@ -19,6 +19,7 @@ from xoot.server.schemas.item_summary import ItemSummary
 from xoot.server.schemas.literals import ResolvedBy
 from xoot.server.schemas.project_entry import ProjectEntry
 from xoot.server.schemas.workflow_entry import WorkflowEntry
+from xoot.services.backlog_service import open_session_backlog
 from xoot.services.lookups import active_workflow
 from xoot.services.project_service import overview
 
@@ -69,6 +70,7 @@ def build_brief(
             by_category[category].append(item)
     backlogged = by_category[Category.BACKLOGGED]
     pending = item_db.list_session_backlogged(conn, project.id, None)
+    held = open_session_backlog(conn, project.id)
     decisions = decision_db.list_recent(conn, project.id, None, RECENT_DECISIONS)
     # One row past the cap tells whether the list was cut.
     sessions = session_db.list_open(conn, project.id, LIST_MAX + 1)
@@ -86,6 +88,8 @@ def build_brief(
         project_backlog_count=sum(
             1 for i in backlogged if i.backlog_session_id is None
         ),
+        open_session_backlog=_summaries(book, held),
+        open_session_backlog_truncated=len(held) > LIST_MAX,
         recent_decisions=[decision_summary(book, d) for d in decisions],
         workflow=_workflow(active_workflow(conn, project).definition),
     )

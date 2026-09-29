@@ -14,11 +14,18 @@ concurrency:
 
 jobs:
   backend-gates:
-    name: backend-gates
+    name: backend-gates (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Both supported versions must pass: installs may run either one.
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
     env:
       UV_PROJECT_ENVIRONMENT: env
+      # Takes precedence over .python-version for every uv command below.
+      UV_PYTHON: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -5,15 +5,12 @@ from typing import Annotated
 from mcp.server.mcpserver import Context, MCPServer
 from pydantic import Field
 
-from xoot.models.event.entity_type import EntityType
-from xoot.models.item.item import Item
 from xoot.models.item.tree_query import MAX_DEPTH, MAX_ITEMS, TreeQuery
-from xoot.models.workflow.category import TERMINAL_CATEGORIES, Category
-from xoot.repositories.event import event_db
 from xoot.repositories.item import item_db
 from xoot.server.db_call import run_db
 from xoot.server.key_book import KeyBook
 from xoot.server.render import (
+    children_summary,
     event_entry,
     item_detail,
     item_summary,
@@ -23,11 +20,12 @@ from xoot.server.resolution import item_by_key, optional_item_id, resolve_projec
 from xoot.server.roots import root_paths
 from xoot.server.schemas.arguments import ItemKey, ProjectAlias
 from xoot.server.schemas.backlog_output import BacklogOutput
-from xoot.server.schemas.children_summary import ChildrenSummary
 from xoot.server.schemas.item_get_output import ItemGetOutput
 from xoot.server.schemas.literals import BacklogScope
 from xoot.server.schemas.tree_output import TreeOutput
 from xoot.server.tool_meta import READ, RESOLUTION, describe
+from xoot.services.backlog_service import backlog_items
+from xoot.services.history_service import recent_events
 from xoot.services.tree_service import tree
 from xoot.store.store import Store
 
@@ -106,11 +104,11 @@ async def item_get(ctx: Context, key: ItemKey) -> ItemGetOutput:
             book = KeyBook(conn)
             item = item_by_key(conn, key)
             children = item_db.list_children(conn, item.project_id, [item.id])
-            events = event_db.list_for_entity(conn, EntityType.ITEM, item.id)
+            events = recent_events(conn, item.id, RECENT_EVENTS)
             return ItemGetOutput(
                 item=item_detail(book, item),
-                children=_children(book, children),
-                events=[event_entry(book, e) for e in events[::-1][:RECENT_EVENTS]],
+                children=children_summary(book, children, CHILDREN_MAX),
+                events=[event_entry(book, e) for e in events],
             )
 
     return await run_db(ctx, work)
@@ -146,11 +144,7 @@ async def backlog_list(
         found, resolved_by = resolve_project(store, project, roots)
         with store.read() as conn:
             book = KeyBook(conn)
-            items = [
-                item
-                for item in item_db.list_for_project(conn, found.id)
-                if _in_scope(scope, item, book.category(item))
-            ]
+            items = backlog_items(conn, found.id, scope)
             return BacklogOutput(
                 project=found.key_prefix,
                 resolved_by=resolved_by,
@@ -160,28 +154,6 @@ async def backlog_list(
             )
 
     return await run_db(ctx, work)
-
-
-def _children(book: KeyBook, children: list[Item]) -> ChildrenSummary:
-    by_category: dict[Category, int] = {}
-    for child in children:
-        category = book.category(child)
-        if category is not None:
-            by_category[category] = by_category.get(category, 0) + 1
-    return ChildrenSummary(
-        total=len(children),
-        by_category=by_category,
-        items=[item_summary(book, child) for child in children[:CHILDREN_MAX]],
-        truncated=len(children) > CHILDREN_MAX,
-    )
-
-
-def _in_scope(scope: BacklogScope, item: Item, category: Category | None) -> bool:
-    if scope == "unfiled":
-        return item.unfiled and category not in TERMINAL_CATEGORIES
-    if category is not Category.BACKLOGGED:
-        return False
-    return (item.backlog_session_id is not None) == (scope == "session")
 
 
 def register(server: MCPServer) -> None:

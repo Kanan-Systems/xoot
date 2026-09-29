@@ -1,0 +1,1033 @@
+{
+  "$defs": {
+    "ActorKind": {
+      "description": "Claude acting through a client, the user directly, or xoot itself.\n\nSYSTEM is for changes xoot derives from another actor's write (stale\nbacklog moves, workflow remaps); they keep that write's client and\nsession.",
+      "enum": [
+        "claude",
+        "user",
+        "system"
+      ],
+      "title": "ActorKind",
+      "type": "string"
+    },
+    "BacklogsView": {
+      "description": "Each open session's backlog, the project backlog and the unfiled\nsubtasks. A capture shows under its session and under unfiled.",
+      "properties": {
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "project_backlog": {
+          "items": {
+            "$ref": "#/$defs/ItemSummary"
+          },
+          "title": "Project Backlog",
+          "type": "array"
+        },
+        "project_backlog_truncated": {
+          "title": "Project Backlog Truncated",
+          "type": "boolean"
+        },
+        "sessions": {
+          "items": {
+            "$ref": "#/$defs/SessionBacklogEntry"
+          },
+          "title": "Sessions",
+          "type": "array"
+        },
+        "unfiled": {
+          "items": {
+            "$ref": "#/$defs/ItemSummary"
+          },
+          "title": "Unfiled",
+          "type": "array"
+        },
+        "unfiled_truncated": {
+          "title": "Unfiled Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "project",
+        "sessions",
+        "project_backlog",
+        "project_backlog_truncated",
+        "unfiled",
+        "unfiled_truncated"
+      ],
+      "title": "BacklogsView",
+      "type": "object"
+    },
+    "BriefView": {
+      "description": "The brief_get picture without its MCP-only fields: counts, open\nsessions, work in flight, backlogs, recent decisions and the workflow.",
+      "properties": {
+        "active": {
+          "items": {
+            "$ref": "#/$defs/ItemSummary"
+          },
+          "title": "Active",
+          "type": "array"
+        },
+        "awaiting_input": {
+          "items": {
+            "$ref": "#/$defs/ItemSummary"
+          },
+          "title": "Awaiting Input",
+          "type": "array"
+        },
+        "counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/Category"
+          },
+          "title": "Counts",
+          "type": "object"
+        },
+        "open_session_backlog": {
+          "items": {
+            "$ref": "#/$defs/ItemSummary"
+          },
+          "title": "Open Session Backlog",
+          "type": "array"
+        },
+        "open_session_backlog_truncated": {
+          "title": "Open Session Backlog Truncated",
+          "type": "boolean"
+        },
+        "open_sessions": {
+          "items": {
+            "$ref": "#/$defs/SessionSummary"
+          },
+          "title": "Open Sessions",
+          "type": "array"
+        },
+        "open_sessions_truncated": {
+          "title": "Open Sessions Truncated",
+          "type": "boolean"
+        },
+        "pending_session_backlog": {
+          "items": {
+            "$ref": "#/$defs/ItemSummary"
+          },
+          "title": "Pending Session Backlog",
+          "type": "array"
+        },
+        "project": {
+          "$ref": "#/$defs/ProjectInfo"
+        },
+        "project_backlog_count": {
+          "title": "Project Backlog Count",
+          "type": "integer"
+        },
+        "recent_decisions": {
+          "items": {
+            "$ref": "#/$defs/DecisionSummary"
+          },
+          "title": "Recent Decisions",
+          "type": "array"
+        },
+        "workflow": {
+          "additionalProperties": {
+            "$ref": "#/$defs/WorkflowEntry"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/ItemKind"
+          },
+          "title": "Workflow",
+          "type": "object"
+        }
+      },
+      "required": [
+        "project",
+        "workflow",
+        "counts",
+        "active",
+        "awaiting_input",
+        "open_sessions",
+        "open_sessions_truncated",
+        "open_session_backlog",
+        "open_session_backlog_truncated",
+        "pending_session_backlog",
+        "project_backlog_count",
+        "recent_decisions"
+      ],
+      "title": "BriefView",
+      "type": "object"
+    },
+    "Category": {
+      "description": "The fixed set of categories. Project workflows name their own states,\nbut every state belongs to exactly one of these, and domain rules\n(backlogs, session close, tree filtering) reason only in categories.",
+      "enum": [
+        "open",
+        "active",
+        "blocked",
+        "awaiting_input",
+        "done",
+        "dropped",
+        "backlogged"
+      ],
+      "title": "Category",
+      "type": "string"
+    },
+    "ChangesView": {
+      "description": "The project's newest event id; the dashboard polls it for changes.",
+      "properties": {
+        "latest_event_id": {
+          "title": "Latest Event Id",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "latest_event_id"
+      ],
+      "title": "ChangesView",
+      "type": "object"
+    },
+    "ChildrenSummary": {
+      "description": "How many children there are per category, and the first few of them.",
+      "properties": {
+        "by_category": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/Category"
+          },
+          "title": "By Category",
+          "type": "object"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ItemSummary"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "total",
+        "by_category",
+        "items",
+        "truncated"
+      ],
+      "title": "ChildrenSummary",
+      "type": "object"
+    },
+    "Client": {
+      "description": "Where a write came from; recorded on sessions and on every event.",
+      "enum": [
+        "chat",
+        "code",
+        "paste",
+        "cli"
+      ],
+      "title": "Client",
+      "type": "string"
+    },
+    "DecisionDetail": {
+      "description": "The summary plus the body and creation time.",
+      "properties": {
+        "body": {
+          "title": "Body",
+          "type": "string"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scope"
+        },
+        "status": {
+          "$ref": "#/$defs/DecisionStatus"
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Supersedes"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "title": "Updated At",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "status",
+        "scope",
+        "supersedes",
+        "version",
+        "updated_at",
+        "body",
+        "created_at"
+      ],
+      "title": "DecisionDetail",
+      "type": "object"
+    },
+    "DecisionStatus": {
+      "description": "Superseded is terminal and only reached by a newer decision.",
+      "enum": [
+        "locked",
+        "deferred",
+        "superseded"
+      ],
+      "title": "DecisionStatus",
+      "type": "string"
+    },
+    "DecisionSummary": {
+      "description": "A decision's key, title, status, references and version.",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scope"
+        },
+        "status": {
+          "$ref": "#/$defs/DecisionStatus"
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Supersedes"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "title": "Updated At",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "status",
+        "scope",
+        "supersedes",
+        "version",
+        "updated_at"
+      ],
+      "title": "DecisionSummary",
+      "type": "object"
+    },
+    "DecisionView": {
+      "description": "One decision with its body.",
+      "properties": {
+        "decision": {
+          "$ref": "#/$defs/DecisionDetail"
+        }
+      },
+      "required": [
+        "decision"
+      ],
+      "title": "DecisionView",
+      "type": "object"
+    },
+    "DecisionsView": {
+      "description": "Decisions, newest first.",
+      "properties": {
+        "decisions": {
+          "items": {
+            "$ref": "#/$defs/DecisionSummary"
+          },
+          "title": "Decisions",
+          "type": "array"
+        },
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "project",
+        "decisions",
+        "truncated"
+      ],
+      "title": "DecisionsView",
+      "type": "object"
+    },
+    "ErrorOutput": {
+      "description": "The error class name and a safe message, built by the same rules as MCP\ntool errors: never driver text, SQL or an arbitrary input value.",
+      "properties": {
+        "error": {
+          "title": "Error",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "error",
+        "message"
+      ],
+      "title": "ErrorOutput",
+      "type": "object"
+    },
+    "EventAction": {
+      "description": "The kind of mutation an event row describes.",
+      "enum": [
+        "create",
+        "update",
+        "link",
+        "dispose",
+        "close",
+        "add_alias",
+        "add_path",
+        "remove_alias",
+        "remove_path",
+        "redact"
+      ],
+      "title": "EventAction",
+      "type": "string"
+    },
+    "EventEntry": {
+      "description": "Who changed what and when. changed names every changed field, body\nincluded; before/after hold the non-body values, with keys for references.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/EventAction"
+        },
+        "actor_kind": {
+          "$ref": "#/$defs/ActorKind"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "After"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Before"
+        },
+        "changed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Changed",
+          "type": "array"
+        },
+        "client": {
+          "$ref": "#/$defs/Client"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "redacted": {
+          "title": "Redacted",
+          "type": "boolean"
+        },
+        "session": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session"
+        }
+      },
+      "required": [
+        "action",
+        "actor_kind",
+        "client",
+        "session",
+        "created_at",
+        "redacted",
+        "changed",
+        "before",
+        "after"
+      ],
+      "title": "EventEntry",
+      "type": "object"
+    },
+    "ItemDetail": {
+      "description": "The summary plus the body, the awaited decision and timestamps.",
+      "properties": {
+        "awaiting_decision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Awaiting Decision"
+        },
+        "backlog_session": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Backlog Session"
+        },
+        "body": {
+          "title": "Body",
+          "type": "string"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Category"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ItemKind"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "unfiled": {
+          "title": "Unfiled",
+          "type": "boolean"
+        },
+        "updated_at": {
+          "title": "Updated At",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "title",
+        "state",
+        "category",
+        "parent",
+        "backlog_session",
+        "version",
+        "body",
+        "awaiting_decision",
+        "unfiled",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "ItemDetail",
+      "type": "object"
+    },
+    "ItemKind": {
+      "description": "A goal holds batches, a batch holds subtasks; subtasks may be unfiled.",
+      "enum": [
+        "goal",
+        "batch",
+        "subtask"
+      ],
+      "title": "ItemKind",
+      "type": "string"
+    },
+    "ItemSummary": {
+      "description": "Enough to recognize, pick and update an item. category is the fixed\nmeaning of the project-defined state; version is what item_update needs.",
+      "properties": {
+        "backlog_session": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Backlog Session"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Category"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ItemKind"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "title",
+        "state",
+        "category",
+        "parent",
+        "backlog_session",
+        "version"
+      ],
+      "title": "ItemSummary",
+      "type": "object"
+    },
+    "ItemView": {
+      "description": "One item in full: its children, most recent events (newest first), the\nsessions it is linked to and the decisions scoped to it, with bodies.",
+      "properties": {
+        "children": {
+          "$ref": "#/$defs/ChildrenSummary"
+        },
+        "decisions": {
+          "items": {
+            "$ref": "#/$defs/DecisionDetail"
+          },
+          "title": "Decisions",
+          "type": "array"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/EventEntry"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "item": {
+          "$ref": "#/$defs/ItemDetail"
+        },
+        "sessions": {
+          "items": {
+            "$ref": "#/$defs/SessionSummary"
+          },
+          "title": "Sessions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "item",
+        "children",
+        "events",
+        "sessions",
+        "decisions"
+      ],
+      "title": "ItemView",
+      "type": "object"
+    },
+    "MetaOutput": {
+      "description": "The running xoot version.",
+      "properties": {
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "title": "MetaOutput",
+      "type": "object"
+    },
+    "ProjectInfo": {
+      "description": "The key prefix the URLs use, the display name and the aliases.\nRegistered paths are left out: the browser has no use for local paths.",
+      "properties": {
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "key_prefix": {
+          "title": "Key Prefix",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key_prefix",
+        "name",
+        "aliases"
+      ],
+      "title": "ProjectInfo",
+      "type": "object"
+    },
+    "ProjectsOutput": {
+      "description": "Every registered project, by key prefix.",
+      "properties": {
+        "projects": {
+          "items": {
+            "$ref": "#/$defs/ProjectInfo"
+          },
+          "title": "Projects",
+          "type": "array"
+        }
+      },
+      "required": [
+        "projects"
+      ],
+      "title": "ProjectsOutput",
+      "type": "object"
+    },
+    "SessionBacklogEntry": {
+      "description": "An open session and the items parked in its backlog.",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ItemSummary"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "session": {
+          "$ref": "#/$defs/SessionSummary"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "session",
+        "items",
+        "truncated"
+      ],
+      "title": "SessionBacklogEntry",
+      "type": "object"
+    },
+    "SessionStatus": {
+      "description": "Sessions start open and are closed exactly once.",
+      "enum": [
+        "open",
+        "closed"
+      ],
+      "title": "SessionStatus",
+      "type": "string"
+    },
+    "SessionSummary": {
+      "description": "A session's key, title, client, status and timestamps.",
+      "properties": {
+        "client": {
+          "$ref": "#/$defs/Client"
+        },
+        "closed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Closed At"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "started_at": {
+          "title": "Started At",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SessionStatus"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "client",
+        "status",
+        "started_at",
+        "closed_at"
+      ],
+      "title": "SessionSummary",
+      "type": "object"
+    },
+    "SessionView": {
+      "description": "One session, its close summary, and the keys of the items it is linked\nto, which the tree overlay highlights.",
+      "properties": {
+        "items": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "session": {
+          "$ref": "#/$defs/SessionSummary"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary"
+        }
+      },
+      "required": [
+        "session",
+        "summary",
+        "items"
+      ],
+      "title": "SessionView",
+      "type": "object"
+    },
+    "SessionsView": {
+      "description": "Sessions, open ones first, then newest first.",
+      "properties": {
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "sessions": {
+          "items": {
+            "$ref": "#/$defs/SessionSummary"
+          },
+          "title": "Sessions",
+          "type": "array"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "project",
+        "sessions",
+        "truncated"
+      ],
+      "title": "SessionsView",
+      "type": "object"
+    },
+    "StateSpec": {
+      "additionalProperties": false,
+      "description": "A project-chosen state name and the fixed category it belongs to.",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/Category"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "category"
+      ],
+      "title": "StateSpec",
+      "type": "object"
+    },
+    "TreeEntry": {
+      "description": "An item and its depth below the query's roots.",
+      "properties": {
+        "depth": {
+          "title": "Depth",
+          "type": "integer"
+        },
+        "item": {
+          "$ref": "#/$defs/ItemSummary"
+        },
+        "unfiled": {
+          "title": "Unfiled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "depth",
+        "unfiled",
+        "item"
+      ],
+      "title": "TreeEntry",
+      "type": "object"
+    },
+    "TreeView": {
+      "description": "Tree nodes in pre-order; truncated says the bounds hid items.",
+      "properties": {
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/TreeEntry"
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "project",
+        "nodes",
+        "truncated"
+      ],
+      "title": "TreeView",
+      "type": "object"
+    },
+    "WorkflowEntry": {
+      "description": "Every state of one kind with its category, so a client picks real state\nnames, and whether only listed transitions are allowed.",
+      "properties": {
+        "states": {
+          "items": {
+            "$ref": "#/$defs/StateSpec"
+          },
+          "title": "States",
+          "type": "array"
+        },
+        "transitions_restricted": {
+          "title": "Transitions Restricted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "states",
+        "transitions_restricted"
+      ],
+      "title": "WorkflowEntry",
+      "type": "object"
+    }
+  },
+  "title": "XootDashboardApi"
+}

@@ -53,7 +53,8 @@ EXPORT = (
     "uv export --quiet --frozen --no-dev --no-emit-project "
     "--format requirements-txt -o {file}"
 )
-INSTALL = "uv tool install --reinstall --constraints {file} ."
+INSTALL = "uv tool install --reinstall --python {python} --constraints {file} ."
+PYTHON = (REPO / ".python-version").read_text(encoding="utf-8").strip()
 
 
 @dataclass(frozen=True)
@@ -133,12 +134,13 @@ def _stub(path: Path, template: str, **values: str) -> None:
 
 @pytest.fixture(name="sandbox")
 def fixture_sandbox(tmp_path: Path) -> Sandbox:
-    """A checkout holding the real install.sh and pyproject.toml, plus stubs."""
+    """A checkout holding the real install.sh, pyproject.toml and
+    .python-version, plus stubs."""
     names = ("xoot", "stubs", "system", "tool-bin", "tmp")
     checkout, stubs, system, bin_dir, tmp = (tmp_path / name for name in names)
     for directory in (checkout, stubs, system, bin_dir, tmp):
         directory.mkdir()
-    for name in ("install.sh", "pyproject.toml"):
+    for name in ("install.sh", "pyproject.toml", ".python-version"):
         shutil.copy2(REPO / name, checkout / name)
     for tool in SYSTEM_TOOLS:
         real = shutil.which(tool)
@@ -183,7 +185,7 @@ def test_dry_run_prints_every_action_and_runs_nothing(sandbox: Sandbox) -> None:
     assert _actions(result.out) == [
         "mktemp",
         EXPORT.format(file="<temp file>"),
-        INSTALL.format(file="<temp file>"),
+        INSTALL.format(python=PYTHON, file="<temp file>"),
         "uv tool dir --bin",
         "<uv tool dir --bin>/xoot --version",
         "claude plugin list",
@@ -198,7 +200,7 @@ def test_yes_installs_locked_and_adds_plugin(sandbox: Sandbox) -> None:
     assert result.code == 0, result.err
     assert result.calls == [
         EXPORT.format(file="<tmp>"),
-        INSTALL.format(file="<tmp>"),
+        INSTALL.format(python=PYTHON, file="<tmp>"),
         f"constraints: {PIN}",
         "uv tool dir --bin",
         "xoot --version",
@@ -209,7 +211,7 @@ def test_yes_installs_locked_and_adds_plugin(sandbox: Sandbox) -> None:
     assert _actions(result.out) == [
         "mktemp",
         EXPORT.format(file="<tmp>"),
-        INSTALL.format(file="<tmp>"),
+        INSTALL.format(python=PYTHON, file="<tmp>"),
         "uv tool dir --bin",
         f"{sandbox.bin_dir}/xoot --version",
         "claude plugin list",
@@ -431,3 +433,36 @@ def test_failed_bin_dir_lookup_stops(sandbox: Sandbox) -> None:
     assert result.code != 0
     assert not any(call.startswith("claude") for call in result.calls)
     assert "--version" not in result.out
+
+
+def test_install_uses_the_checkout_python_version(sandbox: Sandbox) -> None:
+    """The version in .python-version reaches uv tool install as --python."""
+    (sandbox.checkout / ".python-version").write_text("3.13\n", encoding="utf-8")
+    result = sandbox.run("--yes")
+    assert result.code == 0, result.err
+    assert INSTALL.format(python="3.13", file="<tmp>") in result.calls
+
+
+def test_install_reads_a_version_without_a_newline(sandbox: Sandbox) -> None:
+    """A .python-version with no trailing newline is still read."""
+    (sandbox.checkout / ".python-version").write_text("3.12.4", encoding="utf-8")
+    result = sandbox.run("--yes")
+    assert result.code == 0, result.err
+    assert INSTALL.format(python="3.12.4", file="<tmp>") in result.calls
+
+
+@pytest.mark.parametrize("content", [None, "", "3.12 --force\n", "latest\n"])
+def test_install_refuses_a_missing_or_malformed_version(
+    sandbox: Sandbox, content: str | None
+) -> None:
+    """No uv call runs when .python-version is missing, empty or not a version."""
+    version_file = sandbox.checkout / ".python-version"
+    if content is None:
+        version_file.unlink()
+    else:
+        version_file.write_text(content, encoding="utf-8")
+    result = sandbox.run("--yes")
+    assert result.code == 1
+    assert ".python-version" in result.err
+    assert not result.calls
+    assert not list(sandbox.tmp.iterdir())

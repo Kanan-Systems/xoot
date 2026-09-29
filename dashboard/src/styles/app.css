@@ -1,0 +1,314 @@
+/* The dashboard's only stylesheet besides React Flow's; no inline <style>. */
+:root {
+  color-scheme: light dark;
+  --bg: #f7f7f5;
+  --panel: #ffffff;
+  --text: #1d1d1b;
+  --muted: #66665f;
+  --line: #d9d9d3;
+  --accent: #2f5fd0;
+  --warn: #9a5b00;
+  --open: #56606e;
+  --active: #1f6fbf;
+  --blocked: #b3261e;
+  --awaiting: #8a5a00;
+  --done: #2e7d32;
+  --dropped: #6d6d6d;
+  --backlogged: #6a4fb3;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  font-size: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615;
+    --panel: #1f1f1d;
+    --text: #ecece8;
+    --muted: #a3a39b;
+    --line: #3a3a36;
+    --accent: #7ea2ff;
+    --warn: #e0a84a;
+    --open: #aab3c0;
+    --active: #6fb0f0;
+    --blocked: #f28b82;
+    --awaiting: #e8b75a;
+    --done: #7fc882;
+    --dropped: #9e9e9e;
+    --backlogged: #b39ddb;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.page {
+  display: grid;
+  grid-template-areas:
+    'top top top'
+    'side main detail';
+  grid-template-columns: 300px 1fr auto;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+}
+
+.topbar {
+  grid-area: top;
+  display: flex;
+  gap: 1.5rem;
+  align-items: baseline;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.topbar h1 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.last-updated {
+  margin: 0 0 0 auto;
+  color: var(--muted);
+}
+
+.sidebar {
+  grid-area: side;
+  overflow-y: auto;
+  padding: 0.75rem;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.sidebar h2 {
+  font-size: 0.95rem;
+  margin: 1rem 0 0.4rem;
+}
+
+.main {
+  grid-area: main;
+  min-width: 0;
+}
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.tree-toolbar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.tree .react-flow {
+  flex: 1;
+}
+
+.detail {
+  grid-area: detail;
+  width: 420px;
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.detail-close {
+  float: right;
+}
+
+.detail-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem 0.75rem;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, 'Cascadia Mono', monospace;
+  font-size: 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 0.5rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.list li {
+  margin: 0.15rem 0;
+}
+
+.list button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0.2rem 0.3rem;
+  cursor: pointer;
+}
+
+.list button.selected {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.warning {
+  color: var(--warn);
+}
+
+.node {
+  width: 260px;
+  min-height: 88px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+}
+
+.node-button {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.node-group {
+  padding: 0.4rem 0.55rem;
+  border-style: dashed;
+}
+
+.node-head {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.node-key {
+  font-weight: 600;
+}
+
+.node-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-highlighted {
+  border: 2px solid var(--accent);
+}
+
+.node-dimmed {
+  opacity: 0.35;
+}
+
+.badge {
+  font-size: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 0.45rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.badge-decisions {
+  margin-left: auto;
+}
+
+button.badge {
+  margin: 0 0 0.35rem 0.55rem;
+  cursor: pointer;
+}
+
+.cat {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.cat-open {
+  color: var(--open);
+}
+.cat-active {
+  color: var(--active);
+}
+.cat-blocked {
+  color: var(--blocked);
+}
+.cat-awaiting_input {
+  color: var(--awaiting);
+}
+.cat-done {
+  color: var(--done);
+}
+.cat-dropped {
+  color: var(--dropped);
+}
+.cat-backlogged {
+  color: var(--backlogged);
+}
+.cat-unknown {
+  color: var(--muted);
+}
+
+.status-open {
+  color: var(--active);
+}
+
+.home {
+  max-width: 40rem;
+  margin: 2rem auto;
+}

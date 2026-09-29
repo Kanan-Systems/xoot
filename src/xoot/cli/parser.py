@@ -9,7 +9,17 @@ overrides the top-level default and an absent one leaves it alone.
 import argparse
 
 from xoot import __version__
-from xoot.cli.commands import brief, db, init, paste, project, redact, workflow
+from xoot.cli.commands import (
+    brief,
+    dashboard,
+    db,
+    init,
+    paste,
+    project,
+    redact,
+    workflow,
+)
+from xoot.dashboard.runner import DEFAULT_PORT
 from xoot.models.event.redactable_field import RedactableField
 from xoot.models.item.tree_query import MAX_DEPTH
 
@@ -42,7 +52,40 @@ def build_parser() -> argparse.ArgumentParser:
     _redact(commands, common)
     _paste(commands, common)
     _db(commands, common)
+    _dashboard(commands, common)
     return parser
+
+
+def _dashboard(
+    commands: argparse._SubParsersAction, common: argparse.ArgumentParser
+) -> None:
+    command = commands.add_parser(
+        "dashboard",
+        parents=[common],
+        help="serve the read-only web dashboard on 127.0.0.1",
+    )
+    group = command.add_argument_group("dashboard")
+    group.add_argument(
+        "--port",
+        type=_port,
+        default=DEFAULT_PORT,
+        metavar="N",
+        help=f"TCP port on 127.0.0.1 (default: {DEFAULT_PORT})",
+    )
+    group.add_argument(
+        "--open", action="store_true", help="also open the URL in a browser"
+    )
+    command.set_defaults(handler=dashboard.run_dashboard)
+
+
+def _port(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        value = 0
+    if not 1 <= value <= 65535:
+        raise argparse.ArgumentTypeError("must be a port number, 1-65535")
+    return value
 
 
 def _global_options(default: object) -> argparse.ArgumentParser:

@@ -134,6 +134,27 @@ def list_for_project(conn: sqlite3.Connection, project_id: int) -> list[Event]:
     return [_to_event(row) for row in rows]
 
 
+def latest_id(conn: sqlite3.Connection, project_id: int) -> int:
+    """
+    Return the id of a project's newest event.
+
+    Event ids only grow, so a changed value means the project changed.
+    The event_project index answers this without reading the table.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - project_id (int): project id.
+
+    Returns:
+        - event_id (int): the highest event id, or 0 with no events.
+    """
+    row = conn.execute(
+        "SELECT coalesce(max(id), 0) FROM event WHERE project_id = ?",
+        (project_id,),
+    ).fetchone()
+    return int(row[0])
+
+
 def _to_json(value: dict[str, Any] | None) -> str | None:
     if value is None:
         return None

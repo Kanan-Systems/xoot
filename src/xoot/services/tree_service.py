@@ -41,16 +41,37 @@ def tree(store: Store, project_id: int, query: TreeQuery) -> TreeResult:
     """
     check_id("project_id", project_id)
     with store.read() as conn:
-        definition = active_workflow(conn, require_project(conn, project_id)).definition
-        if query.root_id is not None:
-            roots = [require_item(conn, query.root_id, project_id)]
-        else:
-            roots = [
-                i
-                for i in item_db.list_roots(conn, project_id)
-                if _shown(definition, query, i)
-            ]
-        return _walk(conn, definition, query, roots)
+        return tree_in(conn, project_id, query)
+
+
+def tree_in(conn: sqlite3.Connection, project_id: int, query: TreeQuery) -> TreeResult:
+    """
+    Return part of a project's item tree inside the caller's transaction.
+
+    Args:
+        - conn (sqlite3.Connection): a connection inside a read transaction.
+        - project_id (int): project id.
+        - query (TreeQuery): root, depth, item budget and terminal filter.
+
+    Returns:
+        - result (TreeResult): nodes in pre-order and a truncated flag.
+
+    Raises:
+        - InvalidIdError: project_id is not an int id.
+        - NotFoundError: the project or the root does not exist.
+        - CrossProjectError: the root is in another project.
+    """
+    check_id("project_id", project_id)
+    definition = active_workflow(conn, require_project(conn, project_id)).definition
+    if query.root_id is not None:
+        roots = [require_item(conn, query.root_id, project_id)]
+    else:
+        roots = [
+            i
+            for i in item_db.list_roots(conn, project_id)
+            if _shown(definition, query, i)
+        ]
+    return _walk(conn, definition, query, roots)
 
 
 def _walk(

@@ -15,7 +15,7 @@ State lives in one SQLite file on your machine; nothing is sent anywhere.
 ## Status
 
 0.1.0, alpha. The MCP server (stdio), the CLI and paste mode work; the
-dashboard is not built yet.
+dashboard is read-only for now.
 
 ## Install
 
@@ -82,6 +82,7 @@ xoot workflow export [-o FILE] | import FILE [--map kind:old=new]... [--yes]
 xoot redact KEY FIELD [--yes]      # KEY: item, decision or session key, or a prefix
 xoot paste brief | apply SOURCE [--yes]
 xoot db stats | vacuum
+xoot dashboard [--port N] [--open]
 xoot --version
 ```
 
@@ -90,7 +91,7 @@ the one whose path contains the working directory. `--db PATH` and `--json`
 work before or after the command. Results go to stdout; errors, warnings and
 prompts to stderr. Commands that remove or rewrite data show the change and
 ask y/N; without a terminal they need `--yes`. Exit codes: 0 ok, 1 refused,
-2 usage, 3 database unavailable. `xoot-mcp --version` prints the version
+2 usage, 3 database (or dashboard port) unavailable. `xoot-mcp --version` prints the version
 without starting the server.
 
 ## Paste mode
@@ -146,6 +147,26 @@ uv tool uninstall xoot
 
 Also remove `xoot` from Claude Desktop's config. The database is kept: delete
 `$XDG_DATA_HOME/xoot/` (default `~/.local/share/xoot/`) or your `--db` file.
+
+## Dashboard
+
+```sh
+xoot dashboard [--port N] [--open]
+```
+
+Serves a read-only web view of the tracker on 127.0.0.1 (port 7373 unless
+`--port` says otherwise), in the foreground until Ctrl+C. It prints one URL:
+
+```text
+http://xoot.localhost:7373/?token=<per-launch token>
+```
+
+Open it in a browser on the same machine. The token is new at every launch
+and is swapped for a cookie on first use. `--open` opens it for you
+(`wslview` under WSL, else the default browser); it honours `--db`. Views:
+the item tree (done work collapsed, focus mode, a session overlay), item
+details, sessions, backlogs and decisions, refreshed every two seconds.
+Read-only for now; see [SECURITY.md](SECURITY.md#dashboard).
 
 ## Screenshots
 

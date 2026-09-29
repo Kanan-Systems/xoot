@@ -203,3 +203,26 @@ def list_session_backlogged(
         (project_id, closed_before_seq, closed_before_seq),
     ).fetchall()
     return [Item.model_validate(dict(row)) for row in rows]
+
+
+def list_open_session_backlogged(
+    conn: sqlite3.Connection, project_id: int
+) -> list[Item]:
+    """
+    List items held in the backlog of an open session of the project.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - project_id (int): project id.
+
+    Returns:
+        - items (list[Item]): matching items, by session then item number.
+    """
+    rows = conn.execute(
+        f"SELECT {_ITEM_COLUMNS} FROM item "
+        "JOIN session ON session.id = item.backlog_session_id "
+        "WHERE item.project_id = ? AND session.status = 'open' "
+        "ORDER BY session.number, item.number",
+        (project_id,),
+    ).fetchall()
+    return [Item.model_validate(dict(row)) for row in rows]

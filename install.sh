@@ -156,13 +156,31 @@ check_uv() {
     fi
 }
 
+# The interpreter the checkout pins in .python-version, which CI tests.
+# Without it uv picks the newest Python it finds, which may be one nothing
+# tested. Only a plain version number is accepted, since it becomes an
+# argument.
+python_version() {
+    local version=""
+    [[ -f .python-version ]] || die "no .python-version in $PWD"
+    IFS= read -r version <.python-version || [[ -n $version ]] ||
+        die ".python-version is empty"
+    if [[ ! $version =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+        die ".python-version must hold a version number such as 3.12"
+    fi
+    printf '%s' "$version"
+}
+
 # uv tool install has no --locked, so the runtime dependencies uv.lock pins
 # (the versions CI tests) go in as constraints. --reinstall rebuilds from the
 # checkout even when a tool of the same name and version is installed, so
 # rerunning after checking out a new tag always installs what is on disk.
 install_tool() {
     local file='<temp file>'
-    say "Installing xoot from $PWD with the dependency versions in uv.lock"
+    local python
+    python=$(python_version) || exit 1
+    say "Installing xoot from $PWD with Python $python and the dependency" \
+        "versions in uv.lock"
     say "+ mktemp"
     if ! ((dry_run)); then
         constraints=$(mktemp)
@@ -170,7 +188,7 @@ install_tool() {
     fi
     run uv export --quiet --frozen --no-dev --no-emit-project \
         --format requirements-txt -o "$file"
-    run uv tool install --reinstall --constraints "$file" .
+    run uv tool install --reinstall --python "$python" --constraints "$file" .
 }
 
 # main prints the action: whatever this writes to stdout is captured. The

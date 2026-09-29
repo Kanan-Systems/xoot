@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
+from xoot.models.item.backlog_scope import BacklogScope
+
 ResolvedBy = Annotated[
     Literal["prefix", "alias", "roots", "cwd"],
     Field(
@@ -22,5 +24,4 @@ Phase = Literal["preview", "applied"]
 UpdateMode = Literal["update", "drop", "reparent"]
 """Which path an item_update took."""
 
-BacklogScope = Literal["session", "project", "unfiled"]
-"""Which backlog backlog_list reads."""
+__all__ = ["BacklogScope", "Phase", "ResolvedBy", "UpdateMode"]
