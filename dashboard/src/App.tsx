@@ -1,9 +1,14 @@
-// Routes and the query client.
+// Routes and the query client. Each view is its own route under the
+// project; the drawer and filters are query parameters on top of it.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 
+import { BacklogPage } from './pages/BacklogPage.tsx';
+import { DecisionsPage } from './pages/DecisionsPage.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { ProjectPage } from './pages/ProjectPage.tsx';
+import { SessionsPage } from './pages/SessionsPage.tsx';
+import { TreePage } from './pages/TreePage.tsx';
 
 export function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -14,16 +19,36 @@ export function createQueryClient(): QueryClient {
   });
 }
 
+// B4a's /:project/item/:key links open the drawer on the tree.
+function ItemRedirect() {
+  const { project = '', key = '' } = useParams();
+  const search = new URLSearchParams({ item: key });
+  return <Navigate to={`/${project}/tree?${search.toString()}`} replace />;
+}
+
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/:project" element={<ProjectPage />}>
+        <Route index element={<Navigate to="tree" replace />} />
+        <Route path="tree" element={<TreePage focus={false} />} />
+        <Route path="focus/:key" element={<TreePage focus />} />
+        <Route path="sessions" element={<SessionsPage />} />
+        <Route path="backlog" element={<BacklogPage />} />
+        <Route path="decisions" element={<DecisionsPage />} />
+        <Route path="item/:key" element={<ItemRedirect />} />
+        <Route path="*" element={<p role="alert">No such view.</p>} />
+      </Route>
+    </Routes>
+  );
+}
+
 export function App({ client }: { client: QueryClient }) {
   return (
     <QueryClientProvider client={client}>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/:project" element={<ProjectPage mode="tree" />} />
-          <Route path="/:project/focus/:key" element={<ProjectPage mode="focus" />} />
-          <Route path="/:project/item/:key" element={<ProjectPage mode="item" />} />
-        </Routes>
+        <AppRoutes />
       </BrowserRouter>
     </QueryClientProvider>
   );

@@ -108,6 +108,9 @@ export function useChanges(prefix: string): UseQueryResult<ChangesView> {
     queryFn: ({ signal }) =>
       getJson<ChangesView>(`/projects/${segment(prefix)}/changes`, signal),
     refetchInterval: POLL_MS,
-    refetchIntervalInBackground: false,
+    // A hidden tab keeps polling (browsers may throttle it); returning to
+    // the window checks at once instead of waiting for the next tick.
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: 'always',
   });
 }

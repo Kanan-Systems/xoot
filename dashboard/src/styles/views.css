@@ -1,0 +1,125 @@
+/* The Sessions, Backlog and Decisions views. */
+.view {
+  padding: 0.75rem 1rem 2rem;
+}
+
+.view-title {
+  font-size: 1.2rem;
+  margin: 0 0 0.5rem;
+}
+
+.view h2 {
+  font-size: 1rem;
+  margin: 1.25rem 0 0.4rem;
+}
+
+.view-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+
+.items {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.items th,
+.items td {
+  text-align: left;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.items th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* The key link covers its row, so the whole row opens it. */
+.row {
+  position: relative;
+}
+
+.row:hover {
+  background: var(--bg);
+}
+
+.row-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.row-selected {
+  outline: 2px solid var(--accent);
+}
+
+.cell-title {
+  overflow-wrap: anywhere;
+}
+
+.status-open {
+  color: var(--active);
+}
+
+.status-closed {
+  color: var(--muted);
+}
+
+.session-detail {
+  border-left: 1px solid var(--line);
+  padding-left: 1.25rem;
+}
+
+.action {
+  display: inline-block;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.decision-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+}
+
+.decision-row {
+  border-bottom: 1px solid var(--line);
+  padding: 0.4rem 0;
+}
+
+.decision-row:target {
+  background: var(--bg);
+}
+
+.decision-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  align-items: baseline;
+}
+
+.decision-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.chip {
+  font-size: 0.8rem;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  padding: 0 0.5rem;
+}
+
+.chip-locked {
+  color: var(--done);
+}
+
+.chip-deferred {
+  color: var(--awaiting);
+}
+
+.chip-superseded {
+  color: var(--dropped);
+}

@@ -2,20 +2,28 @@
 
 import sqlite3
 
+from xoot.dashboard.schemas.backlog_row import BacklogRow
 from xoot.dashboard.schemas.backlogs_view import BacklogsView
 from xoot.dashboard.schemas.decisions_view import DecisionsView
 from xoot.dashboard.schemas.session_backlog_entry import SessionBacklogEntry
+from xoot.dashboard.schemas.session_item_entry import SessionItemEntry
+from xoot.dashboard.schemas.session_row import SessionRow
 from xoot.dashboard.schemas.session_view import SessionView
 from xoot.dashboard.schemas.sessions_view import SessionsView
 from xoot.dashboard.views.lookup import project_of, session_in
+from xoot.models.fields import format_timestamp
 from xoot.models.item.item import Item
 from xoot.models.session.session_status import SessionStatus
 from xoot.repositories.decision import decision_db
 from xoot.server.key_book import KeyBook
 from xoot.server.render import decision_summary, item_summary, session_summary
-from xoot.server.schemas.item_summary import ItemSummary
 from xoot.services.backlog_service import backlog_items, session_backlogs
-from xoot.services.session_reads import list_sessions, session_items
+from xoot.services.session_reads import (
+    linked_counts,
+    list_sessions,
+    session_items,
+    session_links,
+)
 
 SESSIONS_MAX = 200
 BACKLOG_MAX = 100
@@ -45,16 +53,23 @@ def sessions_view(
     book = KeyBook(conn)
     # One row past the cap tells whether the list was cut.
     rows = list_sessions(conn, project.id, status, SESSIONS_MAX + 1)
+    counts = linked_counts(conn, project.id)
     return SessionsView(
         project=project.key_prefix,
-        sessions=[session_summary(book, s) for s in rows[:SESSIONS_MAX]],
+        sessions=[
+            SessionRow(
+                **session_summary(book, s).model_dump(),
+                linked_items=counts.get(s.id, 0),
+            )
+            for s in rows[:SESSIONS_MAX]
+        ],
         truncated=len(rows) > SESSIONS_MAX,
     )
 
 
 def session_view(conn: sqlite3.Connection, prefix: str, key: str) -> SessionView:
     """
-    Return one session of the project with its linked item keys.
+    Return one session of the project with its linked items.
 
     Args:
         - conn (sqlite3.Connection): a connection inside a read transaction.
@@ -62,16 +77,26 @@ def session_view(conn: sqlite3.Connection, prefix: str, key: str) -> SessionView
         - key (str): the session key from the path.
 
     Returns:
-        - view (SessionView): the session, its summary and item keys.
+        - view (SessionView): the session, its summary, the linked item keys
+          and each linked item with its disposition.
 
     Raises:
         - ApiError: 404, no such project, or no such session in it.
     """
     session = session_in(conn, project_of(conn, prefix), key)
+    book = KeyBook(conn)
     return SessionView(
-        session=session_summary(KeyBook(conn), session),
+        session=session_summary(book, session),
         summary=session.summary,
         items=session_items(conn, session.id),
+        linked=[
+            SessionItemEntry(
+                item=item_summary(book, link.item),
+                disposition=link.disposition,
+                captured=link.captured,
+            )
+            for link in session_links(conn, session.id)
+        ],
     )
 
 
@@ -134,5 +159,11 @@ def decisions_view(conn: sqlite3.Connection, prefix: str) -> DecisionsView:
     )
 
 
-def _capped(book: KeyBook, items: list[Item]) -> list[ItemSummary]:
-    return [item_summary(book, item) for item in items[:BACKLOG_MAX]]
+def _capped(book: KeyBook, items: list[Item]) -> list[BacklogRow]:
+    return [
+        BacklogRow(
+            **item_summary(book, item).model_dump(),
+            created_at=format_timestamp(item.created_at),
+        )
+        for item in items[:BACKLOG_MAX]
+    ]

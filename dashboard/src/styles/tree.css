@@ -1,0 +1,165 @@
+/* The tree view: toolbar, canvas and nodes. */
+.tree {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.tree-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  align-items: center;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.modes {
+  display: flex;
+  gap: 0.75rem;
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.modes legend {
+  float: left;
+  margin-right: 0.5rem;
+  color: var(--muted);
+}
+
+.focus-bar {
+  margin: 0;
+  padding: 0.3rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.tree .react-flow {
+  flex: 1;
+}
+
+.react-flow__node {
+  cursor: pointer;
+}
+
+.react-flow__node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.node {
+  width: 260px;
+  min-height: 88px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+}
+
+.node-goal {
+  border-width: 2px;
+}
+
+.node-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.node-group {
+  padding: 0.4rem 0.55rem;
+  border-style: dashed;
+}
+
+.node-head {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.node-kind-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.node-key {
+  font-weight: 600;
+}
+
+.node-focus {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.badge-decisions + .node-focus {
+  margin-left: 0;
+}
+
+.node-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-highlighted {
+  border: 2px solid var(--accent);
+}
+
+.node-dimmed {
+  opacity: 0.35;
+}
+
+.badge {
+  font-size: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 0.45rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.badge-decisions {
+  margin-left: auto;
+}
+
+button.badge {
+  margin: 0 0 0.35rem 0.55rem;
+  cursor: pointer;
+}
+
+.cat {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.cat-open {
+  color: var(--open);
+}
+.cat-active {
+  color: var(--active);
+}
+.cat-blocked {
+  color: var(--blocked);
+}
+.cat-awaiting_input {
+  color: var(--awaiting);
+}
+.cat-done {
+  color: var(--done);
+}
+.cat-dropped {
+  color: var(--dropped);
+}
+.cat-backlogged {
+  color: var(--backlogged);
+}
+.cat-unknown {
+  color: var(--muted);
+}

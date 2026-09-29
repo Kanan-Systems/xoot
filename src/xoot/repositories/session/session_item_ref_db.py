@@ -92,3 +92,23 @@ def open_session_ids(conn: sqlite3.Connection, item_id: int) -> list[int]:
         (item_id,),
     ).fetchall()
     return [int(row[0]) for row in rows]
+
+
+def count_by_session(conn: sqlite3.Connection, project_id: int) -> dict[int, int]:
+    """
+    Count each session's linked items across a project.
+
+    Args:
+        - conn (sqlite3.Connection): open connection.
+        - project_id (int): project id.
+
+    Returns:
+        - counts (dict[int, int]): session id to link count; sessions with
+          no links are absent.
+    """
+    rows = conn.execute(
+        "SELECT session_id, count(*) FROM session_item_ref "
+        "WHERE project_id = ? GROUP BY session_id",
+        (project_id,),
+    ).fetchall()
+    return {int(row[0]): int(row[1]) for row in rows}

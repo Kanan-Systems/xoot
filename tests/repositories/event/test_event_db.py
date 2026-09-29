@@ -44,6 +44,7 @@ def test_repository_exposes_no_general_update_or_delete() -> None:
         "list_after_version",
         "list_for_project",
         "latest_id",
+        "created_in_session_backlog",
     }
 
 

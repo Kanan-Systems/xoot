@@ -17,6 +17,7 @@ const OPTIONS: GraphOptions = {
   focusKey: null,
   decisionCounts: new Map(),
   highlight: null,
+  unfiledOpen: true,
 };
 
 function keys(entries: readonly { item: { key: string } }[]): string[] {
@@ -68,6 +69,19 @@ describe('buildGraph', () => {
       'unfiled->x-7',
     ]);
     expect(graph.hiddenTopLevel).toBe(1);
+  });
+
+  it('keeps the Unfiled group collapsed when closed: a count, no subtask nodes', () => {
+    const graph = buildGraph(sampleTree(), { ...OPTIONS, unfiledOpen: false });
+    const group = graph.nodes.find((node) => node.id === UNFILED_ID);
+    expect(group?.data).toMatchObject({ count: 1, hiddenDone: 1, open: false });
+    expect(graph.nodes.map((node) => node.id)).not.toContain('x-7');
+    expect(graph.edges.map((edge) => edge.id)).toEqual(['x-1->x-2', 'x-2->x-3']);
+  });
+
+  it('a goal as the root shows only that goal, without the Unfiled group', () => {
+    const graph = buildGraph(sampleTree(), { ...OPTIONS, focusKey: 'x-1' });
+    expect(graph.nodes.map((node) => node.id)).toEqual(['x-1', 'x-2', 'x-3']);
   });
 
   it('carries the hidden-done and decision counts on item nodes', () => {

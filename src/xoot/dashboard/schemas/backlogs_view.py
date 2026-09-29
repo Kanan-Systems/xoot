@@ -2,8 +2,8 @@
 
 from pydantic import BaseModel, ConfigDict
 
+from xoot.dashboard.schemas.backlog_row import BacklogRow
 from xoot.dashboard.schemas.session_backlog_entry import SessionBacklogEntry
-from xoot.server.schemas.item_summary import ItemSummary
 
 
 class BacklogsView(BaseModel):
@@ -16,7 +16,7 @@ class BacklogsView(BaseModel):
 
     project: str
     sessions: list[SessionBacklogEntry]
-    project_backlog: list[ItemSummary]
+    project_backlog: list[BacklogRow]
     project_backlog_truncated: bool
-    unfiled: list[ItemSummary]
+    unfiled: list[BacklogRow]
     unfiled_truncated: bool

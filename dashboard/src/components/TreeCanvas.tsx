@@ -1,98 +1,161 @@
-// The project tree: React Flow, laid out left to right by dagre.
+// The LTR item tree. Nodes are not draggable or selectable; onNodeClick is
+// what gives React Flow's node wrappers pointer events (without a click
+// handler it renders them with pointer-events: none, and clicks fall through
+// to the pane). The wrappers are focusable groups (a button role would hide
+// the focus and done buttons inside them): Enter or Space on one does what a
+// click does. Double-click focuses a goal or batch, so it does not zoom.
 import {
   Background,
   Controls,
   ReactFlow,
   type Edge,
+  type NodeMouseHandler,
   type NodeTypes,
 } from '@xyflow/react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, type KeyboardEvent } from 'react';
 
-import type { DecisionSummary, TreeEntry } from '../api/types.gen.ts';
+import type { TreeEntry } from '../api/types.gen.ts';
+import { KIND } from '../lib/display.ts';
 import { layout } from '../lib/layout.ts';
-import { buildGraph, countByScope } from '../lib/tree.ts';
+import { buildGraph, type Graph } from '../lib/tree.ts';
 import { ItemNode, type ItemFlowNode } from './ItemNode.tsx';
 import { UnfiledNode, type UnfiledFlowNode } from './UnfiledNode.tsx';
 import { NodeActionsContext } from './nodeActions.ts';
 
+type FlowNode = ItemFlowNode | UnfiledFlowNode;
+
 const nodeTypes: NodeTypes = { item: ItemNode, unfiled: UnfiledNode };
 
-interface TreeCanvasProps {
+export interface TreeCanvasProps {
   entries: readonly TreeEntry[];
-  truncated: boolean;
-  decisions: readonly DecisionSummary[];
-  focusKey: string | null;
+  rootKey: string | null;
+  decisionCounts: ReadonlyMap<string, number>;
   highlight: ReadonlySet<string> | null;
+  showDone: boolean;
+  unfiledOpen: boolean;
   onOpen: (key: string) => void;
+  onFocus: (key: string) => void;
+  onShowDone: () => void;
+  onToggleUnfiled: () => void;
 }
 
 export function TreeCanvas(props: TreeCanvasProps) {
-  const { entries, truncated, decisions, focusKey, highlight, onOpen } = props;
-  const [showDone, setShowDone] = useState(false);
-  const decisionCounts = useMemo(() => countByScope(decisions), [decisions]);
+  const { entries, rootKey, decisionCounts, highlight, showDone, unfiledOpen } = props;
+  const { onOpen, onFocus, onShowDone, onToggleUnfiled } = props;
   const graph = useMemo(
-    () => buildGraph(entries, { showDone, focusKey, decisionCounts, highlight }),
-    [entries, showDone, focusKey, decisionCounts, highlight],
+    () =>
+      buildGraph(entries, {
+        showDone,
+        focusKey: rootKey,
+        decisionCounts,
+        highlight,
+        unfiledOpen,
+      }),
+    [entries, showDone, rootKey, decisionCounts, highlight, unfiledOpen],
   );
-  const flow = useMemo(() => {
-    const nodes: (ItemFlowNode | UnfiledFlowNode)[] = layout(
-      graph.nodes,
-      graph.edges,
-    ).map(({ node, x, y }) => ({ ...node, position: { x, y } }));
-    const edges: Edge[] = graph.edges.map((edge) => ({ ...edge, selectable: false }));
-    return { nodes, edges };
-  }, [graph]);
+  const flow = useMemo(() => toFlow(graph), [graph]);
+  const activate = useCallback(
+    (node: FlowNode) => {
+      if (node.type === 'unfiled') {
+        onToggleUnfiled();
+      } else {
+        onOpen(node.id);
+      }
+    },
+    [onOpen, onToggleUnfiled],
+  );
+  const onNodeClick: NodeMouseHandler<FlowNode> = useCallback(
+    (_event, node) => {
+      activate(node);
+    },
+    [activate],
+  );
+  const onNodeDoubleClick: NodeMouseHandler<FlowNode> = useCallback(
+    (_event, node) => {
+      if (node.type === 'item' && node.data.item.kind !== 'subtask') {
+        onFocus(node.id);
+      }
+    },
+    [onFocus],
+  );
+  // Key events from a focused node wrapper bubble here; inner buttons keep
+  // their own native Enter/Space.
+  const onKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      const target = event.target;
+      if (
+        (event.key !== 'Enter' && event.key !== ' ') ||
+        !(target instanceof HTMLElement) ||
+        !target.classList.contains('react-flow__node')
+      ) {
+        return;
+      }
+      const node = flow.nodes.find((candidate) => candidate.id === target.dataset.id);
+      if (node !== undefined) {
+        event.preventDefault();
+        activate(node);
+      }
+    },
+    [flow.nodes, activate],
+  );
   const actions = useMemo(
-    () => ({
-      open: onOpen,
-      showDone: () => {
-        setShowDone(true);
-      },
-    }),
-    [onOpen],
+    () => ({ focus: onFocus, showDone: onShowDone }),
+    [onFocus, onShowDone],
   );
 
   return (
-    <section className="tree" aria-label="Item tree">
-      <div className="tree-toolbar">
-        <label>
-          <input
-            type="checkbox"
-            checked={showDone}
-            onChange={(event) => {
-              setShowDone(event.target.checked);
-            }}
-          />{' '}
-          Show done and dropped
-        </label>
-        {graph.hiddenTopLevel > 0 && (
-          <span className="badge badge-done">
-            {graph.hiddenTopLevel} done at top level
-          </span>
-        )}
-        {truncated && <span className="warning">The tree was cut at 1000 items.</span>}
-        {graph.focusMissing && (
-          <span className="warning">The focused item is gone.</span>
-        )}
-      </div>
-      <NodeActionsContext.Provider value={actions}>
-        <ReactFlow
-          key={focusKey ?? 'all'}
-          nodes={flow.nodes}
-          edges={flow.edges}
-          nodeTypes={nodeTypes}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          nodesFocusable={false}
-          edgesFocusable={false}
-          elementsSelectable={false}
-          fitView
-          minZoom={0.1}
-        >
-          <Background />
-          <Controls showInteractive={false} />
-        </ReactFlow>
-      </NodeActionsContext.Provider>
-    </section>
+    <NodeActionsContext.Provider value={actions}>
+      {graph.focusMissing && (
+        <p className="warning" role="alert">
+          The focused item is gone.
+        </p>
+      )}
+      <ReactFlow<FlowNode>
+        key={rootKey ?? 'all'}
+        nodes={flow.nodes}
+        edges={flow.edges}
+        nodeTypes={nodeTypes}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        nodesFocusable
+        edgesFocusable={false}
+        elementsSelectable={false}
+        onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
+        onKeyDown={onKeyDown}
+        zoomOnDoubleClick={false}
+        fitView
+        minZoom={0.1}
+      >
+        <Background />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </NodeActionsContext.Provider>
   );
+}
+
+function toFlow(graph: Graph): { nodes: FlowNode[]; edges: Edge[] } {
+  const nodes = layout(graph.nodes, graph.edges).map(({ node, x, y }): FlowNode => {
+    const position = { x, y };
+    if (node.type === 'unfiled') {
+      return {
+        ...node,
+        position,
+        ariaLabel: `Unfiled: ${String(node.data.count)} subtasks, ${
+          node.data.open
+            ? 'shown. Press Enter to collapse'
+            : 'collapsed. Press Enter to expand'
+        }`,
+        domAttributes: { 'aria-expanded': node.data.open },
+      };
+    }
+    const { item } = node.data;
+    return {
+      ...node,
+      position,
+      ariaLabel: `${KIND[item.kind].label} ${item.key}: ${item.title}, ${item.state}. Press Enter for details`,
+    };
+  });
+  const edges = graph.edges.map((edge) => ({ ...edge, selectable: false }));
+  return { nodes, edges };
 }

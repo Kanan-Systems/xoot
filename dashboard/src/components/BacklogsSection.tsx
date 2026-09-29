@@ -1,70 +1,19 @@
-// Each open session's backlog, then the project backlog, then unfiled.
-import { Link } from 'react-router-dom';
+// The backlog view's tables: each open session, the project backlog, then
+// unfiled subtasks.
+import type { BacklogsView } from '../api/types.gen.ts';
+import { backlogGroups } from '../lib/backlogGroups.ts';
+import { ItemTable } from './ItemTable.tsx';
 
-import type { BacklogsView, ItemSummary } from '../api/types.gen.ts';
-import { categoryGlyph } from '../lib/display.ts';
-
-interface BacklogsSectionProps {
-  prefix: string;
-  view: BacklogsView;
-}
-
-export function BacklogsSection({ prefix, view }: BacklogsSectionProps) {
+export function BacklogsSection({ view }: { view: BacklogsView }) {
   return (
     <>
-      {view.sessions.map((entry) => (
-        <ItemList
-          key={entry.session.key}
-          prefix={prefix}
-          title={`${entry.session.key} (open): ${entry.session.title}`}
-          items={entry.items}
-          truncated={entry.truncated}
-        />
+      {backlogGroups(view).map((group) => (
+        <section key={group.id} aria-labelledby={`backlog-${group.id}`}>
+          <h2 id={`backlog-${group.id}`}>{group.heading}</h2>
+          <ItemTable caption={group.heading} rows={group.items} holder created />
+          {group.truncated && <p className="warning">Only the first 100 are shown.</p>}
+        </section>
       ))}
-      <ItemList
-        prefix={prefix}
-        title="Project backlog"
-        items={view.project_backlog}
-        truncated={view.project_backlog_truncated}
-      />
-      <ItemList
-        prefix={prefix}
-        title="Unfiled"
-        items={view.unfiled}
-        truncated={view.unfiled_truncated}
-      />
     </>
-  );
-}
-
-interface ItemListProps {
-  prefix: string;
-  title: string;
-  items: readonly ItemSummary[];
-  truncated: boolean;
-}
-
-function ItemList({ prefix, title, items, truncated }: ItemListProps) {
-  return (
-    <details className="backlog" open={items.length > 0}>
-      <summary>
-        {title} ({items.length}
-        {truncated ? '+' : ''})
-      </summary>
-      {items.length === 0 ? (
-        <p className="muted">Empty.</p>
-      ) : (
-        <ul className="list">
-          {items.map((item) => (
-            <li key={item.key}>
-              <Link to={`/${prefix}/item/${item.key}`}>
-                <span aria-hidden="true">{categoryGlyph(item.category).icon}</span>{' '}
-                {item.key}: {item.title}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </details>
   );
 }

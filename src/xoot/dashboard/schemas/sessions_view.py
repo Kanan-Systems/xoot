@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from xoot.server.schemas.session_summary import SessionSummary
+from xoot.dashboard.schemas.session_row import SessionRow
 
 
 class SessionsView(BaseModel):
@@ -11,5 +11,5 @@ class SessionsView(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     project: str
-    sessions: list[SessionSummary]
+    sessions: list[SessionRow]
     truncated: bool

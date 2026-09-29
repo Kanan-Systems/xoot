@@ -10,6 +10,79 @@
       "title": "ActorKind",
       "type": "string"
     },
+    "BacklogRow": {
+      "description": "The item summary plus when the item was created.",
+      "properties": {
+        "backlog_session": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Backlog Session"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Category"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ItemKind"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "title",
+        "state",
+        "category",
+        "parent",
+        "backlog_session",
+        "version",
+        "created_at"
+      ],
+      "title": "BacklogRow",
+      "type": "object"
+    },
     "BacklogsView": {
       "description": "Each open session's backlog, the project backlog and the unfiled\nsubtasks. A capture shows under its session and under unfiled.",
       "properties": {
@@ -19,7 +92,7 @@
         },
         "project_backlog": {
           "items": {
-            "$ref": "#/$defs/ItemSummary"
+            "$ref": "#/$defs/BacklogRow"
           },
           "title": "Project Backlog",
           "type": "array"
@@ -37,7 +110,7 @@
         },
         "unfiled": {
           "items": {
-            "$ref": "#/$defs/ItemSummary"
+            "$ref": "#/$defs/BacklogRow"
           },
           "title": "Unfiled",
           "type": "array"
@@ -406,6 +479,17 @@
       ],
       "title": "DecisionsView",
       "type": "object"
+    },
+    "Disposition": {
+      "description": "carry_over keeps the state; session_backlog and project_backlog move the\nitem to the default backlogged state (with or without this session);\ndropped moves it to the default dropped state.",
+      "enum": [
+        "carry_over",
+        "session_backlog",
+        "project_backlog",
+        "dropped"
+      ],
+      "title": "Disposition",
+      "type": "string"
     },
     "ErrorOutput": {
       "description": "The error class name and a safe message, built by the same rules as MCP\ntool errors: never driver text, SQL or an arbitrary input value.",
@@ -802,7 +886,7 @@
       "properties": {
         "items": {
           "items": {
-            "$ref": "#/$defs/ItemSummary"
+            "$ref": "#/$defs/BacklogRow"
           },
           "title": "Items",
           "type": "array"
@@ -821,6 +905,84 @@
         "truncated"
       ],
       "title": "SessionBacklogEntry",
+      "type": "object"
+    },
+    "SessionItemEntry": {
+      "description": "The item as it is now, the disposition the session's close gave it\n(None while the session is open, or when the item was no longer open at\nclose), and whether the session captured it.",
+      "properties": {
+        "captured": {
+          "title": "Captured",
+          "type": "boolean"
+        },
+        "disposition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Disposition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "item": {
+          "$ref": "#/$defs/ItemSummary"
+        }
+      },
+      "required": [
+        "item",
+        "disposition",
+        "captured"
+      ],
+      "title": "SessionItemEntry",
+      "type": "object"
+    },
+    "SessionRow": {
+      "description": "The session summary plus how many items it is linked to.",
+      "properties": {
+        "client": {
+          "$ref": "#/$defs/Client"
+        },
+        "closed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Closed At"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "linked_items": {
+          "title": "Linked Items",
+          "type": "integer"
+        },
+        "started_at": {
+          "title": "Started At",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SessionStatus"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "client",
+        "status",
+        "started_at",
+        "closed_at",
+        "linked_items"
+      ],
+      "title": "SessionRow",
       "type": "object"
     },
     "SessionStatus": {
@@ -877,13 +1039,20 @@
       "type": "object"
     },
     "SessionView": {
-      "description": "One session, its close summary, and the keys of the items it is linked\nto, which the tree overlay highlights.",
+      "description": "One session, its close summary, the keys of the items it is linked to\n(which the tree filter uses) and those items with their outcomes.",
       "properties": {
         "items": {
           "items": {
             "type": "string"
           },
           "title": "Items",
+          "type": "array"
+        },
+        "linked": {
+          "items": {
+            "$ref": "#/$defs/SessionItemEntry"
+          },
+          "title": "Linked",
           "type": "array"
         },
         "session": {
@@ -904,7 +1073,8 @@
       "required": [
         "session",
         "summary",
-        "items"
+        "items",
+        "linked"
       ],
       "title": "SessionView",
       "type": "object"
@@ -918,7 +1088,7 @@
         },
         "sessions": {
           "items": {
-            "$ref": "#/$defs/SessionSummary"
+            "$ref": "#/$defs/SessionRow"
           },
           "title": "Sessions",
           "type": "array"

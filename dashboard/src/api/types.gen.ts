@@ -49,6 +49,16 @@ export type SessionStatus = 'open' | 'closed';
  */
 export type DecisionStatus = 'locked' | 'deferred' | 'superseded';
 /**
+ * carry_over keeps the state; session_backlog and project_backlog move the
+ * item to the default backlogged state (with or without this session);
+ * dropped moves it to the default dropped state.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "Disposition".
+ */
+export type Disposition =
+  'carry_over' | 'session_backlog' | 'project_backlog' | 'dropped';
+/**
  * The kind of mutation an event row describes.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
@@ -70,30 +80,15 @@ export interface XootDashboardApi {
   [k: string]: unknown;
 }
 /**
- * Each open session's backlog, the project backlog and the unfiled
- * subtasks. A capture shows under its session and under unfiled.
+ * The item summary plus when the item was created.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "BacklogsView".
+ * via the `definition` "BacklogRow".
  */
-export interface BacklogsView {
-  project: string;
-  project_backlog: ItemSummary[];
-  project_backlog_truncated: boolean;
-  sessions: SessionBacklogEntry[];
-  unfiled: ItemSummary[];
-  unfiled_truncated: boolean;
-}
-/**
- * Enough to recognize, pick and update an item. category is the fixed
- * meaning of the project-defined state; version is what item_update needs.
- *
- * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "ItemSummary".
- */
-export interface ItemSummary {
+export interface BacklogRow {
   backlog_session: string | null;
   category: Category | null;
+  created_at: string;
   key: string;
   kind: ItemKind;
   parent: string | null;
@@ -102,13 +97,28 @@ export interface ItemSummary {
   version: number;
 }
 /**
+ * Each open session's backlog, the project backlog and the unfiled
+ * subtasks. A capture shows under its session and under unfiled.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "BacklogsView".
+ */
+export interface BacklogsView {
+  project: string;
+  project_backlog: BacklogRow[];
+  project_backlog_truncated: boolean;
+  sessions: SessionBacklogEntry[];
+  unfiled: BacklogRow[];
+  unfiled_truncated: boolean;
+}
+/**
  * An open session and the items parked in its backlog.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
  * via the `definition` "SessionBacklogEntry".
  */
 export interface SessionBacklogEntry {
-  items: ItemSummary[];
+  items: BacklogRow[];
   session: SessionSummary;
   truncated: boolean;
 }
@@ -150,6 +160,23 @@ export interface BriefView {
   workflow: {
     [k: string]: WorkflowEntry;
   };
+}
+/**
+ * Enough to recognize, pick and update an item. category is the fixed
+ * meaning of the project-defined state; version is what item_update needs.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "ItemSummary".
+ */
+export interface ItemSummary {
+  backlog_session: string | null;
+  category: Category | null;
+  key: string;
+  kind: ItemKind;
+  parent: string | null;
+  state: string;
+  title: string;
+  version: number;
 }
 /**
  * The key prefix the URLs use, the display name and the aliases.
@@ -346,14 +373,43 @@ export interface ProjectsOutput {
   projects: ProjectInfo[];
 }
 /**
- * One session, its close summary, and the keys of the items it is linked
- * to, which the tree overlay highlights.
+ * The item as it is now, the disposition the session's close gave it
+ * (None while the session is open, or when the item was no longer open at
+ * close), and whether the session captured it.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "SessionItemEntry".
+ */
+export interface SessionItemEntry {
+  captured: boolean;
+  disposition: Disposition | null;
+  item: ItemSummary;
+}
+/**
+ * The session summary plus how many items it is linked to.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "SessionRow".
+ */
+export interface SessionRow {
+  client: Client;
+  closed_at: string | null;
+  key: string;
+  linked_items: number;
+  started_at: string;
+  status: SessionStatus;
+  title: string;
+}
+/**
+ * One session, its close summary, the keys of the items it is linked to
+ * (which the tree filter uses) and those items with their outcomes.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
  * via the `definition` "SessionView".
  */
 export interface SessionView {
   items: string[];
+  linked: SessionItemEntry[];
   session: SessionSummary;
   summary: string | null;
 }
@@ -365,7 +421,7 @@ export interface SessionView {
  */
 export interface SessionsView {
   project: string;
-  sessions: SessionSummary[];
+  sessions: SessionRow[];
   truncated: boolean;
 }
 /**

@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from xoot.server.schemas.item_summary import ItemSummary
+from xoot.dashboard.schemas.backlog_row import BacklogRow
 from xoot.server.schemas.session_summary import SessionSummary
 
 
@@ -12,5 +12,5 @@ class SessionBacklogEntry(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     session: SessionSummary
-    items: list[ItemSummary]
+    items: list[BacklogRow]
     truncated: bool

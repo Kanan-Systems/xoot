@@ -1,5 +1,6 @@
-// Live refresh: /changes is polled every POLL_MS; when the latest event id
-// moves, every query of the project (and any open item or decision) is
+// Live refresh: /changes is polled every POLL_MS, in the background too;
+// when the latest event id moves, every query of the project (tree,
+// sessions, backlogs, decisions, and any open item or decision) is
 // invalidated, so only a real change costs more than one tiny request.
 import type { QueryClient } from '@tanstack/react-query';
 

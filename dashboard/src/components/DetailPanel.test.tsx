@@ -98,9 +98,12 @@ describe('ItemDetails', () => {
     expect(screen.getByText('active (Active)', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getByText('none')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Focus on this goal/ })).toHaveAttribute(
+    expect(
+      screen.getByRole('button', { name: /Focus on this goal/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'x-S1' })).toHaveAttribute(
       'href',
-      '/x/focus/x-1',
+      '/x/sessions?session=x-S1',
     );
     expect(
       screen.getByText(/create by claude\/code in x-S1: title/),

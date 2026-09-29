@@ -1,4 +1,5 @@
-// Pure tree logic: done/dropped collapse, focus mode and graph building.
+// Pure tree logic: done/dropped collapse, focus mode, the collapsible
+// unfiled group and graph building.
 // Tree entries arrive in pre-order, so a parent is always seen before its
 // children.
 import type { Category, ItemSummary, TreeEntry } from '../api/types.gen.ts';
@@ -74,6 +75,7 @@ export type UnfiledNodeData = {
   count: number;
   hiddenDone: number;
   dimmed: boolean;
+  open: boolean;
 };
 
 export type GraphNode =
@@ -98,6 +100,8 @@ export interface GraphOptions {
   focusKey: string | null;
   decisionCounts: ReadonlyMap<string, number>;
   highlight: ReadonlySet<string> | null;
+  // Unfiled subtasks show as nodes only when their group is expanded.
+  unfiledOpen: boolean;
 }
 
 export function buildGraph(
@@ -115,6 +119,10 @@ export function buildGraph(
   for (const entry of visible) {
     const key = entry.item.key;
     const parent = key === focusRoot ? ROOT_ID : parentId(entry);
+    if (parent === UNFILED_ID && !options.unfiledOpen) {
+      unfiled += 1;
+      continue;
+    }
     const state = overlay(key, options.highlight);
     nodes.push({
       id: key,
@@ -142,6 +150,7 @@ export function buildGraph(
         count: unfiled,
         hiddenDone: unfiledHidden,
         dimmed: options.highlight !== null,
+        open: options.unfiledOpen,
       },
     });
   }

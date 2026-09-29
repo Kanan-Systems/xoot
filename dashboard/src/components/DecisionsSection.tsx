@@ -1,47 +1,112 @@
-// The project's decisions; a body is fetched only when its entry is opened.
+// The decisions list: key, status chip, title, the scoped item (opens the
+// drawer) and supersede links. A body loads when its row is expanded and
+// is shown as plain text.
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
-import { useDecision, useDecisions } from '../api/queries.ts';
+import { useDecision } from '../api/queries.ts';
 import type { DecisionSummary } from '../api/types.gen.ts';
+import { useDrawer } from '../hooks/useDrawer.ts';
+import { DECISION_STATUS } from '../lib/display.ts';
 import { QueryState } from './QueryState.tsx';
 
-export function DecisionsSection({ prefix }: { prefix: string }) {
-  const query = useDecisions(prefix);
+export function anchorOf(key: string): string {
+  return `decision-${key}`;
+}
+
+// Which decision supersedes each one, from the supersedes links.
+export function supersededBy(
+  decisions: readonly DecisionSummary[],
+): Map<string, string> {
+  const next = new Map<string, string>();
+  for (const decision of decisions) {
+    if (decision.supersedes !== null) {
+      next.set(decision.supersedes, decision.key);
+    }
+  }
+  return next;
+}
+
+interface DecisionsSectionProps {
+  decisions: readonly DecisionSummary[];
+  successors: ReadonlyMap<string, string>;
+}
+
+export function DecisionsSection({ decisions, successors }: DecisionsSectionProps) {
+  if (decisions.length === 0) {
+    return <p className="muted">No decisions match.</p>;
+  }
   return (
-    <section aria-labelledby="decisions-heading">
-      <h2 id="decisions-heading">Decisions</h2>
-      <QueryState query={query} what="decisions">
-        {(view) => (
-          <ul className="list">
-            {view.decisions.map((decision) => (
-              <li key={decision.key}>
-                <DecisionEntry decision={decision} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </QueryState>
-    </section>
+    <ul className="decision-list">
+      {decisions.map((decision) => (
+        <DecisionRow
+          key={decision.key}
+          decision={decision}
+          successor={successors.get(decision.key) ?? null}
+        />
+      ))}
+    </ul>
   );
 }
 
-function DecisionEntry({ decision }: { decision: DecisionSummary }) {
-  const [open, setOpen] = useState(false);
-  const detail = useDecision(decision.key, open);
+interface DecisionRowProps {
+  decision: DecisionSummary;
+  successor: string | null;
+}
+
+function DecisionRow({ decision, successor }: DecisionRowProps) {
+  const [expanded, setExpanded] = useState(false);
+  const { hrefFor } = useDrawer();
+  const status = DECISION_STATUS[decision.status];
+  const bodyId = `${anchorOf(decision.key)}-body`;
   return (
-    <details
-      onToggle={(event) => {
-        setOpen(event.currentTarget.open);
-      }}
-    >
-      <summary>
-        {decision.key} ({decision.status}): {decision.title}
-      </summary>
-      {open && (
-        <QueryState query={detail} what="decision">
-          {(view) => <pre className="body">{view.decision.body}</pre>}
-        </QueryState>
+    <li id={anchorOf(decision.key)} className="decision-row">
+      <div className="decision-head">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={bodyId}
+          onClick={() => {
+            setExpanded(!expanded);
+          }}
+        >
+          <span aria-hidden="true">{expanded ? '▾' : '▸'}</span> {decision.key}
+        </button>
+        <span className={`chip chip-${decision.status}`}>
+          <span aria-hidden="true">{status.icon}</span> {status.label}
+        </span>
+        <span className="decision-title">{decision.title}</span>
+        {decision.scope !== null && (
+          <span>
+            Scope: <Link to={hrefFor(decision.scope)}>{decision.scope}</Link>
+          </span>
+        )}
+        {decision.supersedes !== null && (
+          <span>
+            Supersedes{' '}
+            <a href={`#${anchorOf(decision.supersedes)}`}>{decision.supersedes}</a>
+          </span>
+        )}
+        {successor !== null && (
+          <span>
+            Superseded by <a href={`#${anchorOf(successor)}`}>{successor}</a>
+          </span>
+        )}
+      </div>
+      {expanded && (
+        <div id={bodyId}>
+          <DecisionBody decisionKey={decision.key} />
+        </div>
       )}
-    </details>
+    </li>
+  );
+}
+
+function DecisionBody({ decisionKey }: { decisionKey: string }) {
+  const query = useDecision(decisionKey, true);
+  return (
+    <QueryState query={query} what="decision">
+      {(view) => <pre className="body">{view.decision.body}</pre>}
+    </QueryState>
   );
 }

@@ -6,7 +6,13 @@ import pytest
 from starlette.testclient import TestClient
 
 from xoot import __version__
+from xoot.models.event.actor import Actor
+from xoot.models.fields import format_timestamp
+from xoot.models.session.disposition import Disposition
+from xoot.models.session.session_close import SessionClose
 from xoot.server.brief import LIST_MAX
+from xoot.services.session_close_service import close_session
+from xoot.store.store import Store
 
 
 def _ok(client: TestClient, path: str) -> Any:
@@ -96,6 +102,45 @@ def test_session_detail_lists_linked_items(client: TestClient, seeded: Any) -> N
     assert view["session"]["status"] == "open"
     assert view["summary"] is None
     assert view["items"] == [seeded.goal.key, seeded.held.key]
+    assert [
+        (e["item"]["key"], e["item"]["kind"], e["disposition"], e["captured"])
+        for e in view["linked"]
+    ] == [
+        (seeded.goal.key, "goal", None, False),
+        (seeded.held.key, "subtask", None, True),
+    ]
+    assert view["linked"][1]["item"]["state"] == "backlogged"
+
+
+def test_sessions_list_counts_linked_items(client: TestClient, seeded: Any) -> None:
+    """The table's count: the focus goal and the capture."""
+    assert seeded
+    [row] = _ok(client, "/api/v1/projects/xoot/sessions")["sessions"]
+    assert row["linked_items"] == 2
+    assert {"key", "title", "client", "status", "started_at", "closed_at"} <= set(row)
+
+
+def test_closed_session_detail_reports_dispositions(
+    client: TestClient, seeded: Any, store: Store, user: Actor
+) -> None:
+    """After the close, each open linked item shows the disposition it got."""
+    close_session(
+        store,
+        seeded.session.id,
+        SessionClose(
+            dispositions={
+                seeded.goal.id: Disposition.CARRY_OVER,
+                seeded.held.id: Disposition.PROJECT_BACKLOG,
+            }
+        ),
+        user,
+    )
+    view = _ok(client, "/api/v1/projects/xoot/sessions/xoot-S1")
+    assert view["session"]["status"] == "closed"
+    assert [(e["item"]["key"], e["disposition"]) for e in view["linked"]] == [
+        (seeded.goal.key, "carry_over"),
+        (seeded.held.key, "project_backlog"),
+    ]
 
 
 def test_session_of_another_project_is_not_found(
@@ -117,6 +162,8 @@ def test_backlogs_per_open_session_project_and_unfiled(
     assert not view["project_backlog"]
     assert seeded.held.key in [i["key"] for i in view["unfiled"]]
     assert view["project_backlog_truncated"] is False
+    [row] = view["sessions"][0]["items"]
+    assert row["created_at"] == format_timestamp(seeded.held.created_at)
 
 
 def test_decisions_list(client: TestClient, seeded: Any) -> None:
