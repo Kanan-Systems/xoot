@@ -5,9 +5,9 @@ from collections.abc import Callable
 
 from xoot.dashboard.errors import not_found
 from xoot.exceptions.not_found_error import NotFoundError
+from xoot.models.decision.decision import Decision
 from xoot.models.item.item import Item
 from xoot.models.project.project import Project
-from xoot.models.session.session import Session
 from xoot.services import key_resolver
 
 
@@ -25,51 +25,55 @@ def project_of(conn: sqlite3.Connection, prefix: str) -> Project:
     Raises:
         - ApiError: 404, the prefix names no project.
     """
-    return _resolve(key_resolver.project_by_key, conn, prefix)
+    try:
+        return key_resolver.project_by_key(conn, prefix)
+    except NotFoundError as exc:
+        raise not_found(prefix) from exc
 
 
-def item_of(conn: sqlite3.Connection, key: str) -> Item:
+def item_of(conn: sqlite3.Connection, project: Project, key: str) -> Item:
     """
-    Resolve a URL's item key.
+    Resolve a URL's item key within the URL's project; old keys resolve too.
 
     Args:
         - conn (sqlite3.Connection): a connection inside a read transaction.
-        - key (str): the key from the path.
+        - project (Project): the project the path names.
+        - key (str): the unqualified key from the path, slashes included.
 
     Returns:
         - item (Item): the item.
 
     Raises:
-        - ApiError: 404, the key names no item.
+        - ApiError: 404, the key names no item of this project.
     """
-    return _resolve(key_resolver.item_by_key, conn, key)
+    return _resolve(key_resolver.item_by_key, conn, project, key)
 
 
-def session_in(conn: sqlite3.Connection, project: Project, key: str) -> Session:
+def decision_of(conn: sqlite3.Connection, project: Project, key: str) -> Decision:
     """
-    Resolve a URL's session key within the URL's project.
+    Resolve a URL's decision key within the URL's project.
 
     Args:
         - conn (sqlite3.Connection): a connection inside a read transaction.
         - project (Project): the project the path names.
-        - key (str): the session key from the path.
+        - key (str): the unqualified key from the path, slashes included.
 
     Returns:
-        - session (Session): the session.
+        - decision (Decision): the decision.
 
     Raises:
-        - ApiError: 404, the key names no session of this project.
+        - ApiError: 404, the key names no decision of this project.
     """
-    session = _resolve(key_resolver.session_by_key, conn, key)
-    if session.project_id != project.id:
-        raise not_found(key)
-    return session
+    return _resolve(key_resolver.decision_by_key, conn, project, key)
 
 
 def _resolve[T](
-    lookup: Callable[[sqlite3.Connection, str], T], conn: sqlite3.Connection, key: str
+    lookup: Callable[[sqlite3.Connection, int, str], T],
+    conn: sqlite3.Connection,
+    project: Project,
+    key: str,
 ) -> T:
     try:
-        return lookup(conn, key)
+        return lookup(conn, project.id, key)
     except NotFoundError as exc:
         raise not_found(key) from exc

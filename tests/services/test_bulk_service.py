@@ -9,26 +9,22 @@ from pydantic import ValidationError
 from xoot.exceptions.confirm_token_error import ConfirmTokenError
 from xoot.exceptions.cross_project_error import CrossProjectError
 from xoot.exceptions.hierarchy_error import HierarchyError
-from xoot.exceptions.session_state_error import SessionStateError
 from xoot.models.confirm.confirmation import Confirmation
 from xoot.models.event.actor import Actor
+from xoot.models.event.write_context import WriteContext
 from xoot.models.item.bulk_create import MAX_BULK_ITEMS, BulkCreate
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
-from xoot.models.session.session import Session
-from xoot.models.session.session_close import SessionClose
-from xoot.repositories.session import session_item_ref_db
 from xoot.services.bulk_service import apply_bulk, preview_bulk
 from xoot.services.confirm_service import issue_token
-from xoot.services.session_close_service import close_session
 from xoot.store.store import Store
 
 DIGEST = "c" * 64
 
 
 def _tree() -> BulkCreate:
-    """goal > (batch > two subtasks), plus one unfiled subtask."""
+    """goal > (batch > two subtasks), plus a second goal."""
     return BulkCreate.model_validate(
         {
             "items": [
@@ -46,56 +42,47 @@ def _tree() -> BulkCreate:
                         }
                     ],
                 },
-                {"kind": "subtask", "title": "loose"},
+                {"kind": "goal", "title": "loose"},
             ]
         }
     )
 
 
-@pytest.fixture(name="session")
-def fixture_session(project: Project, make_session: Callable[..., Session]) -> Session:
-    """An open session in the xoot project."""
-    return make_session(project)
-
-
 def test_preview_plans_keys_and_writes_nothing(
-    store: Store, session: Session, row_counts: Callable[[], dict[str, int]]
+    store: Store, project: Project, row_counts: Callable[[], dict[str, int]]
 ) -> None:
     """The preview assigns keys in pre-order, with parent keys, and writes nothing."""
     before, changes = row_counts(), store.conn.total_changes
-    plan = preview_bulk(store, session.id, _tree())
+    plan = preview_bulk(store, project.id, _tree())
     assert (row_counts(), store.conn.total_changes) == (before, changes)
     assert [(p.key, p.kind, p.parent_key) for p in plan.items] == [
-        ("xoot-1", ItemKind.GOAL, None),
-        ("xoot-2", ItemKind.BATCH, "xoot-1"),
-        ("xoot-3", ItemKind.SUBTASK, "xoot-2"),
-        ("xoot-4", ItemKind.SUBTASK, "xoot-2"),
-        ("xoot-5", ItemKind.SUBTASK, None),
+        ("goal-1", ItemKind.GOAL, None),
+        ("goal-1/batch-1", ItemKind.BATCH, "goal-1"),
+        ("goal-1/batch-1/subtask-1", ItemKind.SUBTASK, "goal-1/batch-1"),
+        ("goal-1/batch-1/subtask-2", ItemKind.SUBTASK, "goal-1/batch-1"),
+        ("goal-2", ItemKind.GOAL, None),
     ]
 
 
-def test_apply_creates_every_item_linked_to_the_session(
-    store: Store, session: Session, claude: Actor
+def test_apply_creates_every_item(
+    store: Store, project: Project, claude: Actor
 ) -> None:
-    """Apply inserts the planned tree in one go and links each item."""
-    plan = preview_bulk(store, session.id, _tree())
-    created = apply_bulk(store, session.id, _tree(), claude)
+    """Apply inserts the planned tree in one go, with the planned keys."""
+    plan = preview_bulk(store, project.id, _tree())
+    created, report = apply_bulk(store, project.id, _tree(), WriteContext(actor=claude))
     assert [item.key for item in created] == [p.key for p in plan.items]
     by_title = {item.title: item for item in created}
     goal, batch = by_title["g"], by_title["b"]
     assert batch.parent_id == goal.id
     assert by_title["s1"].parent_id == by_title["s2"].parent_id == batch.id
-    assert by_title["s2"].body == "details" and by_title["loose"].unfiled
+    assert by_title["s2"].body == "details" and by_title["loose"].parent_id is None
     assert {item.state for item in created} == {"open"}
-    with store.read() as conn:
-        refs = session_item_ref_db.list_for_session(conn, session.id)
-    assert {ref.item_id for ref in refs} == {item.id for item in created}
+    assert report.completed == report.reopened == ()
 
 
 def test_existing_parent_is_used(
     store: Store,
     project: Project,
-    session: Session,
     claude: Actor,
     make_item: Callable[..., Item],
 ) -> None:
@@ -104,8 +91,8 @@ def test_existing_parent_is_used(
     request = BulkCreate.model_validate(
         {"items": [{"kind": "batch", "title": "b", "parent_id": goal.id}]}
     )
-    assert preview_bulk(store, session.id, request).items[0].parent_key == goal.key
-    created = apply_bulk(store, session.id, request, claude)
+    assert preview_bulk(store, project.id, request).items[0].parent_key == goal.key
+    created = apply_bulk(store, project.id, request, WriteContext(actor=claude))[0]
     assert [item.parent_id for item in created] == [goal.id]
 
 
@@ -131,7 +118,7 @@ def test_existing_parent_is_used(
 )
 def test_hierarchy_is_checked_before_anything_is_written(
     store: Store,
-    session: Session,
+    project: Project,
     claude: Actor,
     items: list[dict[str, Any]],
     row_counts: Callable[[], dict[str, int]],
@@ -139,10 +126,10 @@ def test_hierarchy_is_checked_before_anything_is_written(
     """Preview and apply both refuse a broken hierarchy; the apply writes nothing."""
     request = BulkCreate.model_validate({"items": items})
     with pytest.raises(HierarchyError):
-        preview_bulk(store, session.id, request)
+        preview_bulk(store, project.id, request)
     before = row_counts()
     with pytest.raises(HierarchyError):
-        apply_bulk(store, session.id, request, claude)
+        apply_bulk(store, project.id, request, WriteContext(actor=claude))
     assert row_counts() == before
 
 
@@ -154,7 +141,7 @@ def fixture_foreign(other_project: Project, make_item: Callable[..., Item]) -> I
 
 def test_late_failure_rolls_back_earlier_items(
     store: Store,
-    session: Session,
+    project: Project,
     claude: Actor,
     foreign: Item,
     row_counts: Callable[[], dict[str, int]],
@@ -170,15 +157,15 @@ def test_late_failure_rolls_back_earlier_items(
     )
     before = row_counts()
     with pytest.raises(CrossProjectError):
-        apply_bulk(store, session.id, request, claude)
+        apply_bulk(store, project.id, request, WriteContext(actor=claude))
     assert row_counts() == before
-    assert preview_bulk(store, session.id, _tree()).items[0].key == "xoot-1"
+    assert preview_bulk(store, project.id, _tree()).items[0].key == "goal-1"
 
 
 @pytest.mark.parametrize(
     "items",
     [
-        [{"kind": "subtask", "title": f"s{n}"} for n in range(MAX_BULK_ITEMS + 1)],
+        [{"kind": "goal", "title": f"g{n}"} for n in range(MAX_BULK_ITEMS + 1)],
         [
             {
                 "kind": "goal",
@@ -208,26 +195,46 @@ def test_nested_count_is_capped() -> None:
         )
 
 
-def test_closed_session_is_refused(
-    store: Store, session: Session, user: Actor, claude: Actor
+def test_bulk_refuses_backlog_nodes(
+    store: Store, project: Project, work_tree: tuple[Item, Item, Item, Item]
 ) -> None:
-    """Bulk creates need an open session."""
-    close_session(store, session.id, SessionClose(), user)
-    with pytest.raises(SessionStateError):
-        preview_bulk(store, session.id, _tree())
-    with pytest.raises(SessionStateError):
-        apply_bulk(store, session.id, _tree(), claude)
+    """Backlog comes from capture, never from a bulk create."""
+    request = BulkCreate.model_validate(
+        {"items": [{"kind": "backlog", "title": "b", "parent_id": work_tree[1].id}]}
+    )
+    with pytest.raises(HierarchyError, match="capture"):
+        preview_bulk(store, project.id, request)
+
+
+def test_new_subtasks_reopen_a_done_batch(
+    store: Store,
+    project: Project,
+    claude: Actor,
+    work_tree: tuple[Item, Item, Item, Item],
+    set_state: Callable[..., Item],
+) -> None:
+    """The completion engine runs on every inserted node."""
+    goal, batch, first, second = work_tree
+    set_state(first, "done")
+    set_state(second, "done")
+    request = BulkCreate.model_validate(
+        {"items": [{"kind": "subtask", "title": "more", "parent_id": batch.id}]}
+    )
+    created, report = apply_bulk(store, project.id, request, WriteContext(actor=claude))
+    assert created[0].key == "goal-1/batch-1/subtask-3"
+    assert report.reopened == (batch.key, goal.key)
 
 
 def test_apply_consumes_its_token(
-    store: Store, session: Session, claude: Actor
+    store: Store, project: Project, claude: Actor
 ) -> None:
     """With a confirmation, the apply spends it; a replay is refused."""
-    plan = preview_bulk(store, session.id, _tree())
+    plan = preview_bulk(store, project.id, _tree())
     token = issue_token(
-        store, session.id, "items_create_bulk", DIGEST, plan.plan_sha256
+        store, project.id, "items_create_bulk", DIGEST, plan.plan_sha256
     )
     claim = Confirmation(token=token, tool="items_create_bulk", args_sha256=DIGEST)
-    assert len(apply_bulk(store, session.id, _tree(), claude, claim)) == 5
+    write = WriteContext(actor=claude)
+    assert len(apply_bulk(store, project.id, _tree(), write, claim)[0]) == 5
     with pytest.raises(ConfirmTokenError, match="already been used"):
-        apply_bulk(store, session.id, _tree(), claude, claim)
+        apply_bulk(store, project.id, _tree(), write, claim)

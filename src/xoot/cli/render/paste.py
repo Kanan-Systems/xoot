@@ -1,10 +1,11 @@
 """
 The text forms of `xoot paste apply`: the plan on stderr and the receipt.
 
-The plan is one line per op, then one indented line per disposition, field
-change and carried descendant, then a SIDE EFFECTS section listing every
-auto-backlog move. Each record the block creates, updates, disposes or moves
-is named once per op with its kind and title (cut to TITLE_CUT characters;
+The plan is one line per op, then one indented line per field change (a
+move lists each key change), then a COMPLETION section listing what the
+block completes, reopens or leaves blocked by open backlog. Each record the
+block creates, updates or moves is named once per op with its kind and
+title (cut to TITLE_CUT characters;
 every line is cleaned), so the user sees what they confirm. When a title or
 body looks damaged by a clipboard code page, a POSSIBLE ENCODING DAMAGE
 section follows, naming the op, key or ref and field, never the text. The
@@ -29,7 +30,7 @@ ENCODING_ADVICE = (
     "copy again using the UTF-8 command"
 )
 # Stored text: a plan names the field, never its value.
-_TEXT_FIELDS = frozenset({"title", "body", "summary"})
+_TEXT_FIELDS = frozenset({"title", "body"})
 
 
 def plan_lines(result: PasteResult) -> list[str]:
@@ -42,21 +43,18 @@ def plan_lines(result: PasteResult) -> list[str]:
     Returns:
         - lines (list[str]): the plan, cleaned, one entry per line.
     """
-    lines = [
-        f"paste plan: project {result.project}, session {result.session} "
-        f"({result.session_status} after the block)"
-    ]
+    lines = [f"paste plan: project {result.project}"]
     for outcome in result.outcomes:
         lines.extend(_outcome_lines(result, outcome))
-    lines.append("SIDE EFFECTS")
-    if not result.auto_backlog:
+    lines.append("COMPLETION")
+    lines.extend(f"  completes {key}{_label(result, key)}" for key in result.completed)
+    lines.extend(f"  reopens {key}{_label(result, key)}" for key in result.reopened)
+    lines.extend(
+        f"  {b.key} stays open: {b.open_backlog} open backlog item(s)"
+        for b in result.blocked
+    )
+    if not (result.completed or result.reopened or result.blocked):
         lines.append("  (none)")
-    for move in result.auto_backlog:
-        origin = move.origin_session or "an earlier session"
-        lines.append(
-            f"  {move.key}{_label(result, move.key)}: moves from the backlog of "
-            f"{origin} to the project backlog"
-        )
     return [clean(line) for line in lines]
 
 
@@ -86,15 +84,17 @@ def receipt(result: PasteResult) -> PasteReceipt:
         - result (PasteResult): the apply's result.
 
     Returns:
-        - receipt (PasteReceipt): session, refs and final records.
+        - receipt (PasteReceipt): refs, final records and the completion
+          outcome.
     """
     return PasteReceipt(
         project=result.project,
-        session=result.session,
-        session_status=result.session_status,
         refs=dict(result.refs),
         items=list(result.items),
         decisions=list(result.decisions),
+        completed=list(result.completed),
+        reopened=list(result.reopened),
+        blocked=list(result.blocked),
     )
 
 
@@ -113,23 +113,16 @@ def render_receipt(result: PasteResult) -> str:
 
 
 def _outcome_lines(result: PasteResult, outcome: PasteOpOutcome) -> list[str]:
-    """The op line, then its dispositions, changes and carried keys."""
+    """The op line, then its changes."""
     key = outcome.key or NONE
     lines = [
         f"  op {outcome.index} {outcome.op}: {_target(outcome)}{_label(result, key)}"
     ]
     named = {key}
-    for item_key, disposition in outcome.dispositions.items():
-        lines.append(
-            f"      dispose {item_key}{_label(result, item_key)}: {disposition}"
-        )
-        named.add(item_key)
     for change in outcome.changes:
         label = "" if change.key in named else _label(result, change.key)
         named.add(change.key)
         lines.append(f"      {_change(change, label)}")
-    if outcome.carried:
-        lines.append(f"      carries along: {', '.join(outcome.carried)}")
     return lines
 
 

@@ -8,12 +8,19 @@ export const CONCEPTS_URL =
   'https://github.com/Kanan-Systems/xoot/blob/main/docs/concepts.md';
 
 export const TAB_HELP = {
-  tree: 'Goals hold batches, batches hold subtasks; click an item for details.',
-  sessions:
-    'Each working session with Claude, what it covered and what it left behind.',
-  backlog: 'Parked items: per open session, project-wide, and unfiled.',
+  tree:
+    'The project holds goals, goals hold batches, batches hold subtasks; backlog ' +
+    'hangs off the batch, goal or project it sits on. Goals and batches complete ' +
+    'on their own once their work is done and no backlog is open. Click an item ' +
+    'for details.',
+  backlog:
+    'Open work found along the way, by level: on a batch, on a goal, then the ' +
+    'project backlog. Open backlog keeps its batch or goal from completing until ' +
+    'it is covered, resolved or pushed up.',
   decisions:
-    'Recorded choices and why they were made; superseded ones link to their replacement.',
+    'Recorded choices and why they were made, grouped by goal; each belongs to ' +
+    'the goal, batch or subtask it was made on. Superseded ones link to their ' +
+    'replacement.',
 } as const;
 
 export function TabHelp({ tab }: { tab: keyof typeof TAB_HELP }) {

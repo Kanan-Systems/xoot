@@ -15,7 +15,8 @@
   --awaiting: #8a5a00;
   --done: #2e7d32;
   --dropped: #6d6d6d;
-  --backlogged: #6a4fb3;
+  --backlog: #6a4fb3;
+  --control-hover: #ecece7;
   font-family:
     system-ui,
     -apple-system,
@@ -39,7 +40,8 @@
     --awaiting: #e8b75a;
     --done: #7fc882;
     --dropped: #9e9e9e;
-    --backlogged: #b39ddb;
+    --backlog: #b39ddb;
+    --control-hover: #2c2c29;
   }
 }
 

@@ -35,21 +35,25 @@ Every MCP write is recorded as `claude/code` or `claude/chat`; no tool
 accepts an actor or a client. CLI admin commands write as `user/cli`.
 `xoot paste apply` writes as `claude/paste`: Claude authored the block and
 the user confirmed its plan at the terminal. Changes xoot makes on its own
-(auto-backlog moves, workflow remaps) are recorded with actor `system`.
-A session's client (`code` or `chat`) comes from the name the MCP
-client reports at initialization. That name is unauthenticated: it labels
-the session and grants nothing.
+(goals and batches completing or reopening, workflow remaps) are recorded
+with actor `system`. A write's client (`code` or `chat`) comes, per call,
+from the name the MCP client reported at initialization. That name is
+unauthenticated: it labels the write and grants nothing.
 
-Stored titles, bodies and summaries are written by users and agents. The
+Stored titles and bodies are written by users and agents. The
 server returns them as data, and every tool description says so, but a
 client model may still read them as instructions. Treat them as untrusted.
 
 ## Dashboard
 
-`xoot dashboard` binds 127.0.0.1 only and is read-only in 0.2: anything but
+`xoot dashboard` binds 127.0.0.1 only and is read-only: anything but
 GET and HEAD gets 405. Each launch makes a random token, printed once to
 stdout and never logged or written to disk; it becomes an HttpOnly,
-SameSite=Strict cookie that every API request needs (401 without it). Only
+SameSite=Strict cookie named after the port (`xoot_token_<port>`) that every
+API request needs (401 without it). `--open` never puts the token in the
+browser opener's command line, which other local users can read: the
+opener gets a one-time launch code, valid for 30 seconds and redeemable
+once, that the dashboard swaps for the cookie. Only
 the Host names `xoot.localhost`, `localhost` and `127.0.0.1` on the served
 port are answered (400 otherwise, against DNS rebinding), and an API request
 from a foreign Origin gets 403. A strict Content-Security-Policy allows
@@ -60,7 +64,7 @@ access log is off, since request lines can carry the token.
 
 Never put secrets in key prefixes or aliases. They are part of every key,
 appear in outputs and events, and cannot be redacted. `xoot redact` clears
-titles, bodies, summaries and project names only.
+item and decision titles and bodies, and project names, only.
 
 ## install.sh
 

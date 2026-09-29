@@ -6,14 +6,17 @@ from xoot.models.decision.decision_status import DecisionStatus
 
 
 class DecisionSummary(BaseModel):
-    """A decision's key, title, status, references and version."""
+    """
+    A decision's key (<owner key>/decision-<n>), title, status, the item it
+    was made on, the decision it supersedes, and its version.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     key: str
     title: str
     status: DecisionStatus
-    scope: str | None
+    owner: str | None
     supersedes: str | None
     version: int
     updated_at: str

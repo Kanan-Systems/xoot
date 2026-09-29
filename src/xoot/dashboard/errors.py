@@ -47,8 +47,8 @@ def not_found(key: str) -> ApiError:
     """
     Build the 404 for a key or prefix that names nothing.
 
-    A well-formed key or prefix is echoed (it holds only [a-z0-9-] and
-    digits); any other text is arbitrary input and is not.
+    A well-formed key or prefix is echoed (it holds only [a-z0-9/:-]); any
+    other text is arbitrary input and is not.
 
     Args:
         - key (str): the key or prefix as the caller sent it.

@@ -9,9 +9,9 @@ MAX_CHILDREN = 50
 
 class BulkItem(ItemBasics):
     """
-    A new item with its new children. parent_id names an existing parent and
-    is only allowed on top-level nodes; nested nodes sit under their node.
-    Every item starts in its kind's default open state.
+    A new goal, batch or subtask with its new children. parent_id names an
+    existing parent and is only allowed on top-level nodes; nested nodes sit
+    under their node. Every item starts in its kind's default open state.
     """
 
     children: tuple["BulkItem", ...] = Field(default=(), max_length=MAX_CHILDREN)

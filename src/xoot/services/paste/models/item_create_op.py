@@ -5,8 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from xoot.models.fields import Body, Title
-from xoot.models.item.item_kind import ItemKind
-from xoot.services.paste.models.fields import KeyOrRef, RefName
+from xoot.services.paste.models.fields import ItemKeyOrRef, RefName
 
 
 class ItemCreateOp(BaseModel):
@@ -19,7 +18,7 @@ class ItemCreateOp(BaseModel):
 
     op: Literal["item_create"]
     ref: RefName | None = None
-    kind: ItemKind
+    kind: Literal["goal", "batch", "subtask"]
     title: Title
     body: Body = ""
-    parent: KeyOrRef | None = None
+    parent: ItemKeyOrRef | None = None

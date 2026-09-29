@@ -1,20 +1,14 @@
 // URL search parameters. Views are routes; what sits on top of a view (the
-// drawer, the session filter, the goal) lives in the query string, so deep
-// links and Back/Forward restore it.
+// drawer, the goal, the focus root, the filters) lives in the query string,
+// so deep links and Back/Forward restore it. Nested keys such as
+// goal-1/batch-2 always travel here, URL-encoded, never as a path segment.
 export const PARAM = {
   item: 'item',
-  session: 'session',
-  mode: 'mode',
   goal: 'goal',
-  closed: 'closed',
+  focus: 'focus',
+  level: 'level',
   status: 'status',
 } as const;
-
-export type FilterMode = 'highlight' | 'only';
-
-export function filterMode(value: string | null): FilterMode {
-  return value === 'only' ? 'only' : 'highlight';
-}
 
 // The query string with one parameter set, or removed when value is null.
 export function withParam(

@@ -12,7 +12,6 @@ from xoot.exceptions.workflow_mapping_error import WorkflowMappingError
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
-from xoot.models.workflow.category import Category
 from xoot.models.workflow.workflow import Workflow
 from xoot.models.workflow.workflow_change import WorkflowChange
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
@@ -23,7 +22,6 @@ from xoot.repositories.workflow import workflow_db
 from xoot.services.id_checks import check_id
 from xoot.services.item_writer import write_item
 from xoot.services.lookups import active_workflow, require_project
-from xoot.services.session_links import link_items, open_session_for
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
 
@@ -97,16 +95,16 @@ def set_workflow(
     Add and activate a new workflow version, remapping affected items.
 
     Items in a state the new definition removes move to the state the
-    mapping names; items whose state leaves the backlogged category lose
-    their session backlog. Each item change is its own event, recorded as
-    the system's with the caller's client and session. A definition
+    mapping names. Each item change is its own event, recorded as the
+    system's with the caller's client, and settles through the completion
+    engine like any other item write. A definition
     identical to the active one changes nothing: no version, no events.
 
     Args:
         - store (Store): the database.
         - project_id (int): project id.
         - change (WorkflowChange): the new definition and state mapping.
-        - ctx (WriteContext): actor and optional session.
+        - ctx (WriteContext): the actor.
 
     Returns:
         - workflow (Workflow): the new active version, or the unchanged
@@ -121,7 +119,6 @@ def set_workflow(
     check_id("project_id", project_id)
     with store.write() as conn:
         project = require_project(conn, project_id)
-        session = open_session_for(conn, project_id, ctx.session_id)
         active = active_workflow(conn, project)
         _check_mapping_keys(active.definition, change)
         if change.definition == active.definition:
@@ -139,7 +136,6 @@ def set_workflow(
         system = scope.as_system()
         for item, fields in remaps:
             write_item(system, item, fields)
-        link_items(scope, session, [item.id for item, _ in remaps])
         return workflow
 
 
@@ -169,16 +165,8 @@ def _plan_remaps(
             label = f"{item.kind}:{item.state}"
             uncovered[label] = uncovered.get(label, 0) + 1
             continue
-        fields: dict[str, Any] = {}
         if state != item.state:
-            fields["state"] = state
-        if (
-            item.backlog_session_id is not None
-            and workflow.category_of(state) is not Category.BACKLOGGED
-        ):
-            fields["backlog_session_id"] = None
-        if fields:
-            planned.append((item, fields))
+            planned.append((item, {"state": state}))
     if uncovered:
         detail = ", ".join(
             f"{label} ({count})" for label, count in sorted(uncovered.items())

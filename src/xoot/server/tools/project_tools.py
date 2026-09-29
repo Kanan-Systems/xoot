@@ -72,10 +72,11 @@ def register(server: MCPServer) -> None:
     server.add_tool(
         brief_get,
         description=describe(
-            "Brief on one project: item counts per category, open sessions, "
-            "active and awaiting-input items, pending session-backlog items, the "
-            "project-backlog count, the latest decisions, and the workflow: per "
-            "kind, each state with its category and whether transitions are "
+            "Brief on one project: open goals with batch progress (n of m "
+            "done), active and awaiting-input items, goals and batches blocked "
+            "only by open backlog, open backlog counts per level (project, "
+            "goal, batch), the latest decisions, and the workflow: per kind, "
+            "each state with its category and whether transitions are "
             f"restricted. Read this first. {RESOLUTION}"
         ),
         annotations=READ,

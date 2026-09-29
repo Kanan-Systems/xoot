@@ -102,7 +102,10 @@ def test_ctrl_c_stops_cleanly(xoot: Any, monkeypatch: pytest.MonkeyPatch) -> Non
 def test_open_hands_the_url_to_the_opener(
     xoot: Any, served: list[Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """--open passes the printed URL; a failure warns and keeps serving."""
+    """
+    --open hands the opener a one-time launch code, never the printed token;
+    a failure warns and keeps serving.
+    """
     opened: list[str] = []
 
     def fail(url: str) -> bool:
@@ -112,7 +115,11 @@ def test_open_hands_the_url_to_the_opener(
     monkeypatch.setattr(runner, "open_url", fail)
     result = xoot("dashboard", "--port", _free_port(), "--open")
     assert result.code == exit_codes.OK
-    assert opened == [result.out.strip()]
+    assert len(opened) == 1
+    url = opened[0]
+    printed = result.out.strip()
+    assert url.startswith(printed.split("?")[0] + "?launch=")
+    assert printed.split("token=")[1] not in url
     assert "warning: could not open a browser" in result.err
     assert len(served) == 1
 

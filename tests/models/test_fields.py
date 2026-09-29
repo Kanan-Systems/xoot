@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from xoot.models.decision.decision_create import DecisionCreate
 from xoot.models.fields import (
     AbsolutePath,
     Body,
@@ -19,8 +20,6 @@ from xoot.models.fields import (
 from xoot.models.item.item_create import ItemCreate
 from xoot.models.item.item_draft import ItemDraft
 from xoot.models.item.item_kind import ItemKind
-from xoot.models.session.session_close import SessionClose
-from xoot.models.session.session_start import SessionStart
 
 
 def _accepts(field: object, value: object) -> bool:
@@ -162,9 +161,9 @@ def test_input_models_apply_the_limits() -> None:
     with pytest.raises(ValidationError):
         ItemDraft(title="ok", body="\x00")
     with pytest.raises(ValidationError):
-        SessionStart(title="")
+        DecisionCreate(owner_item_id=1, title="")
     with pytest.raises(ValidationError):
-        SessionClose(summary="s" * 32769)
+        DecisionCreate(owner_item_id=1, title="t", body="s" * 32769)
 
 
 def test_input_models_forbid_unknown_fields() -> None:

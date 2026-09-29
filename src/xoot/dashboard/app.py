@@ -16,12 +16,17 @@ from xoot.dashboard.api import api_routes
 from xoot.dashboard.api_error import ApiError
 from xoot.dashboard.errors import UNAVAILABLE, error_response
 from xoot.dashboard.guard import guard
+from xoot.dashboard.launch_codes import LaunchCodes
 
 STATIC = Path(__file__).parent / "static"
 
 
 def create_app(
-    db_path: Path, token: str, port: int, static_dir: Path = STATIC
+    db_path: Path,
+    token: str,
+    port: int,
+    static_dir: Path = STATIC,
+    launch_codes: LaunchCodes | None = None,
 ) -> ASGIApp:
     """
     Build the guarded dashboard application.
@@ -31,6 +36,7 @@ def create_app(
         - token (str): the per-launch token the guard requires.
         - port (int): the served port, part of the Host allowlist.
         - static_dir (Path): the built bundle: index.html and assets/.
+        - launch_codes (LaunchCodes | None): one-time codes for --open.
 
     Returns:
         - app (ASGIApp): the application, guard outermost.
@@ -57,4 +63,4 @@ def create_app(
             Route("/{path:path}", spa, methods=["GET"]),
         ]
     )
-    return guard(app, token=token, port=port)
+    return guard(app, token=token, port=port, launch_codes=launch_codes)

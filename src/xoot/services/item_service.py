@@ -1,49 +1,42 @@
 """
-Creating, capturing and updating single items.
+Creating and updating single items.
 
-Numbers come from the project counter inside the write transaction, so
-concurrent writers get unique, gap-free keys.
+Numbers come from the parent's counter inside the write transaction, so
+concurrent writers get unique keys. Every write settles the goals and
+batches above it (see completion_service); the store-level functions return
+the write's completion report beside the row.
 """
 
 from typing import Any
 
-from xoot.models.event.actor import Actor
+from xoot.exceptions.hierarchy_error import HierarchyError
 from xoot.models.event.entity_type import EntityType
 from xoot.models.event.write_context import WriteContext
+from xoot.models.item.completion_report import CompletionReport
 from xoot.models.item.item import Item
 from xoot.models.item.item_create import ItemCreate
-from xoot.models.item.item_draft import ItemDraft
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.workflow.category import Category
-from xoot.models.workflow.kind_workflow import KindWorkflow
 from xoot.services.conflicts import ensure_version
 from xoot.services.id_checks import check_id
 from xoot.services.item_rules import (
+    check_awaited_decision,
     check_parent,
-    check_references,
     check_state,
     check_transition,
 )
 from xoot.services.item_writer import insert_item, write_item
-from xoot.services.lookups import (
-    active_workflow,
-    require_item,
-    require_project,
-    require_session,
-)
-from xoot.services.session_links import (
-    link_items,
-    open_session_for,
-    scope_session_id,
-)
+from xoot.services.lookups import active_workflow, require_item, require_project
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
+
+BACKLOG_VIA_CAPTURE = "backlog items are created with capture"
 
 
 def create_item(
     store: Store, project_id: int, request: ItemCreate, ctx: WriteContext
-) -> Item:
+) -> tuple[Item, CompletionReport]:
     """
     Create a goal, batch or subtask.
 
@@ -51,22 +44,25 @@ def create_item(
         - store (Store): the database.
         - project_id (int): project id.
         - request (ItemCreate): validated item details.
-        - ctx (WriteContext): actor and optional session (linked if given).
+        - ctx (WriteContext): the actor.
 
     Returns:
-        - item (Item): the new item.
+        - created (tuple[Item, CompletionReport]): the new item and what the
+          completion engine did (a new subtask reopens a done batch).
 
     Raises:
-        - HierarchyError: the parent is not allowed for this kind.
-        - StateError: the state or session backlog breaks the workflow.
+        - HierarchyError: the parent is not allowed for this kind, or the
+          kind is backlog.
+        - StateError: the state is not in the workflow.
         - CrossProjectError: a reference is in another project.
-        - SessionStateError: the session is closed.
         - InvalidIdError: project_id is not an int id.
         - NotFoundError: the project or a reference does not exist.
     """
     check_id("project_id", project_id)
     with store.write() as conn:
-        return create_item_in(WriteScope(conn, ctx), project_id, request)
+        scope = WriteScope(conn, ctx)
+        item = create_item_in(scope, project_id, request)
+        return item, scope.report()
 
 
 def create_item_in(scope: WriteScope, project_id: int, request: ItemCreate) -> Item:
@@ -74,8 +70,7 @@ def create_item_in(scope: WriteScope, project_id: int, request: ItemCreate) -> I
     Create a goal, batch or subtask; the caller owns the transaction.
 
     Args:
-        - scope (WriteScope): the open write scope; its session, if any, is
-          linked.
+        - scope (WriteScope): the open write scope.
         - project_id (int): project id.
         - request (ItemCreate): validated item details.
 
@@ -83,86 +78,43 @@ def create_item_in(scope: WriteScope, project_id: int, request: ItemCreate) -> I
         - item (Item): the new item.
 
     Raises:
-        - HierarchyError: the parent is not allowed for this kind.
-        - StateError: the state or session backlog breaks the workflow.
+        - HierarchyError: the parent is not allowed for this kind, or the
+          kind is backlog.
+        - StateError: the state is not in the workflow.
         - CrossProjectError: a reference is in another project.
-        - SessionStateError: the session is closed.
+        - NotFoundError: the project or a reference does not exist.
+    """
+    if request.kind is ItemKind.BACKLOG:
+        raise HierarchyError(BACKLOG_VIA_CAPTURE)
+    return insert_checked(scope, project_id, request)
+
+
+def insert_checked(scope: WriteScope, project_id: int, request: ItemCreate) -> Item:
+    """
+    Validate a create of any kind against the rows and insert it.
+
+    Args:
+        - scope (WriteScope): the open write scope.
+        - project_id (int): project id.
+        - request (ItemCreate): item details; state defaults to open.
+
+    Returns:
+        - item (Item): the new item.
+
+    Raises:
+        - HierarchyError: the parent is not allowed for this kind.
+        - StateError: the state is not in the workflow.
+        - CrossProjectError: a reference is in another project.
         - NotFoundError: the project or a reference does not exist.
     """
     conn = scope.conn
     project = require_project(conn, project_id)
-    session = open_session_for(conn, project_id, scope.ctx.session_id)
     workflow = active_workflow(conn, project).definition.for_kind(request.kind)
     check_parent(conn, project_id, request.kind, request.parent_id)
     state = request.state or workflow.default_state(Category.OPEN)
-    check_state(workflow, state, request.backlog_session_id)
-    check_references(
-        conn, project_id, request.backlog_session_id, request.awaiting_decision_id
-    )
-    item = insert_item(scope, project, request.model_copy(update={"state": state}))
-    link_items(scope, session, [item.id])
-    return item
-
-
-def capture(store: Store, session_id: int, draft: ItemDraft, actor: Actor) -> Item:
-    """
-    Capture a quick note as an unfiled subtask in the session's backlog.
-
-    The subtask gets the default backlogged state and backlog_session_id set
-    to this session, and is linked to the session.
-
-    Args:
-        - store (Store): the database.
-        - session_id (int): an open session.
-        - draft (ItemDraft): title and optional body.
-        - actor (Actor): who captures it.
-
-    Returns:
-        - item (Item): the new unfiled subtask.
-
-    Raises:
-        - InvalidIdError: session_id is not an int id.
-        - SessionStateError: the session is closed.
-        - NotFoundError: no such session.
-    """
-    check_id("session_id", session_id)
-    with store.write() as conn:
-        scope = WriteScope(conn, WriteContext(actor=actor, session_id=session_id))
-        return capture_in(scope, draft)
-
-
-def capture_in(scope: WriteScope, draft: ItemDraft) -> Item:
-    """
-    Capture a quick note in the scope's session; the caller owns the transaction.
-
-    Args:
-        - scope (WriteScope): the open write scope, attributed to an open
-          session.
-        - draft (ItemDraft): title and optional body.
-
-    Returns:
-        - item (Item): the new unfiled subtask.
-
-    Raises:
-        - SessionStateError: the scope has no session, or it is closed.
-        - NotFoundError: no such session.
-    """
-    conn = scope.conn
-    session_id = scope_session_id(scope)
-    project_id = require_session(conn, session_id).project_id
-    session = open_session_for(conn, project_id, session_id)
-    project = require_project(conn, project_id)
-    workflow = active_workflow(conn, project).definition.for_kind(ItemKind.SUBTASK)
-    request = ItemCreate(
-        kind=ItemKind.SUBTASK,
-        title=draft.title,
-        body=draft.body,
-        state=workflow.default_state(Category.BACKLOGGED),
-        backlog_session_id=session_id,
-    )
-    item = insert_item(scope, project, request)
-    link_items(scope, session, [item.id])
-    return item
+    check_state(workflow, state)
+    check_awaited_decision(conn, project_id, request.awaiting_decision_id)
+    return insert_item(scope, project, request.model_copy(update={"state": state}))
 
 
 def update_item(
@@ -171,35 +123,34 @@ def update_item(
     expected_version: int,
     changes: ItemUpdate,
     ctx: WriteContext,
-) -> Item:
+) -> tuple[Item, CompletionReport]:
     """
-    Change an item's title, body, state or references.
-
-    Moving out of the backlogged category clears backlog_session_id unless
-    the caller sets it (which then fails the backlog rule).
+    Change an item's title, body, state or awaited decision.
 
     Args:
         - store (Store): the database.
         - item_id (int): item id.
         - expected_version (int): the version the caller read.
         - changes (ItemUpdate): the fields to change.
-        - ctx (WriteContext): actor and optional session (linked if given).
+        - ctx (WriteContext): the actor.
 
     Returns:
-        - item (Item): the stored item.
+        - updated (tuple[Item, CompletionReport]): the stored item and what
+          the completion engine did.
 
     Raises:
         - VersionConflictError: the item changed since expected_version.
-        - StateError: unknown state, disallowed transition or backlog rule.
+        - StateError: unknown state or disallowed transition.
         - CrossProjectError: a reference is in another project.
-        - SessionStateError: the session is closed.
         - InvalidIdError: item_id or expected_version is not an int.
         - NotFoundError: the item or a reference does not exist.
     """
     check_id("item_id", item_id)
     check_id("expected_version", expected_version)
     with store.write() as conn:
-        return update_item_in(WriteScope(conn, ctx), item_id, expected_version, changes)
+        scope = WriteScope(conn, ctx)
+        item = update_item_in(scope, item_id, expected_version, changes)
+        return item, scope.report()
 
 
 def update_item_in(
@@ -209,8 +160,7 @@ def update_item_in(
     Change an item; the caller owns the transaction.
 
     Args:
-        - scope (WriteScope): the open write scope; its session, if any, is
-          linked.
+        - scope (WriteScope): the open write scope.
         - item_id (int): item id.
         - expected_version (int): the version the caller read.
         - changes (ItemUpdate): the fields to change.
@@ -220,27 +170,21 @@ def update_item_in(
 
     Raises:
         - VersionConflictError: the item changed since expected_version.
-        - StateError: unknown state, disallowed transition or backlog rule.
+        - StateError: unknown state or disallowed transition.
         - CrossProjectError: a reference is in another project.
-        - SessionStateError: the session is closed.
         - NotFoundError: the item or a reference does not exist.
     """
     conn = scope.conn
     item = require_item(conn, item_id)
     ensure_version(conn, EntityType.ITEM, item, expected_version)
-    session = open_session_for(conn, item.project_id, scope.ctx.session_id)
     project = require_project(conn, item.project_id)
     workflow = active_workflow(conn, project).definition.for_kind(item.kind)
-    fields = _effective_fields(item, workflow, changes)
-    check_references(
-        conn,
-        item.project_id,
-        fields.get("backlog_session_id"),
-        fields.get("awaiting_decision_id"),
-    )
-    updated = write_item(scope, item, fields)
-    link_items(scope, session, [item.id])
-    return updated
+    fields: dict[str, Any] = changes.provided()
+    state = fields.get("state", item.state)
+    check_state(workflow, state)
+    check_transition(workflow, item.state, state)
+    check_awaited_decision(conn, item.project_id, fields.get("awaiting_decision_id"))
+    return write_item(scope, item, fields)
 
 
 def get_item(store: Store, item_id: int) -> Item:
@@ -261,22 +205,3 @@ def get_item(store: Store, item_id: int) -> Item:
     check_id("item_id", item_id)
     with store.read() as conn:
         return require_item(conn, item_id)
-
-
-def _effective_fields(
-    item: Item, workflow: KindWorkflow, changes: ItemUpdate
-) -> dict[str, Any]:
-    """Resolve the requested fields into the full set to write, validated."""
-    fields = changes.provided()
-    state = fields.get("state", item.state)
-    if (
-        "backlog_session_id" not in fields
-        and item.backlog_session_id is not None
-        and workflow.category_of(state) is not Category.BACKLOGGED
-    ):
-        fields["backlog_session_id"] = None
-    check_state(
-        workflow, state, fields.get("backlog_session_id", item.backlog_session_id)
-    )
-    check_transition(workflow, item.state, state)
-    return fields

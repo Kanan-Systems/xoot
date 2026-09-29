@@ -11,14 +11,18 @@ import os
 import signal
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import anyio
 import anyio.abc
 
 from xoot import __version__
+from xoot.exceptions.legacy_database_error import LEGACY_MESSAGE
+from xoot.exceptions.store_error import StoreError
 from xoot.server.app import build_server
 from xoot.server.xoot_server import XootServer
 from xoot.store.paths import db_path_from_arg
+from xoot.store.store import is_legacy_file
 
 LOG_FORMAT = "%(name)s %(levelname)s: %(message)s"
 # Bounded so a signal always ends the process within two seconds.
@@ -38,7 +42,32 @@ def main(argv: Sequence[str] | None = None) -> None:
     db_path = db_path_from_arg(args.db)
     _configure_logging()
     logging.getLogger("xoot.server").info("database: %s", db_path)
+    warn_if_legacy(db_path)
     anyio.run(_serve, build_server(db_path))
+
+
+def warn_if_legacy(db_path: Path) -> None:
+    """
+    Log one WARNING at startup when the database is a 0.2 one.
+
+    Every tool call still fails with LegacyDatabaseError; the warning makes
+    the cause visible in the client's server log before the first call. A
+    missing, unsafe or unreadable file is left to the per-call errors, and
+    a symlink is never followed here.
+
+    Args:
+        - db_path (Path): the database the server will open.
+    """
+    if db_path.is_symlink() or not db_path.is_file():
+        return
+    try:
+        legacy = is_legacy_file(db_path)
+    except StoreError:
+        return
+    if legacy:
+        logging.getLogger("xoot.server").warning(
+            "database %s is a legacy xoot 0.2 database: %s", db_path, LEGACY_MESSAGE
+        )
 
 
 async def _serve(server: XootServer) -> None:

@@ -17,7 +17,15 @@ from pydantic import ValidationError
 from xoot.exceptions.paste_error import PasteError
 from xoot.exceptions.paste_op_error import PasteOpError
 from xoot.exceptions.xoot_error import XootError
-from xoot.services.paste.item_ops import run_capture, run_item_create, run_item_update
+from xoot.services.paste.item_ops import (
+    run_backlog_cover,
+    run_backlog_push,
+    run_capture,
+    run_item_create,
+    run_item_update,
+)
+from xoot.services.paste.models.backlog_cover_op import BacklogCoverOp
+from xoot.services.paste.models.backlog_push_op import BacklogPushOp
 from xoot.services.paste.models.capture_op import CaptureOp
 from xoot.services.paste.models.decision_record_op import DecisionRecordOp
 from xoot.services.paste.models.decision_update_op import DecisionUpdateOp
@@ -26,28 +34,21 @@ from xoot.services.paste.models.item_update_op import ItemUpdateOp
 from xoot.services.paste.models.paste_block import PasteBlock, PasteOp
 from xoot.services.paste.models.paste_op_outcome import PasteOpOutcome
 from xoot.services.paste.models.paste_result import PasteResult
-from xoot.services.paste.models.session_close_op import SessionCloseOp
-from xoot.services.paste.models.session_start_op import SessionStartOp
 from xoot.services.paste.paste_run import PasteRun
-from xoot.services.paste.record_ops import (
-    run_decision_record,
-    run_decision_update,
-    run_session_close,
-    run_session_start,
-)
+from xoot.services.paste.record_ops import run_decision_record, run_decision_update
 from xoot.store.store import Store
 from xoot.utils.utils import canonical_sha256
 
 PLAN_CHANGED = "plan changed since preview; run paste apply again"
 
 _HANDLERS: dict[type, Callable[[PasteRun, int, Any], PasteOpOutcome]] = {
-    SessionStartOp: run_session_start,
-    CaptureOp: run_capture,
     ItemCreateOp: run_item_create,
     ItemUpdateOp: run_item_update,
+    CaptureOp: run_capture,
+    BacklogCoverOp: run_backlog_cover,
+    BacklogPushOp: run_backlog_push,
     DecisionRecordOp: run_decision_record,
     DecisionUpdateOp: run_decision_update,
-    SessionCloseOp: run_session_close,
 }
 
 
@@ -71,7 +72,7 @@ def dry_run(store: Store, block: PasteBlock) -> PasteResult:
         - result (PasteResult): what the block would do.
 
     Raises:
-        - PasteError: the project or session cannot be used.
+        - PasteError: the project cannot be used.
         - PasteOpError: an op failed; the message names it.
     """
     try:
@@ -95,7 +96,7 @@ def apply(store: Store, block: PasteBlock, expected_digest: str) -> PasteResult:
 
     Raises:
         - PasteError: the result differs from the dry run's, or the project
-          or session cannot be used.
+          cannot be used.
         - PasteOpError: an op failed; the message names it.
     """
     with store.write() as conn:

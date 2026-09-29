@@ -57,8 +57,9 @@ describe('live refresh', () => {
       '/projects/x/tree': () => ({
         project: 'x',
         truncated: false,
+        blocked: [],
         nodes: titles.map((title, index) =>
-          entry(item(`x-${String(index + 1)}`, 'subtask', null, 'open', title), 0),
+          entry(item(`goal-${String(index + 1)}`, 'goal', null, 'open', title), 0),
         ),
       }),
     });

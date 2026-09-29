@@ -15,10 +15,9 @@ describe('tab help', () => {
   });
 
   it.each([
-    ['/x/tree', /goals hold batches, batches hold subtasks/i],
-    ['/x/sessions', /each working session with Claude/i],
-    ['/x/backlog', /per open session, project-wide, and unfiled/],
-    ['/x/decisions', /superseded ones link to their replacement/],
+    ['/x/tree', /goals hold batches, batches hold subtasks; backlog hangs off/i],
+    ['/x/backlog', /by level: on a batch, on a goal, then the project backlog/],
+    ['/x/decisions', /grouped by goal; each belongs to the goal, batch or subtask/],
   ])(
     '%s: collapsed, then expands to the text and the concepts link',
     async (path, text) => {

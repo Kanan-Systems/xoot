@@ -18,9 +18,9 @@ from xoot.models.project.project import Project
     "argv",
     [
         ["brief", "--project", "zz"],
-        ["tree", "--project", "xo", "--root", "xoot-99"],
+        ["tree", "--project", "xo", "--root", "goal-99"],
         ["project", "add-alias", "xo", "--project", "xoot"],
-        ["redact", "xoot-99", "title", "--yes"],
+        ["redact", "goal-99", "title", "--yes"],
         ["workflow", "import", "/nonexistent.toml", "--project", "xo", "--yes"],
     ],
 )
@@ -50,7 +50,7 @@ def test_warnings_go_to_stderr(xoot: Any, project: Project, make_item: Any) -> N
     make_item(project, ItemKind.BATCH, parent_id=goal.id)
     run = xoot("tree", "--project", "xo", "--depth", "0", "--json")
     assert run.code == 0
-    assert [n["item"]["key"] for n in run.json()["nodes"]] == ["xoot-1"]
+    assert [n["item"]["key"] for n in run.json()["nodes"]] == ["goal-1"]
     assert run.err == "warning: the tree was truncated by --depth or the item limit\n"
 
 

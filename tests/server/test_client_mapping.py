@@ -1,4 +1,4 @@
-"""The session's client comes from client_info; every write reuses it."""
+"""Every write's client comes from client_info, per call; the actor is Claude."""
 
 from typing import Any
 
@@ -18,26 +18,50 @@ from xoot.store.store import Store
         ("some other client", "chat"),
     ],
 )
-def test_session_client_follows_client_info(
+def test_write_client_follows_client_info(
     store: Store,
     project: Project,
     harness: Any,
     client_name: str,
     expected: str,
 ) -> None:
-    """claude-code in any case means code, anything else chat; writes are Claude's."""
-    assert project.key_prefix == "xoot"
+    """claude-code in any case means code, anything else chat."""
 
-    async def scenario(client: ClientSession) -> dict[str, Any]:
-        started = await harness.ok(client, "session_start", project="xo", title="t")
-        key = started["session"]["key"]
-        await harness.ok(client, "capture", session=key, title="side")
-        return started
+    async def scenario(client: ClientSession) -> None:
+        await harness.ok(client, "item_create", project="xo", kind="goal", title="g")
 
-    started = harness.run(scenario, client_name=client_name)
-    assert started["session"]["client"] == expected
-    assert started["client_info"] == {"name": client_name, "version": "9.9.9"}
+    harness.run(scenario, client_name=client_name)
     events = store.conn.execute(
-        "SELECT DISTINCT actor_kind, client FROM event WHERE session_id IS NOT NULL"
+        "SELECT DISTINCT actor_kind, client FROM event "
+        "WHERE project_id = ? AND entity_type = 'item'",
+        (project.id,),
     ).fetchall()
     assert [tuple(row) for row in events] == [("claude", expected)]
+
+
+def test_two_clients_work_on_one_goal(
+    store: Store, project: Project, harness: Any
+) -> None:
+    """A chat and Claude Code both write to the same goal; each is labelled."""
+
+    async def create(client: ClientSession) -> None:
+        await harness.ok(client, "item_create", project="xo", kind="goal", title="g")
+
+    async def add(client: ClientSession) -> None:
+        await harness.ok(
+            client,
+            "item_create",
+            project="xo",
+            kind="batch",
+            title="b",
+            parent="goal-1",
+        )
+
+    harness.run(create, client_name="claude-ai")
+    harness.run(add, client_name="claude-code")
+    rows = store.conn.execute(
+        "SELECT client FROM event WHERE project_id = ? AND entity_type = 'item' "
+        "ORDER BY id",
+        (project.id,),
+    ).fetchall()
+    assert [row[0] for row in rows] == ["chat", "code"]

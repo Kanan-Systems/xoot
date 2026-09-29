@@ -47,8 +47,14 @@ def test_plan_counts_and_writes_nothing(
         ItemKind.GOAL: ("blocked",),
         ItemKind.BATCH: (),
         ItemKind.SUBTASK: (),
+        ItemKind.BACKLOG: (),
     }
-    assert plan.remaps == {ItemKind.GOAL: 2, ItemKind.BATCH: 0, ItemKind.SUBTASK: 0}
+    assert plan.remaps == {
+        ItemKind.GOAL: 2,
+        ItemKind.BATCH: 0,
+        ItemKind.SUBTASK: 0,
+        ItemKind.BACKLOG: 0,
+    }
     assert set_workflow(store, project.id, change, ctx).version == 2
 
 

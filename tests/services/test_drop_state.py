@@ -65,7 +65,7 @@ def test_requested_dropped_state_is_honored(
     goal = subtree[0]
     preview = preview_drop(store, goal.id, EXTRA)
     assert [c.after["state"] for c in preview.changes] == [EXTRA] * 3
-    assert apply_drop(store, goal.id, goal.version, ctx, state=EXTRA) == preview
+    assert apply_drop(store, goal.id, goal.version, ctx, state=EXTRA)[0] == preview
     assert _states(store, subtree) == [EXTRA] * 3
 
 

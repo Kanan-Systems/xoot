@@ -3,7 +3,7 @@
 from pydantic import BaseModel, ConfigDict
 
 from xoot.models.event.actor_kind import ActorKind
-from xoot.models.session.client import Client
+from xoot.models.event.client import Client
 
 
 class Actor(BaseModel):

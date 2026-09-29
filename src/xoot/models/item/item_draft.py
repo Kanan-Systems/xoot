@@ -1,4 +1,4 @@
-"""Input for capturing a quick note as an unfiled subtask."""
+"""Input for capturing a backlog item."""
 
 from pydantic import BaseModel, ConfigDict
 
@@ -6,7 +6,7 @@ from xoot.models.fields import Body, Title
 
 
 class ItemDraft(BaseModel):
-    """Just a title and an optional body; capture decides everything else."""
+    """A title and a body saying why; capture decides where it sits."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

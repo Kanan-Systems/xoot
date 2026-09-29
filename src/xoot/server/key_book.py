@@ -7,9 +7,7 @@ from xoot.models.workflow.category import Category
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.decision import decision_db
 from xoot.repositories.item import item_db
-from xoot.repositories.session import session_db
 from xoot.services.lookups import active_workflow, require_project
-from xoot.utils.utils import session_key
 
 
 class KeyBook:
@@ -31,7 +29,6 @@ class KeyBook:
         """
         self.conn = conn
         self._items: dict[int, str | None] = {}
-        self._sessions: dict[int, str | None] = {}
         self._decisions: dict[int, str | None] = {}
         self._prefixes: dict[int, str] = {}
         self._workflows: dict[int, WorkflowDefinition] = {}
@@ -52,27 +49,6 @@ class KeyBook:
             item = item_db.get(self.conn, item_id)
             self._items[item_id] = None if item is None else item.key
         return self._items[item_id]
-
-    def session_key(self, session_id: int | None) -> str | None:
-        """
-        Return a session's key.
-
-        Args:
-            - session_id (int | None): the session id.
-
-        Returns:
-            - key (str | None): the key, or None for None or a missing session.
-        """
-        if session_id is None:
-            return None
-        if session_id not in self._sessions:
-            session = session_db.get(self.conn, session_id)
-            self._sessions[session_id] = (
-                None
-                if session is None
-                else session_key(self.prefix(session.project_id), session.number)
-            )
-        return self._sessions[session_id]
 
     def decision_key(self, decision_id: int | None) -> str | None:
         """

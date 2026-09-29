@@ -16,6 +16,7 @@ from xoot.models.event.actor import Actor
 from xoot.models.event.entity_type import EntityType
 from xoot.models.event.redactable_field import RedactableField
 from xoot.models.event.write_context import WriteContext
+from xoot.models.item.bulk_create import BulkCreate
 from xoot.models.item.item import Item
 from xoot.models.item.item_create import ItemCreate
 from xoot.models.item.item_draft import ItemDraft
@@ -23,18 +24,16 @@ from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.item.tree_query import TreeQuery
 from xoot.models.project.project import Project
-from xoot.models.session.session import Session
-from xoot.models.session.session_close import SessionClose
-from xoot.models.session.session_start import SessionStart
 from xoot.models.workflow.workflow_change import WorkflowChange
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.services import (
+    backlog_push_service,
+    backlog_service,
+    bulk_service,
     decision_service,
     item_service,
     project_service,
     redaction_service,
-    session_close_service,
-    session_service,
     subtree_service,
     tree_service,
     workflow_service,
@@ -52,7 +51,7 @@ class Env:
     batch: Item
     subtask: Item
     decision: Decision
-    session: Session
+    backlog: Item
     user: Actor
     ctx: WriteContext
 
@@ -67,21 +66,29 @@ CALLS: dict[str, Call] = {
         s, v, "/new", e.ctx
     ),
     "get_project.project_id": lambda s, e, v: project_service.get_project(s, v),
-    "start_session.project_id": lambda s, e, v: session_service.start_session(
-        s, v, SessionStart(title="t"), e.user
-    ),
-    "get_session.session_id": lambda s, e, v: session_service.get_session(s, v),
-    "preview_close.session_id": lambda s, e, v: session_close_service.preview_close(
-        s, v, SessionClose()
-    ),
-    "close_session.session_id": lambda s, e, v: session_close_service.close_session(
-        s, v, SessionClose(), e.user
-    ),
     "create_item.project_id": lambda s, e, v: item_service.create_item(
         s, v, ItemCreate(kind=ItemKind.GOAL, title="t"), e.ctx
     ),
-    "capture.session_id": lambda s, e, v: item_service.capture(
-        s, v, ItemDraft(title="t"), e.user
+    "capture.project_id": lambda s, e, v: backlog_service.capture(
+        s, v, e.subtask.id, ItemDraft(title="t"), e.ctx
+    ),
+    "capture.found_on_id": lambda s, e, v: backlog_service.capture(
+        s, e.subtask.project_id, v, ItemDraft(title="t"), e.ctx
+    ),
+    "cover.backlog_id": lambda s, e, v: backlog_service.cover(s, v, None, e.ctx),
+    "cover.batch_id": lambda s, e, v: backlog_service.cover(s, e.backlog.id, v, e.ctx),
+    "preview_push.item_id": lambda s, e, v: backlog_push_service.preview_push(s, v),
+    "apply_push.item_id": lambda s, e, v: backlog_push_service.apply_push(
+        s, v, e.ctx, None
+    ),
+    "preview_bulk.project_id": lambda s, e, v: bulk_service.preview_bulk(
+        s, v, BulkCreate.model_validate({"items": [{"kind": "goal", "title": "g"}]})
+    ),
+    "apply_bulk.project_id": lambda s, e, v: bulk_service.apply_bulk(
+        s,
+        v,
+        BulkCreate.model_validate({"items": [{"kind": "goal", "title": "g"}]}),
+        e.ctx,
     ),
     "update_item.item_id": lambda s, e, v: item_service.update_item(
         s, v, 1, ItemUpdate(title="t"), e.ctx
@@ -91,7 +98,7 @@ CALLS: dict[str, Call] = {
     ),
     "get_item.item_id": lambda s, e, v: item_service.get_item(s, v),
     "create_decision.project_id": lambda s, e, v: decision_service.create_decision(
-        s, v, DecisionCreate(title="t"), e.ctx
+        s, v, DecisionCreate(owner_item_id=e.batch.id, title="t"), e.ctx
     ),
     "update_decision.decision_id": lambda s, e, v: decision_service.update_decision(
         s, v, 1, DecisionUpdate(title="t"), e.ctx
@@ -137,12 +144,12 @@ CALLS: dict[str, Call] = {
     ),
 }
 
-# None is a valid new_parent_id: it unfiles a subtask.
+# None is a valid new_parent_id (the project) and batch_id (the item's own).
 CASES = [
     (name, value)
     for name in CALLS
     for value in BAD_VALUES
-    if not (value is None and name.endswith(".new_parent_id"))
+    if not (value is None and name.endswith((".new_parent_id", ".batch_id")))
 ]
 
 
@@ -152,18 +159,19 @@ def fixture_env(
     project: Project,
     ctx: WriteContext,
     make_item: Callable[..., Item],
-    make_session: Callable[..., Session],
+    capture_on: Callable[..., Item],
 ) -> Env:
     """One of everything an entry point can point at, all valid."""
     goal = make_item(project, ItemKind.GOAL)
     batch = make_item(project, ItemKind.BATCH, parent_id=goal.id)
+    subtask = make_item(project, ItemKind.SUBTASK, parent_id=batch.id)
     return Env(
         batch=batch,
-        subtask=make_item(project, ItemKind.SUBTASK, parent_id=batch.id),
+        subtask=subtask,
         decision=decision_service.create_decision(
-            store, project.id, DecisionCreate(title="d"), ctx
+            store, project.id, DecisionCreate(owner_item_id=goal.id, title="d"), ctx
         ),
-        session=make_session(project),
+        backlog=capture_on(subtask),
         user=ctx.actor,
         ctx=ctx,
     )

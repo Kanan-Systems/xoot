@@ -17,9 +17,10 @@ from typing import Self
 from xoot.exceptions.database_access_error import DatabaseAccessError
 from xoot.exceptions.database_busy_error import DatabaseBusyError
 from xoot.exceptions.integrity_violation_error import IntegrityViolationError
+from xoot.exceptions.legacy_database_error import LegacyDatabaseError
 from xoot.exceptions.store_open_error import StoreOpenError
 from xoot.store.connection import connect
-from xoot.store.migrator import migrate
+from xoot.store.migrator import is_legacy, migrate
 from xoot.store.paths import default_db_path, prepare_db_file
 from xoot.store.permissions import check_private_files
 from xoot.store.transaction import read_transaction, write_transaction
@@ -59,9 +60,12 @@ class Store(AbstractContextManager["Store"]):
               is a symlink, owned by another user, or group/other accessible.
             - PragmaCheckError: the connection could not be made safe.
             - StoreOpenError: SQLite could not open or configure the file.
+            - LegacyDatabaseError: the file holds the xoot 0.2 schema; it
+              is left byte-identical.
             - SchemaVersionError: the database is newer than this code.
             - MigrationFailedError: SQLite failed while migrating.
-            - OSError: the directory or file could not be created.
+            - OSError: the directory or file could not be created, or the
+              pre-migration backup could not be written.
         """
         db_path = default_db_path() if path is None else path
         # Checked before creating anything, so nothing is written through a
@@ -69,12 +73,13 @@ class Store(AbstractContextManager["Store"]):
         check_private_files(db_path, must_exist=False)
         prepare_db_file(db_path)
         check_private_files(db_path, must_exist=True)
+        _refuse_legacy(db_path)
         try:
             conn = connect(db_path)
         except sqlite3.Error as exc:
             raise StoreOpenError(db_path, exc) from exc
         try:
-            migrate(conn)
+            migrate(conn, db_path=db_path)
         except BaseException:
             conn.close()
             raise
@@ -169,6 +174,41 @@ class Store(AbstractContextManager["Store"]):
     ) -> None:
         """Close the store when leaving a with-block."""
         self.close()
+
+
+def is_legacy_file(db_path: Path) -> bool:
+    """
+    Tell whether a database file holds the xoot 0.2 schema, without writing.
+
+    connect() switches the journal mode, which rewrites the header of a
+    file not in WAL mode; this plain connection only reads, so the file
+    stays byte-identical.
+
+    Args:
+        - db_path (Path): an existing database file.
+
+    Returns:
+        - legacy (bool): True for a 0.2 database.
+
+    Raises:
+        - StoreOpenError: SQLite could not open or read the file.
+    """
+    try:
+        probe = sqlite3.connect(db_path)
+    except sqlite3.Error as exc:
+        raise StoreOpenError(db_path, exc) from exc
+    try:
+        return is_legacy(probe)
+    except sqlite3.Error as exc:
+        raise StoreOpenError(db_path, exc) from exc
+    finally:
+        probe.close()
+
+
+def _refuse_legacy(db_path: Path) -> None:
+    """Refuse a 0.2 database before any pragma can write to it."""
+    if is_legacy_file(db_path):
+        raise LegacyDatabaseError()
 
 
 @contextmanager

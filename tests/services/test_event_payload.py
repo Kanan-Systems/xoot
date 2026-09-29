@@ -47,9 +47,12 @@ def test_create_event_stores_digest_not_body(
     """A 32768-character body leaves a create event under 1 KB."""
     if entity_type is EntityType.ITEM:
         request = ItemCreate(kind=ItemKind.GOAL, title="big", body=BIG_BODY)
-        entity_id = create_item(store, project.id, request, ctx).id
+        entity_id = create_item(store, project.id, request, ctx)[0].id
     else:
-        decision = DecisionCreate(title="big", body=BIG_BODY)
+        goal, _ = create_item(
+            store, project.id, ItemCreate(kind=ItemKind.GOAL, title="g"), ctx
+        )
+        decision = DecisionCreate(owner_item_id=goal.id, title="big", body=BIG_BODY)
         entity_id = create_decision(store, project.id, decision, ctx).id
     (created,) = _events(store, entity_type, entity_id)
     assert created.action is EventAction.CREATE
@@ -64,10 +67,10 @@ def test_update_events_keep_changed_fields(
     store: Store, project: Project, ctx: WriteContext
 ) -> None:
     """A body update's before holds the original body; title updates omit it."""
-    item = create_item(
+    item, _ = create_item(
         store, project.id, ItemCreate(kind=ItemKind.GOAL, title="t", body=BIG_BODY), ctx
     )
-    item = update_item(store, item.id, 1, ItemUpdate(title="t2"), ctx)
+    item, _ = update_item(store, item.id, 1, ItemUpdate(title="t2"), ctx)
     update_item(store, item.id, 2, ItemUpdate(body="short"), ctx)
     _, title_change, body_change = _events(store, EntityType.ITEM, item.id)
     assert (title_change.before, title_change.after) == (

@@ -48,6 +48,12 @@ nothing.
 Every change needs tests: new behaviour, bug fixes (a regression test) and
 failure paths.
 
+Always run the whole suite, never a subset, before reporting a count or a
+result. Tests share fixtures and spawn server and CLI processes, and a
+partial run once reported a test count that did not match the tests
+actually added (the pytest interleave bug); only the full run's collected
+and passed counts are comparable between changes.
+
 ### Dashboard: schema, types and bundle
 
 The API's JSON Schema, the TypeScript types and the bundle are all
@@ -65,9 +71,19 @@ committed, and each is checked for drift:
 
 ## Migrations are frozen
 
-The schema lives in `src/xoot/store/migrations/`. A migration that has been
-committed is never edited. Every schema change is a new migration file, so
-every existing database upgrades along the same path.
+The schema lives in `src/xoot/store/migrations/`. It starts at the 0.3
+baseline, `0002_goal_baseline.sql`: a fresh database ends at schema version
+2. A database at version 1, or holding the 0.2 `session` table, is refused
+unchanged (xoot 0.2 data is not migrated).
+
+A migration that has been committed is never edited. Every schema change is
+a new migration file (`0003_...`), so every existing database upgrades
+along the same path. Before an existing database takes a pending migration,
+the store copies it with SQLite's backup API to `xoot.db.pre-v<target>`
+(mode 0600; only the newest copy is kept). Foreign keys stay on during
+migrations; a migration that rebuilds a table must leave
+`PRAGMA foreign_key_check` clean, which the migrator verifies before every
+commit.
 
 ## Release checklist
 
@@ -76,6 +92,10 @@ Tags and commits are the maintainer's.
 1. Bump the version in `pyproject.toml` and in
    `plugin/.claude-plugin/plugin.json`; they must match (a test checks).
 2. `uv lock`, so the lockfile records the new version.
+   The build backend is pinned below a ceiling (`uv_build>=0.9.8,<0.10.0`
+   in `[build-system]`). Before a release, check that the ceiling still
+   admits the uv release CI and `install.sh` use; raising it is its own
+   change, with the gates run on the new backend.
 3. Run the gates, then commit.
 4. Tag the commit `vX.Y.Z`, matching the version.
 

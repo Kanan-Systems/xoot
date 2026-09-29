@@ -4,7 +4,6 @@ import argparse
 
 from xoot.cli import exit_codes
 from xoot.cli.console import Console
-from xoot.dashboard.runner import PortUnavailableError, bind, serve
 from xoot.store.store import Store
 
 
@@ -24,6 +23,11 @@ def run_dashboard(args: argparse.Namespace, store: Store, console: Console) -> i
         - code (int): OK once stopped; UNAVAILABLE when the port cannot be
           bound.
     """
+    # Imported here only: starlette and uvicorn load for this command alone,
+    # so every other command starts without the web stack.
+    # pylint: disable-next=import-outside-toplevel
+    from xoot.dashboard.runner import PortUnavailableError, bind, serve
+
     try:
         sock = bind(args.port)
     except PortUnavailableError as exc:

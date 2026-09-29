@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "xoot",
-      "description": "The xoot MCP server (the installed xoot-mcp) and the xoot-session skill.",
+      "description": "The xoot MCP server (the installed xoot-mcp) and the xoot-workflow skill.",
       "author": {
         "name": "Kanan Systems"
       },

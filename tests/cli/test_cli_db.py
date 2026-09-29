@@ -27,7 +27,7 @@ def test_stats_match_row_counts(
     assert stats["rows"]["item"] == 3
     assert stats["page_count"] > stats["freelist_count"] >= 0
     text = xoot("db", "stats").out
-    assert "item              3" in text
+    assert "item           3" in text
 
 
 def test_stats_show_the_schema_version(xoot: Any) -> None:

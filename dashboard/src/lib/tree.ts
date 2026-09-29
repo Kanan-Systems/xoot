@@ -1,57 +1,59 @@
-// Pure tree logic: done/dropped collapse, focus mode, the collapsible
-// unfiled group and graph building.
+// Pure tree logic: the project root, done/dropped collapse, the focus root,
+// what open backlog blocks, and graph building.
 // Tree entries arrive in pre-order, so a parent is always seen before its
 // children.
-import type { Category, ItemSummary, TreeEntry } from '../api/types.gen.ts';
+import type { BlockedEntry, ItemSummary, TreeEntry } from '../api/types.gen.ts';
 
-export const UNFILED_ID = 'unfiled';
-export const ROOT_ID = '';
+// Keys never contain '@', so the project node cannot collide with an item.
+export const PROJECT_ID = '@project';
 
-const TERMINAL: ReadonlySet<Category> = new Set<Category>(['done', 'dropped']);
+export type Closed = 'done' | 'dropped';
+export type HiddenCounts = Readonly<Partial<Record<Closed, number>>>;
 
-export function isTerminal(item: ItemSummary): boolean {
-  return item.category !== null && TERMINAL.has(item.category);
+export function closedCategory(item: ItemSummary): Closed | null {
+  return item.category === 'done' || item.category === 'dropped' ? item.category : null;
 }
 
-// Where an entry hangs: its parent, the unfiled group, or the top level.
+// Where an entry hangs: its parent, or the project for goals and
+// project-level backlog.
 export function parentId(entry: TreeEntry): string {
-  if (entry.item.parent !== null) {
-    return entry.item.parent;
-  }
-  return entry.unfiled ? UNFILED_ID : ROOT_ID;
+  return entry.item.parent ?? PROJECT_ID;
 }
 
 export interface Collapsed {
   visible: TreeEntry[];
-  // Per parent id: how many done or dropped direct children are hidden.
-  hiddenDone: ReadonlyMap<string, number>;
+  // Per parent id: the done and dropped direct children that are hidden.
+  hidden: ReadonlyMap<string, HiddenCounts>;
 }
 
-// keep names an entry that stays visible even when done: the focus root.
+// keep names an entry that stays visible even when closed: the root.
 export function collapseDone(
   entries: readonly TreeEntry[],
   showDone: boolean,
   keep: string | null = null,
 ): Collapsed {
-  const hidden = new Set<string>();
-  const hiddenDone = new Map<string, number>();
+  const gone = new Set<string>();
+  const hidden = new Map<string, Partial<Record<Closed, number>>>();
   const visible: TreeEntry[] = [];
   for (const entry of entries) {
     const parent = parentId(entry);
-    if (hidden.has(parent)) {
-      hidden.add(entry.item.key);
-    } else if (!showDone && entry.item.key !== keep && isTerminal(entry.item)) {
-      hidden.add(entry.item.key);
-      hiddenDone.set(parent, (hiddenDone.get(parent) ?? 0) + 1);
+    const closed = closedCategory(entry.item);
+    if (gone.has(parent)) {
+      gone.add(entry.item.key);
+    } else if (!showDone && entry.item.key !== keep && closed !== null) {
+      gone.add(entry.item.key);
+      const counts = hidden.get(parent) ?? {};
+      counts[closed] = (counts[closed] ?? 0) + 1;
+      hidden.set(parent, counts);
     } else {
       visible.push(entry);
     }
   }
-  return { visible, hiddenDone };
+  return { visible, hidden };
 }
 
-// The focus root and everything below it; empty when the key is absent.
-export function focusSubtree(entries: readonly TreeEntry[], key: string): TreeEntry[] {
+// The root and everything below it; empty when the key is absent.
+export function subtree(entries: readonly TreeEntry[], key: string): TreeEntry[] {
   const inside = new Set<string>([key]);
   const result: TreeEntry[] = [];
   for (const entry of entries) {
@@ -63,24 +65,72 @@ export function focusSubtree(entries: readonly TreeEntry[], key: string): TreeEn
   return result;
 }
 
+export interface Blocked {
+  count: number;
+  // What every one of is closed: a batch's subtasks, a goal's batches.
+  children: 'subtasks' | 'batches';
+  // The open backlog items sitting on the node, when the tree has them.
+  backlog: readonly string[];
+}
+
+// Open backlog keys per holder, from the entries the tree returned.
+export function openBacklog(entries: readonly TreeEntry[]): Map<string, string[]> {
+  const byHolder = new Map<string, string[]>();
+  for (const { item } of entries) {
+    if (item.kind === 'backlog' && closedCategory(item) === null) {
+      const holder = item.parent ?? PROJECT_ID;
+      byHolder.set(holder, [...(byHolder.get(holder) ?? []), item.key]);
+    }
+  }
+  return byHolder;
+}
+
+export function blockedOf(
+  item: ItemSummary,
+  counts: ReadonlyMap<string, number>,
+  backlog: ReadonlyMap<string, readonly string[]>,
+): Blocked | null {
+  const count = counts.get(item.key);
+  if (count === undefined || (item.kind !== 'goal' && item.kind !== 'batch')) {
+    return null;
+  }
+  return {
+    count,
+    children: item.kind === 'goal' ? 'batches' : 'subtasks',
+    backlog: backlog.get(item.key) ?? [],
+  };
+}
+
+export function blockedLine(blocked: Blocked): string {
+  return `all ${blocked.children} done · ${String(blocked.count)} backlog open`;
+}
+
+// Read-only: the dashboard never writes, so it says what to ask for.
+export function blockedHint(key: string, blocked: Blocked): string {
+  const target = blocked.backlog.length > 0 ? blocked.backlog.join(', ') : key;
+  return `Ask Claude to cover or push ${target}`;
+}
+
+export function blockedCounts(blocked: readonly BlockedEntry[]): Map<string, number> {
+  return new Map(blocked.map((entry) => [entry.key, entry.open_backlog]));
+}
+
 export type ItemNodeData = {
   item: ItemSummary;
-  hiddenDone: number;
+  hidden: HiddenCounts;
   decisions: number;
-  highlighted: boolean;
-  dimmed: boolean;
+  blocked: Blocked | null;
 };
 
-export type UnfiledNodeData = {
-  count: number;
-  hiddenDone: number;
-  dimmed: boolean;
-  open: boolean;
+export type ProjectNodeData = {
+  name: string;
+  prefix: string;
+  hidden: HiddenCounts;
 };
 
 export type GraphNode =
   | { id: string; type: 'item'; data: ItemNodeData }
-  | { id: string; type: 'unfiled'; data: UnfiledNodeData };
+  | { id: string; type: 'project'; data: ProjectNodeData };
 
 export interface GraphEdge {
   id: string;
@@ -91,101 +141,64 @@ export interface GraphEdge {
 export interface Graph {
   nodes: GraphNode[];
   edges: GraphEdge[];
-  hiddenTopLevel: number;
-  focusMissing: boolean;
+  rootMissing: boolean;
 }
 
 export interface GraphOptions {
   showDone: boolean;
-  focusKey: string | null;
+  // A goal or batch as the root; null for the project-root tree.
+  rootKey: string | null;
+  project: { name: string; prefix: string };
   decisionCounts: ReadonlyMap<string, number>;
-  highlight: ReadonlySet<string> | null;
-  // Unfiled subtasks show as nodes only when their group is expanded.
-  unfiledOpen: boolean;
+  blocked: ReadonlyMap<string, number>;
 }
 
 export function buildGraph(
   entries: readonly TreeEntry[],
   options: GraphOptions,
 ): Graph {
-  const scoped =
-    options.focusKey === null ? entries : focusSubtree(entries, options.focusKey);
-  const focusRoot = options.focusKey;
-  const { visible, hiddenDone } = collapseDone(scoped, options.showDone, focusRoot);
+  const { rootKey } = options;
+  const scoped = rootKey === null ? entries : subtree(entries, rootKey);
+  const { visible, hidden } = collapseDone(scoped, options.showDone, rootKey);
+  const backlog = openBacklog(scoped);
   const shown = new Set(visible.map((entry) => entry.item.key));
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
-  let unfiled = 0;
+  if (rootKey === null) {
+    shown.add(PROJECT_ID);
+    nodes.push({
+      id: PROJECT_ID,
+      type: 'project',
+      data: { ...options.project, hidden: hidden.get(PROJECT_ID) ?? {} },
+    });
+  }
   for (const entry of visible) {
-    const key = entry.item.key;
-    const parent = key === focusRoot ? ROOT_ID : parentId(entry);
-    if (parent === UNFILED_ID && !options.unfiledOpen) {
-      unfiled += 1;
-      continue;
-    }
-    const state = overlay(key, options.highlight);
+    const { key } = entry.item;
     nodes.push({
       id: key,
       type: 'item',
       data: {
         item: entry.item,
-        hiddenDone: hiddenDone.get(key) ?? 0,
+        hidden: hidden.get(key) ?? {},
         decisions: options.decisionCounts.get(key) ?? 0,
-        ...state,
+        blocked: blockedOf(entry.item, options.blocked, backlog),
       },
     });
-    if (parent === UNFILED_ID) {
-      unfiled += 1;
-    }
-    if (parent === UNFILED_ID || shown.has(parent)) {
+    const parent = parentId(entry);
+    if (key !== rootKey && shown.has(parent)) {
       edges.push({ id: `${parent}->${key}`, source: parent, target: key });
     }
   }
-  const unfiledHidden = hiddenDone.get(UNFILED_ID) ?? 0;
-  if (unfiled > 0 || unfiledHidden > 0) {
-    nodes.push({
-      id: UNFILED_ID,
-      type: 'unfiled',
-      data: {
-        count: unfiled,
-        hiddenDone: unfiledHidden,
-        dimmed: options.highlight !== null,
-        open: options.unfiledOpen,
-      },
-    });
-  }
-  return {
-    nodes,
-    edges,
-    hiddenTopLevel: hiddenDone.get(ROOT_ID) ?? 0,
-    focusMissing: focusRoot !== null && scoped.length === 0,
-  };
+  return { nodes, edges, rootMissing: rootKey !== null && scoped.length === 0 };
 }
 
-export interface OverlayState {
-  highlighted: boolean;
-  dimmed: boolean;
-}
-
-// With a session selected, its items are highlighted and the rest dimmed.
-export function overlay(
-  key: string,
-  highlight: ReadonlySet<string> | null,
-): OverlayState {
-  if (highlight === null) {
-    return { highlighted: false, dimmed: false };
-  }
-  const linked = highlight.has(key);
-  return { highlighted: linked, dimmed: !linked };
-}
-
-export function countByScope(
-  decisions: readonly { scope: string | null }[],
+export function countByOwner(
+  decisions: readonly { owner: string | null }[],
 ): Map<string, number> {
   const counts = new Map<string, number>();
   for (const decision of decisions) {
-    if (decision.scope !== null) {
-      counts.set(decision.scope, (counts.get(decision.scope) ?? 0) + 1);
+    if (decision.owner !== null) {
+      counts.set(decision.owner, (counts.get(decision.owner) ?? 0) + 1);
     }
   }
   return counts;

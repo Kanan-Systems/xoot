@@ -1,12 +1,8 @@
-// The legend toggle: what the kind icons and the seven category colour,
-// icon and label pairs mean, what unfiled means, and what a session is.
+// The legend toggle: the four kinds (icon and word), the six category
+// colour, icon and label triples, and what blocked and completed mean.
 import { useId, useState } from 'react';
 
-import type { Category, ItemKind } from '../api/types.gen.ts';
-import { CATEGORY, categoryClass, KIND } from '../lib/display.ts';
-
-const KINDS: readonly ItemKind[] = ['goal', 'batch', 'subtask'];
-const CATEGORIES = Object.keys(CATEGORY) as Category[];
+import { CATEGORIES, CATEGORY, categoryClass, KIND, KINDS } from '../lib/display.ts';
 
 export function Legend() {
   const [open, setOpen] = useState(false);
@@ -26,10 +22,16 @@ export function Legend() {
       {open && (
         <section id={panel} className="legend-panel" aria-label="Legend">
           <h2>Kinds</h2>
-          <p className="muted">A goal holds batches; a batch holds subtasks.</p>
+          <p className="muted">
+            A goal holds batches; a batch holds subtasks. Backlog is open work found
+            along the way, on a batch, a goal or the project.
+          </p>
           <ul className="list">
             {KINDS.map((kind) => (
-              <li key={kind}>
+              <li
+                key={kind}
+                className={kind === 'backlog' ? 'legend-backlog' : undefined}
+              >
                 <span aria-hidden="true">{KIND[kind].icon}</span> {KIND[kind].label}
               </li>
             ))}
@@ -45,15 +47,11 @@ export function Legend() {
               </li>
             ))}
           </ul>
-          <h2>Unfiled</h2>
+          <h2>Completion</h2>
           <p className="muted">
-            Unfiled: a subtask not yet placed under a batch — usually a side item
-            captured during a session, waiting for triage.
-          </p>
-          <h2>Sessions</h2>
-          <p className="muted">
-            A session is one working sitting. It links every item it focused on, touched
-            or captured, and its close gives each open one a disposition.
+            Goals and batches complete on their own when every child is done or dropped
+            and no backlog is open on them. Open backlog blocks completion: such a node
+            says how much is open.
           </p>
         </section>
       )}

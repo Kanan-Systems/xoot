@@ -18,20 +18,6 @@
   margin: 0;
 }
 
-.modes {
-  display: flex;
-  gap: 0.75rem;
-  border: none;
-  margin: 0;
-  padding: 0;
-}
-
-.modes legend {
-  float: left;
-  margin-right: 0.5rem;
-  color: var(--muted);
-}
-
 .focus-bar {
   margin: 0;
   padding: 0.3rem 0.75rem;
@@ -64,6 +50,39 @@
   border-width: 2px;
 }
 
+/* Backlog: its own icon and word on the card, and a dashed border. */
+.node-backlog {
+  border: 1px dashed var(--backlog);
+}
+
+.node-backlog .node-kind {
+  color: var(--backlog);
+}
+
+.node-project {
+  border-width: 2px;
+  border-style: double;
+}
+
+.node-blocked-line {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--warn);
+}
+
+/* Two lines at most; the full hint is its title on hover. */
+.node-hint {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.7rem;
+  font-style: italic;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
 .node-card {
   display: flex;
   flex-direction: column;
@@ -71,26 +90,11 @@
   padding: 0.4rem 0.55rem;
 }
 
-.node-group {
-  padding: 0.4rem 0.55rem;
-  border-style: dashed;
-}
-
-.node-head {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-}
-
 .node-kind-label {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
-}
-
-.node-key {
-  font-weight: 600;
 }
 
 .node-meta {
@@ -123,14 +127,6 @@
   line-clamp: 2;
 }
 
-.node-highlighted {
-  border: 2px solid var(--accent);
-}
-
-.node-dimmed {
-  opacity: 0.35;
-}
-
 .badge {
   font-size: 0.75rem;
   border: 1px solid var(--line);
@@ -145,8 +141,47 @@
 }
 
 button.badge {
-  margin: 0 0 0.35rem 0.55rem;
   cursor: pointer;
+}
+
+.node-badges {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0 0 0.35rem 0.55rem;
+}
+
+.badge-done {
+  color: var(--done);
+}
+
+.badge-dropped {
+  color: var(--dropped);
+}
+
+/* React Flow's zoom controls ship light-only colours; theme tokens make
+   them follow the page in dark mode too. */
+.flow-controls {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+.flow-controls .react-flow__controls-button {
+  background: var(--panel);
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+}
+
+.flow-controls .react-flow__controls-button:hover {
+  background: var(--control-hover);
+}
+
+.flow-controls .react-flow__controls-button svg {
+  fill: currentcolor;
+}
+
+.react-flow__background {
+  background: var(--bg);
 }
 
 .cat {
@@ -171,9 +206,6 @@ button.badge {
 }
 .cat-dropped {
   color: var(--dropped);
-}
-.cat-backlogged {
-  color: var(--backlogged);
 }
 .cat-unknown {
   color: var(--muted);

@@ -7,7 +7,8 @@ class Category(StrEnum):
     """
     The fixed set of categories. Project workflows name their own states,
     but every state belongs to exactly one of these, and domain rules
-    (backlogs, session close, tree filtering) reason only in categories.
+    (completion, backlog counts, tree filtering) reason only in categories.
+    Backlog is an item kind, not a category.
     """
 
     OPEN = "open"
@@ -16,7 +17,6 @@ class Category(StrEnum):
     AWAITING_INPUT = "awaiting_input"
     DONE = "done"
     DROPPED = "dropped"
-    BACKLOGGED = "backlogged"
 
 
 TERMINAL_CATEGORIES = frozenset({Category.DONE, Category.DROPPED})

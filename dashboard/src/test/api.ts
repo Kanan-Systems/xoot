@@ -1,16 +1,24 @@
 // A fake /api/v1 for component tests: responses keyed by path (without the
-// query string), served through a stubbed fetch. Unknown paths are a 404.
+// query string, percent-decoded as the server decodes it), served through
+// a stubbed fetch. Unknown paths are a 404.
 import { vi } from 'vitest';
 
 import type {
-  BacklogsView,
+  BacklogRow,
+  BacklogView,
   DecisionsView,
   ItemView,
-  SessionView,
-  SessionsView,
   TreeView,
 } from '../api/types.gen.ts';
-import { item, sampleTree } from './fixtures.ts';
+import {
+  B1,
+  B1_BACKLOG,
+  G1,
+  G1_BACKLOG,
+  item,
+  P_BACKLOG,
+  sampleTree,
+} from './fixtures.ts';
 
 export type Routes = Record<string, unknown>;
 
@@ -32,7 +40,7 @@ export function urlOf(input: RequestInfo | URL): string {
 export function mockApi(routes: Routes) {
   const fetchMock = vi.fn((input: RequestInfo | URL) => {
     const url = new URL(urlOf(input), 'http://t');
-    const path = url.pathname.replace(/^\/api\/v1/, '');
+    const path = decodeURIComponent(url.pathname.replace(/^\/api\/v1/, ''));
     const route = routes[path];
     if (route === undefined) {
       return Promise.resolve(json(404, { error: 'NotFoundError', message: path }));
@@ -46,146 +54,109 @@ export function mockApi(routes: Routes) {
 }
 
 export function treeView(): TreeView {
-  return { project: 'x', nodes: sampleTree(), truncated: false };
+  return {
+    project: 'x',
+    nodes: sampleTree(),
+    truncated: false,
+    blocked: [{ key: B1, open_backlog: 1 }],
+  };
 }
 
 export function itemView(key: string): ItemView {
-  const summary = item(key, 'batch', 'x-1');
+  const found = sampleTree().find((node) => node.item.key === key)?.item;
+  const summary = found ?? item(key, 'batch', G1);
   return {
     item: {
       ...summary,
       body: `body of ${key}`,
       awaiting_decision: null,
-      unfiled: false,
+      found_on: null,
+      covered_by: null,
+      origin: null,
+      aliases: [],
       created_at: '2026-09-28T00:00:00.000000Z',
       updated_at: '2026-09-28T00:00:00.000000Z',
     },
     children: { total: 0, by_category: {}, items: [], truncated: false },
     events: [],
-    sessions: [],
     decisions: [],
   };
 }
 
-const SESSION_BASE = {
-  client: 'code',
-  started_at: '2026-09-28T10:00:00.000000Z',
-} as const;
+function row(
+  key: string,
+  level: BacklogRow['level'],
+  parent: string | null,
+): BacklogRow {
+  return {
+    ...item(key, 'backlog', parent),
+    level,
+    found_on: parent,
+    created_at: '2026-09-28T09:30:00.000000Z',
+    why: `why ${key}`,
+  };
+}
 
-export function sessionsView(): SessionsView {
+// As the API orders it: project level first, then by key.
+export function backlogView(): BacklogView {
   return {
     project: 'x',
     truncated: false,
-    sessions: [
-      {
-        ...SESSION_BASE,
-        key: 'x-S2',
-        title: 'open one',
-        status: 'open',
-        closed_at: null,
-        linked_items: 2,
-      },
-      {
-        ...SESSION_BASE,
-        key: 'x-S1',
-        title: 'closed one',
-        status: 'closed',
-        closed_at: '2026-09-28T11:00:00.000000Z',
-        linked_items: 5,
-      },
+    items: [
+      row(P_BACKLOG, 'project', null),
+      row(G1_BACKLOG, 'goal', G1),
+      row(B1_BACKLOG, 'batch', B1),
     ],
-  };
-}
-
-export function sessionView(): SessionView {
-  return {
-    session: {
-      ...SESSION_BASE,
-      key: 'x-S1',
-      title: 'closed one',
-      status: 'closed',
-      closed_at: '2026-09-28T11:00:00.000000Z',
-    },
-    summary: 'wrapped up',
-    items: ['x-2', 'x-4', 'x-7'],
-    linked: [
-      { item: item('x-2', 'batch', 'x-1'), disposition: 'carry_over', captured: false },
-      {
-        item: item('x-4', 'subtask', 'x-2', 'done'),
-        disposition: null,
-        captured: false,
-      },
-      {
-        item: item('x-7', 'subtask', null, 'backlogged'),
-        disposition: 'session_backlog',
-        captured: true,
-      },
-    ],
-  };
-}
-
-export function backlogsView(): BacklogsView {
-  const row = (key: string, holder: string | null) => ({
-    ...item(key, 'subtask', null, 'backlogged'),
-    backlog_session: holder,
-    created_at: '2026-09-28T09:30:00.000000Z',
-  });
-  return {
-    project: 'x',
-    sessions: [
-      {
-        session: {
-          ...SESSION_BASE,
-          key: 'x-S2',
-          title: 'open one',
-          status: 'open',
-          closed_at: null,
-        },
-        items: [row('x-9', 'x-S2')],
-        truncated: false,
-      },
-    ],
-    project_backlog: [row('x-10', null)],
-    project_backlog_truncated: false,
-    unfiled: [row('x-9', 'x-S2'), row('x-7', null)],
-    unfiled_truncated: false,
   };
 }
 
 export function decisionsView(): DecisionsView {
-  const base = { scope: null, supersedes: null, updated_at: 't', version: 1 };
+  const base = { supersedes: null, updated_at: 't', version: 1 };
   return {
     project: 'x',
     truncated: false,
     decisions: [
       {
         ...base,
-        key: 'x-D2',
+        key: 'goal-1/batch-1/decision-2',
         title: 'new rule',
         status: 'locked',
-        supersedes: 'x-D1',
-        scope: 'x-1',
+        supersedes: 'goal-1/decision-1',
+        owner: B1,
       },
-      { ...base, key: 'x-D1', title: 'old rule', status: 'superseded' },
-      { ...base, key: 'x-D3', title: 'later', status: 'deferred' },
+      {
+        ...base,
+        key: 'goal-1/decision-1',
+        title: 'old rule',
+        status: 'superseded',
+        owner: G1,
+      },
+      {
+        ...base,
+        key: 'goal-2/batch-1/subtask-1/decision-1',
+        title: 'later',
+        status: 'deferred',
+        owner: 'goal-2/batch-1/subtask-1',
+      },
     ],
   };
 }
 
 // Every endpoint the project views read, for prefix x.
 export function projectRoutes(overrides: Routes = {}): Routes {
+  const items = Object.fromEntries(
+    sampleTree().map((node) => [
+      `/projects/x/items/${node.item.key}`,
+      itemView(node.item.key),
+    ]),
+  );
   return {
-    '/projects': { projects: [{ key_prefix: 'x', name: 'x', aliases: [] }] },
+    '/projects': { projects: [{ key_prefix: 'x', name: 'Xproj', aliases: [] }] },
     '/projects/x/changes': { latest_event_id: 1 },
     '/projects/x/tree': treeView(),
     '/projects/x/decisions': decisionsView(),
-    '/projects/x/sessions': sessionsView(),
-    '/projects/x/sessions/x-S1': sessionView(),
-    '/projects/x/backlogs': backlogsView(),
-    '/items/x-1': itemView('x-1'),
-    '/items/x-2': itemView('x-2'),
-    '/items/x-3': itemView('x-3'),
-    '/items/x-9': itemView('x-9'),
+    '/projects/x/backlog': backlogView(),
+    ...items,
     ...overrides,
   };
 }

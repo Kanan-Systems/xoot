@@ -16,7 +16,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from pydantic.json_schema import models_json_schema
 
-from xoot.dashboard.schemas.backlogs_view import BacklogsView
+from xoot.dashboard.schemas.backlog_view import BacklogView
 from xoot.dashboard.schemas.brief_view import BriefView
 from xoot.dashboard.schemas.changes_view import ChangesView
 from xoot.dashboard.schemas.decision_view import DecisionView
@@ -25,17 +25,14 @@ from xoot.dashboard.schemas.error_output import ErrorOutput
 from xoot.dashboard.schemas.item_view import ItemView
 from xoot.dashboard.schemas.meta_output import MetaOutput
 from xoot.dashboard.schemas.projects_output import ProjectsOutput
-from xoot.dashboard.schemas.session_view import SessionView
-from xoot.dashboard.schemas.sessions_view import SessionsView
 from xoot.dashboard.schemas.tree_view import TreeView
 
 # Only meaningful in a source checkout: <repo>/src/xoot/dashboard/ -> <repo>.
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[3] / "dashboard/src/api/schema.json"
 
 RESPONSES: tuple[type[BaseModel], ...] = (
-    BacklogsView, BriefView, ChangesView, DecisionView, DecisionsView,
-    ErrorOutput, ItemView, MetaOutput, ProjectsOutput, SessionView,
-    SessionsView, TreeView,
+    BacklogView, BriefView, ChangesView, DecisionView, DecisionsView,
+    ErrorOutput, ItemView, MetaOutput, ProjectsOutput, TreeView,
 )  # fmt: skip
 
 

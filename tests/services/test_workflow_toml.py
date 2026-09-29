@@ -29,7 +29,6 @@ CUSTOM_STATES = (
     ("asked", Category.AWAITING_INPUT),
     ("shipped", Category.DONE),
     ("abandoned", Category.DROPPED),
-    ("later", Category.BACKLOGGED),
 )
 
 
@@ -38,17 +37,27 @@ def custom_definition() -> WorkflowDefinition:
     states = tuple(StateSpec(name=n, category=c) for n, c in CUSTOM_STATES)
     defaults = {
         Category.OPEN: "todo",
-        Category.BACKLOGGED: "later",
+        Category.DONE: "shipped",
         Category.DROPPED: "abandoned",
     }
     restricted = KindWorkflow(
         states=states,
         defaults=defaults,
-        transitions={"todo": ("doing", "abandoned"), "doing": ("review",), "later": ()},
+        transitions={
+            "todo": ("doing", "abandoned"),
+            "doing": ("review",),
+            "shipped": (),
+        },
     )
     free = KindWorkflow(states=states, defaults=defaults)
+    backlog = WorkflowDefinition.default().for_kind(ItemKind.BACKLOG)
     return WorkflowDefinition(
-        kinds={ItemKind.GOAL: restricted, ItemKind.BATCH: free, ItemKind.SUBTASK: free}
+        kinds={
+            ItemKind.GOAL: restricted,
+            ItemKind.BATCH: free,
+            ItemKind.SUBTASK: free,
+            ItemKind.BACKLOG: backlog,
+        }
     )
 
 
@@ -69,7 +78,7 @@ def test_structure_matches_the_format() -> None:
     assert set(document) == {"kinds"}
     assert goal["states"][0] == {"name": "todo", "category": "open"}
     assert goal["defaults"]["open"] == "todo"
-    assert goal["transitions"]["later"] == []
+    assert goal["transitions"]["shipped"] == []
     assert "transitions" not in document["kinds"]["batch"]
 
 
@@ -114,3 +123,27 @@ def test_file_limits(tmp_path: Path) -> None:
 def test_basic_strings_parse_back(value: str) -> None:
     """Quotes, backslashes and control characters survive a TOML parse."""
     assert tomllib.loads(f"v = {basic_string(value)}")["v"] == value
+
+
+@pytest.mark.parametrize(
+    "legacy",
+    [
+        '[kinds.goal]\n[[kinds.goal.states]]\nname = "later"\n'
+        'category = "backlogged"\n',
+        '[kinds.goal.defaults]\nopen = "open"\nbacklogged = "later"\n',
+    ],
+)
+def test_backlogged_files_are_refused_with_a_clear_message(legacy: str) -> None:
+    """A 0.2 workflow file says why it no longer loads."""
+    with pytest.raises(WorkflowFileError, match="removed in 0.3"):
+        load_workflow(legacy.encode())
+
+
+def test_old_export_without_backlog_kind_is_refused() -> None:
+    """A definition missing the backlog kind fails validation."""
+    kinds = WorkflowDefinition.default().model_dump(mode="json")["kinds"]
+    del kinds["backlog"]
+    text = dump_workflow(WorkflowDefinition.default())
+    assert "[kinds.backlog]" in text
+    with pytest.raises(ValidationError, match="backlog"):
+        WorkflowDefinition.model_validate({"kinds": kinds})

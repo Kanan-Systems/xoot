@@ -9,7 +9,7 @@ from xoot.exceptions.not_found_error import NotFoundError
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
-from xoot.services.lookups import active_workflow, require_item, require_session
+from xoot.services.lookups import active_workflow, require_decision, require_item
 from xoot.store.store import Store
 
 
@@ -18,8 +18,8 @@ def test_missing_rows_raise_not_found(store: Store) -> None:
     with store.read() as conn:
         with pytest.raises(NotFoundError, match="item 7"):
             require_item(conn, 7)
-        with pytest.raises(NotFoundError, match="session 8"):
-            require_session(conn, 8)
+        with pytest.raises(NotFoundError, match="decision 8"):
+            require_decision(conn, 8)
 
 
 def test_project_filter_rejects_other_projects(
@@ -32,7 +32,7 @@ def test_project_filter_rejects_other_projects(
     item = make_item(project, ItemKind.GOAL)
     with store.read() as conn:
         assert require_item(conn, item.id, project.id) == item
-        with pytest.raises(CrossProjectError, match="xoot-1"):
+        with pytest.raises(CrossProjectError, match="goal-1"):
             require_item(conn, item.id, other_project.id)
 
 

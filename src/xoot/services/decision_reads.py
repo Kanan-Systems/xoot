@@ -1,6 +1,6 @@
 """
 Decision reads for views: one decision with its body, and the decisions
-scoped to an item.
+made on an item.
 
 Functions take a connection inside the caller's read transaction.
 """
@@ -13,13 +13,14 @@ from xoot.repositories.decision import decision_db
 from xoot.services import key_resolver
 
 
-def decision_detail(conn: sqlite3.Connection, key: str) -> Decision:
+def decision_detail(conn: sqlite3.Connection, project_id: int, key: str) -> Decision:
     """
-    Fetch one decision, body included, by its public key.
+    Fetch one decision, body included, by its key within a project.
 
     Args:
         - conn (sqlite3.Connection): a connection inside a read transaction.
-        - key (str): the decision key as the caller sent it.
+        - project_id (int): the project.
+        - key (str): the unqualified decision key as the caller sent it.
 
     Returns:
         - decision (Decision): the decision with its body.
@@ -27,21 +28,19 @@ def decision_detail(conn: sqlite3.Connection, key: str) -> Decision:
     Raises:
         - NotFoundError: the key is malformed or names no decision.
     """
-    return key_resolver.decision_by_key(conn, key)
+    return key_resolver.decision_by_key(conn, project_id, key)
 
 
-def scoped_decisions(
-    conn: sqlite3.Connection, item: Item, limit: int
-) -> list[Decision]:
+def owned_decisions(conn: sqlite3.Connection, item: Item, limit: int) -> list[Decision]:
     """
-    List the decisions whose scope is an item, newest first.
+    List the decisions made on an item, newest first.
 
     Args:
         - conn (sqlite3.Connection): a connection inside a read transaction.
-        - item (Item): the scope item.
+        - item (Item): the owner item.
         - limit (int): the most decisions to return.
 
     Returns:
         - decisions (list[Decision]): up to limit decisions.
     """
-    return decision_db.list_for_scope(conn, item.project_id, item.id, limit)
+    return decision_db.list_for_owner(conn, item.id, limit)

@@ -12,7 +12,6 @@ from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
-from xoot.models.session.session import Session
 from xoot.services.confirm_service import issue_token
 from xoot.services.redaction_service import redact_field
 from xoot.store.store import Store
@@ -30,13 +29,13 @@ def test_redaction_deletes_every_token(
     project: Project,
     ctx: WriteContext,
     make_item: Callable[..., Item],
-    make_session: Callable[..., Session],
+    other_project: Project,
 ) -> None:
-    """Unused tokens of several sessions and tools are all gone afterwards."""
+    """Unused tokens of several projects and tools are all gone afterwards."""
     item = make_item(project, ItemKind.GOAL, title="short secret")
-    for tool in ("session_close", "items_create_bulk"):
-        for _ in range(2):
-            issue_token(store, make_session(project).id, tool, DIGEST, DIGEST)
+    for tool in ("backlog_push", "items_create_bulk"):
+        for owner in (project, other_project):
+            issue_token(store, owner.id, tool, DIGEST, DIGEST)
     assert _tokens(store) == 4
     redact_field(store, "item", item.id, "title", ctx.actor)
     assert _tokens(store) == 0
@@ -47,11 +46,10 @@ def test_refused_redaction_keeps_the_tokens(
     project: Project,
     ctx: WriteContext,
     make_item: Callable[..., Item],
-    make_session: Callable[..., Session],
 ) -> None:
     """The delete shares the redaction's transaction: a refusal rolls it back."""
     item = make_item(project, ItemKind.GOAL)
-    issue_token(store, make_session(project).id, "session_close", DIGEST, DIGEST)
+    issue_token(store, project.id, "backlog_push", DIGEST, DIGEST)
     with pytest.raises(RedactionError):
         redact_field(store, "item", item.id, "body", ctx.actor)
     assert _tokens(store) == 1

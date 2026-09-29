@@ -2,7 +2,7 @@
 The bounded tree query.
 
 Walks the hierarchy breadth-first so a small item budget shows every goal
-before any subtask, then returns the nodes in pre-order for display.
+(and the project backlog) before any subtask, then returns the nodes in pre-order for display.
 """
 
 import sqlite3
@@ -128,6 +128,6 @@ def _shown(definition: WorkflowDefinition, query: TreeQuery, item: Item) -> bool
 def _pre_order(
     item: Item, depth: int, children: dict[int, list[Item]], nodes: list[TreeNode]
 ) -> None:
-    nodes.append(TreeNode(item=item, depth=depth, unfiled=item.unfiled))
+    nodes.append(TreeNode(item=item, depth=depth))
     for child in children.get(item.id, []):
         _pre_order(child, depth + 1, children, nodes)

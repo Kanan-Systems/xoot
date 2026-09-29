@@ -11,12 +11,12 @@ from xoot.models.decision.decision_create import DecisionCreate
 from xoot.models.decision.decision_update import DecisionUpdate
 from xoot.models.event.actor import Actor
 from xoot.models.event.actor_kind import ActorKind
+from xoot.models.event.client import Client
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.project.project import Project
-from xoot.models.session.client import Client
 from xoot.services.decision_service import create_decision, update_decision
 from xoot.services.item_service import get_item, update_item
 from xoot.store.store import Store
@@ -36,7 +36,7 @@ def _stale_update(
     with Store.open(Path(db_path)) as store:
         barrier.wait(timeout=60)
         try:
-            item = update_item(
+            item, _ = update_item(
                 store, item_id, 1, WORKER_CHANGES[field], WriteContext(actor=actor)
             )
         except VersionConflictError as exc:
@@ -57,7 +57,7 @@ def test_two_stale_updates_exactly_one_wins(
 ) -> None:
     """Both callers read version 1; the second write is refused with details."""
     item = make_item(project, ItemKind.GOAL)
-    winner = update_item(
+    winner, _ = update_item(
         store, item.id, 1, ItemUpdate(title="renamed"), WriteContext(actor=user)
     )
     with pytest.raises(VersionConflictError) as caught:
@@ -65,7 +65,7 @@ def test_two_stale_updates_exactly_one_wins(
             store, item.id, 1, ItemUpdate(state="active"), WriteContext(actor=claude)
         )
     assert winner.version == 2
-    assert caught.value.key == "xoot-1"
+    assert caught.value.key == "goal-1"
     assert caught.value.current_version == 2
     assert caught.value.changed_fields == ("title",)
     assert caught.value.actors == (user,)
@@ -118,13 +118,19 @@ def test_concurrent_processes_exactly_one_wins(
 
 
 def test_decisions_use_the_same_check(
-    store: Store, project: Project, ctx: WriteContext, user: Actor
+    store: Store,
+    project: Project,
+    ctx: WriteContext,
+    user: Actor,
+    make_item: Callable[..., Item],
 ) -> None:
     """Decision updates are version-checked and explained the same way."""
-    decision = create_decision(store, project.id, DecisionCreate(title="d"), ctx)
+    goal = make_item(project, ItemKind.GOAL)
+    request = DecisionCreate(owner_item_id=goal.id, title="d")
+    decision = create_decision(store, project.id, request, ctx)
     update_decision(store, decision.id, 1, DecisionUpdate(body="why"), ctx)
     with pytest.raises(VersionConflictError) as caught:
         update_decision(store, decision.id, 1, DecisionUpdate(title="x"), ctx)
-    assert caught.value.key == "xoot-D1"
+    assert caught.value.key == "goal-1/decision-1"
     assert caught.value.changed_fields == ("body",)
     assert caught.value.actors == (user,)

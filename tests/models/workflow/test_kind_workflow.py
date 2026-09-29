@@ -14,10 +14,10 @@ def _valid() -> dict[str, Any]:
         "states": [
             {"name": "todo", "category": "open"},
             {"name": "doing", "category": "active"},
-            {"name": "icebox", "category": "backlogged"},
+            {"name": "shipped", "category": "done"},
             {"name": "gone", "category": "dropped"},
         ],
-        "defaults": {"open": "todo", "backlogged": "icebox", "dropped": "gone"},
+        "defaults": {"open": "todo", "done": "shipped", "dropped": "gone"},
     }
 
 
@@ -26,7 +26,7 @@ def test_valid_workflow() -> None:
     workflow = KindWorkflow.model_validate(_valid())
     assert workflow.category_of("doing") is Category.ACTIVE
     assert workflow.category_of("nope") is None
-    assert workflow.default_state(Category.BACKLOGGED) == "icebox"
+    assert workflow.default_state(Category.DONE) == "shipped"
 
 
 @pytest.mark.parametrize(
@@ -37,15 +37,16 @@ def test_valid_workflow() -> None:
             {"states": [{"name": "todo", "category": "open"}] * 2},
             "unique",
         ),
-        ({"defaults": {"open": "todo", "dropped": "gone"}}, "backlogged"),
+        ({"defaults": {"open": "todo", "dropped": "gone"}}, "done"),
         (
-            {"defaults": {"open": "doing", "backlogged": "icebox", "dropped": "gone"}},
+            {"defaults": {"open": "doing", "done": "shipped", "dropped": "gone"}},
             "not in the open category",
         ),
         (
-            {"defaults": {"open": "ghost", "backlogged": "icebox", "dropped": "gone"}},
+            {"defaults": {"open": "ghost", "done": "shipped", "dropped": "gone"}},
             "not in the open category",
         ),
+        ({"states": [{"name": "icebox", "category": "backlogged"}]}, "category"),
         ({"transitions": {"todo": ["ghost"]}}, "unknown states"),
         ({"states": [{"name": "x", "category": "someday"}]}, "category"),
     ],

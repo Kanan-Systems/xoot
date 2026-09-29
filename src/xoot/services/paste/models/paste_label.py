@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 class PasteLabel(BaseModel):
     """
-    The kind (goal, batch, subtask or decision) and current title of one
+    The kind (goal, batch, subtask, backlog or decision) and current title of one
     touched record, for the plan shown on the terminal only.
     """
 

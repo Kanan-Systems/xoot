@@ -7,97 +7,93 @@ import sqlite3
 
 from xoot.exceptions.hierarchy_error import HierarchyError
 from xoot.exceptions.state_error import StateError
+from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
-from xoot.models.workflow.category import Category
+from xoot.models.workflow.category import TERMINAL_CATEGORIES, Category
 from xoot.models.workflow.kind_workflow import KindWorkflow
-from xoot.services.lookups import require_decision, require_item, require_session
+from xoot.models.workflow.workflow_definition import WorkflowDefinition
+from xoot.services.lookups import require_decision, require_item
 
-# The only parent kind each kind may have; None means "no parent allowed".
-_PARENT_KIND: dict[ItemKind, ItemKind | None] = {
-    ItemKind.GOAL: None,
-    ItemKind.BATCH: ItemKind.GOAL,
-    ItemKind.SUBTASK: ItemKind.BATCH,
+# The parent kinds each kind may have; None stands for the project itself.
+PARENT_KINDS: dict[ItemKind, tuple[ItemKind | None, ...]] = {
+    ItemKind.GOAL: (None,),
+    ItemKind.BATCH: (ItemKind.GOAL,),
+    ItemKind.SUBTASK: (ItemKind.BATCH,),
+    ItemKind.BACKLOG: (ItemKind.BATCH, ItemKind.GOAL, None),
+}
+_WHERE = {
+    ItemKind.GOAL: "a goal sits on the project and has no parent",
+    ItemKind.BATCH: "a batch needs a parent goal",
+    ItemKind.SUBTASK: "a subtask needs a parent batch",
+    ItemKind.BACKLOG: "a backlog item sits on a batch, a goal or the project",
 }
 
 
 def check_parent(
     conn: sqlite3.Connection, project_id: int, kind: ItemKind, parent_id: int | None
-) -> None:
+) -> Item | None:
     """
-    Enforce the hierarchy: goals have no parent, a batch sits under a goal,
-    a subtask sits under a batch or nowhere (unfiled).
+    Enforce the hierarchy for a stored parent.
 
-    The layering also rules out cycles: nothing can sit under a subtask.
+    The layering also rules out cycles: nothing sits under a subtask or a
+    backlog item.
 
     Args:
         - conn (sqlite3.Connection): open connection.
         - project_id (int): the child's project.
         - kind (ItemKind): the child's kind.
-        - parent_id (int | None): the proposed parent.
+        - parent_id (int | None): the proposed parent; None for the project.
+
+    Returns:
+        - parent (Item | None): the parent row, or None on the project.
 
     Raises:
         - HierarchyError: the parent is missing, forbidden or of the wrong kind.
         - NotFoundError: the parent does not exist.
         - CrossProjectError: the parent is in another project.
     """
-    allowed = _PARENT_KIND[kind]
     if parent_id is None:
-        if kind is ItemKind.BATCH:
-            raise HierarchyError("a batch needs a parent goal")
-        return
-    if allowed is None:
-        raise HierarchyError("a goal cannot have a parent")
+        if None not in PARENT_KINDS[kind]:
+            raise HierarchyError(_WHERE[kind])
+        return None
     parent = require_item(conn, parent_id, project_id)
-    if parent.kind is not allowed:
-        raise HierarchyError(
-            f"a {kind}'s parent must be a {allowed}, not a {parent.kind}"
-        )
+    check_child_kind(parent.kind, kind)
+    return parent
 
 
 def check_child_kind(parent_kind: ItemKind, kind: ItemKind) -> None:
     """
-    Enforce the hierarchy for a parent that is not stored yet, such as one
-    planned earlier in the same bulk create.
+    Enforce the hierarchy for a parent that may not be stored yet, such as
+    one planned earlier in the same bulk create.
 
     Args:
-        - parent_kind (ItemKind): the planned parent's kind.
+        - parent_kind (ItemKind): the parent's kind.
         - kind (ItemKind): the child's kind.
 
     Raises:
         - HierarchyError: the child kind may not sit under the parent kind.
     """
-    allowed = _PARENT_KIND[kind]
-    if allowed is None:
-        raise HierarchyError("a goal cannot have a parent")
-    if parent_kind is not allowed:
-        raise HierarchyError(
-            f"a {kind}'s parent must be a {allowed}, not a {parent_kind}"
-        )
+    if parent_kind not in PARENT_KINDS[kind]:
+        raise HierarchyError(_WHERE[kind])
 
 
-def check_state(
-    workflow: KindWorkflow, state: str, backlog_session_id: int | None
-) -> Category:
+def check_state(workflow: KindWorkflow, state: str) -> Category:
     """
     Validate a state against the active workflow for the item's kind.
 
     Args:
         - workflow (KindWorkflow): the kind's active workflow.
         - state (str): the state to validate.
-        - backlog_session_id (int | None): the item's session backlog, if any.
 
     Returns:
         - category (Category): the state's category.
 
     Raises:
-        - StateError: unknown state, or a session backlog outside the
-          backlogged category.
+        - StateError: the state is not in the workflow.
     """
     category = workflow.category_of(state)
     if category is None:
         raise StateError(f"state {state!r} is not in the active workflow")
-    if backlog_session_id is not None and category is not Category.BACKLOGGED:
-        raise StateError("backlog_session_id is only allowed in a backlogged state")
     return category
 
 
@@ -117,26 +113,49 @@ def check_transition(workflow: KindWorkflow, source: str, target: str) -> None:
         raise StateError(f"transition {source!r} -> {target!r} is not allowed")
 
 
-def check_references(
-    conn: sqlite3.Connection,
-    project_id: int,
-    backlog_session_id: int | None,
-    awaiting_decision_id: int | None,
+def check_awaited_decision(
+    conn: sqlite3.Connection, project_id: int, decision_id: int | None
 ) -> None:
     """
-    Check an item's session-backlog and awaited-decision references.
+    Check an item's awaited-decision reference.
 
     Args:
         - conn (sqlite3.Connection): open connection.
         - project_id (int): the item's project.
-        - backlog_session_id (int | None): referenced session.
-        - awaiting_decision_id (int | None): referenced decision.
+        - decision_id (int | None): referenced decision.
 
     Raises:
-        - NotFoundError: a referenced row does not exist.
-        - CrossProjectError: a referenced row is in another project.
+        - NotFoundError: the decision does not exist.
+        - CrossProjectError: the decision is in another project.
     """
-    if backlog_session_id is not None:
-        require_session(conn, backlog_session_id, project_id)
-    if awaiting_decision_id is not None:
-        require_decision(conn, awaiting_decision_id, project_id)
+    if decision_id is not None:
+        require_decision(conn, decision_id, project_id)
+
+
+def category_of(definition: WorkflowDefinition, item: Item) -> Category | None:
+    """
+    Classify an item's state in a workflow.
+
+    Args:
+        - definition (WorkflowDefinition): the project's active workflow.
+        - item (Item): the item.
+
+    Returns:
+        - category (Category | None): its category; None for a state the
+          workflow no longer knows.
+    """
+    return definition.for_kind(item.kind).category_of(item.state)
+
+
+def is_closed(definition: WorkflowDefinition, item: Item) -> bool:
+    """
+    Tell whether an item is done or dropped.
+
+    Args:
+        - definition (WorkflowDefinition): the project's active workflow.
+        - item (Item): the item.
+
+    Returns:
+        - closed (bool): True in a terminal category.
+    """
+    return category_of(definition, item) in TERMINAL_CATEGORIES

@@ -19,9 +19,18 @@ def render_brief(brief: BriefOutput) -> str:
         - text (str): the sections.
     """
     counts = "  " + "  ".join(f"{c}: {n}" for c, n in brief.counts.items())
-    sessions = [
-        (s.key, clean(s.title), s.client, s.started_at) for s in brief.open_sessions
+    goals = [
+        (
+            g.key,
+            g.state,
+            f"{g.batches_done} of {g.batches_total} done",
+            str(g.open_backlog),
+            clean(g.title),
+        )
+        for g in brief.open_goals
     ]
+    blocked = [(b.key, str(b.open_backlog)) for b in brief.blocked]
+    backlog = "  " + "  ".join(f"{lvl}: {n}" for lvl, n in brief.backlog_counts.items())
     decisions = [(d.key, d.status, clean(d.title)) for d in brief.recent_decisions]
     workflow = [
         f"  {kind}: "
@@ -33,24 +42,17 @@ def render_brief(brief: BriefOutput) -> str:
         "\n".join([*project_lines(brief.project), f"resolved by: {brief.resolved_by}"]),
         brief.header,
         "Counts\n" + counts,
-        "Open sessions\n"
-        + _rows(("key", "title", "client", "started"), sessions)
+        "Open goals\n"
+        + _rows(("key", "state", "batches", "backlog", "title"), goals)
         + (
-            f"\n  (first {len(sessions)} shown; more are open)"
-            if brief.open_sessions_truncated
+            f"\n  (first {len(goals)} shown; more are open)"
+            if brief.open_goals_truncated
             else ""
         ),
         "Active\n" + _items(brief.active),
         "Awaiting input\n" + _items(brief.awaiting_input),
-        "Pending session backlog\n" + _items(brief.pending_session_backlog),
-        f"Project backlog: {brief.project_backlog_count}",
-        "Open session backlog\n"
-        + _items(brief.open_session_backlog)
-        + (
-            f"\n  (first {len(brief.open_session_backlog)} shown; more are held)"
-            if brief.open_session_backlog_truncated
-            else ""
-        ),
+        "Blocked by open backlog\n" + _rows(("key", "open backlog"), blocked),
+        "Open backlog per level\n" + backlog,
         "Recent decisions\n" + _rows(("key", "status", "title"), decisions),
         "Workflow\n" + "\n".join(workflow),
     ]

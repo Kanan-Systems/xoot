@@ -23,7 +23,7 @@ def fixture_fenced() -> Fenced:
     """Factory: a chat reply holding one xoot block built from ops."""
 
     def build(ops: list[dict[str, Any]], **top: Any) -> str:
-        block = {"xoot": 1, "project": "xoot", **top, "ops": ops}
+        block = {"xoot": 2, "project": "xoot", **top, "ops": ops}
         return f"Here you go:\n\n```xoot\n{json.dumps(block, indent=1)}\n```\n\nDone."
 
     return build

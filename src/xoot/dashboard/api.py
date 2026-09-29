@@ -17,19 +17,14 @@ from xoot import __version__
 from xoot.dashboard.api_error import ApiError
 from xoot.dashboard.errors import NOT_FOUND, error_response, from_exception
 from xoot.dashboard.params.no_params import NoParams
-from xoot.dashboard.params.sessions_params import SessionsParams
 from xoot.dashboard.params.tree_params import TreeParams
 from xoot.dashboard.reads import run_read
 from xoot.dashboard.schemas.meta_output import MetaOutput
-from xoot.dashboard.views.listing_views import (
-    backlogs_view,
-    decisions_view,
-    session_view,
-    sessions_view,
-)
 from xoot.dashboard.views.project_views import (
+    backlog_view,
     brief_view,
     changes_view,
+    decisions_view,
     projects_view,
     tree_view,
 )
@@ -71,39 +66,31 @@ def api_routes(db_path: Path) -> list[Route]:
             "/projects/{prefix}/brief",
             lambda r: _no_query(r, lambda c: brief_view(c, path(r, "prefix"))),
         ),
+        ("/projects/{prefix}/tree", lambda r: _tree(r, path(r, "prefix"))),
         (
-            "/projects/{prefix}/tree",
-            lambda r: _tree(r, path(r, "prefix")),
-        ),
-        (
-            "/projects/{prefix}/sessions",
-            lambda r: _sessions(r, path(r, "prefix")),
-        ),
-        (
-            "/projects/{prefix}/sessions/{key}",
+            # {key:path} keeps the slashes of a nested key such as goal-1/batch-2.
+            "/projects/{prefix}/items/{key:path}",
             lambda r: _no_query(
-                r, lambda c: session_view(c, path(r, "prefix"), path(r, "key"))
+                r, lambda c: item_view(c, path(r, "prefix"), path(r, "key"))
             ),
         ),
         (
-            "/projects/{prefix}/backlogs",
-            lambda r: _no_query(r, lambda c: backlogs_view(c, path(r, "prefix"))),
+            "/projects/{prefix}/backlog",
+            lambda r: _no_query(r, lambda c: backlog_view(c, path(r, "prefix"))),
         ),
         (
             "/projects/{prefix}/decisions",
             lambda r: _no_query(r, lambda c: decisions_view(c, path(r, "prefix"))),
         ),
         (
+            "/projects/{prefix}/decisions/{key:path}",
+            lambda r: _no_query(
+                r, lambda c: decision_view(c, path(r, "prefix"), path(r, "key"))
+            ),
+        ),
+        (
             "/projects/{prefix}/changes",
             lambda r: _no_query(r, lambda c: changes_view(c, path(r, "prefix"))),
-        ),
-        (
-            "/items/{key}",
-            lambda r: _no_query(r, lambda c: item_view(c, path(r, "key"))),
-        ),
-        (
-            "/decisions/{key}",
-            lambda r: _no_query(r, lambda c: decision_view(c, path(r, "key"))),
         ),
     ]
     return [
@@ -136,13 +123,6 @@ def _no_query[M: BaseModel](
 def _tree(request: Request, prefix: str) -> Callable[[sqlite3.Connection], BaseModel]:
     params = _query(request, TreeParams)
     return lambda conn: tree_view(conn, prefix, params)
-
-
-def _sessions(
-    request: Request, prefix: str
-) -> Callable[[sqlite3.Connection], BaseModel]:
-    params = _query(request, SessionsParams)
-    return lambda conn: sessions_view(conn, prefix, params.status)
 
 
 def _query[P: BaseModel](request: Request, model: type[P]) -> P:

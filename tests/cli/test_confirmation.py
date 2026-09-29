@@ -13,13 +13,13 @@ from xoot.models.item.item import Item
 
 CONFIRMED = {
     "workflow import": ["workflow", "import", "{toml}", "--project", "xo"],
-    "redact": ["redact", "xoot-1", "body"],
+    "redact": ["redact", "xoot:goal-1", "body"],
     "remove-alias": ["project", "remove-alias", "xo", "--project", "xoot"],
     "remove-path": ["project", "remove-path", "/work/xoot", "--project", "xo"],
 }
 PROMPTS = {
     "workflow import": "import a new workflow into project xoot",
-    "redact": "redact the body of item xoot-1",
+    "redact": "redact the body of item xoot:goal-1",
     "remove-alias": "remove alias xo from project xoot",
     "remove-path": "remove path /work/xoot from project xoot",
 }
@@ -74,7 +74,7 @@ def test_answering_yes_applies(
     xoot: Any, secret_item: Item, answer: str, marker: str
 ) -> None:
     """The redaction prompt never contains the content it will remove."""
-    run = xoot("redact", secret_item.key, "title", answer=answer)
+    run = xoot("redact", f"xoot:{secret_item.key}", "title", answer=answer)
     assert run.code == 0, run.err
-    assert "redact the title of item xoot-1" in run.err
+    assert "redact the title of item xoot:goal-1" in run.err
     assert marker not in run.err and marker not in run.out

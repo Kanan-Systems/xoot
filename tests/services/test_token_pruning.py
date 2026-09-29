@@ -1,11 +1,9 @@
 """Issuing a token prunes spent tokens issued more than a day ago."""
 
-from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 from xoot.models.confirm.new_confirm_token import NewConfirmToken
 from xoot.models.project.project import Project
-from xoot.models.session.session import Session
 from xoot.repositories.confirm import confirm_token_db
 from xoot.services.confirm_service import TOKEN_TTL, hash_token, issue_token
 from xoot.store.store import Store
@@ -15,7 +13,7 @@ DIGEST = "f" * 64
 
 
 def _backdated(
-    store: Store, session: Session, name: str, issued: datetime, used: bool
+    store: Store, project: Project, name: str, issued: datetime, used: bool
 ) -> None:
     """Insert a token row as if issued at `issued`; the name fills its hash."""
     with store.write() as conn:
@@ -23,10 +21,10 @@ def _backdated(
             conn,
             NewConfirmToken(
                 token_sha256=name * 64,
-                tool="session_close",
+                project_id=project.id,
+                tool="backlog_push",
                 args_sha256=DIGEST,
                 plan_sha256=DIGEST,
-                session_id=session.id,
                 expires_at=issued + TOKEN_TTL,
             ),
         )
@@ -34,19 +32,16 @@ def _backdated(
             confirm_token_db.mark_used(conn, row.id, issued + timedelta(minutes=1))
 
 
-def test_issue_prunes_only_old_spent_tokens(
-    store: Store, project: Project, make_session: Callable[..., Session]
-) -> None:
+def test_issue_prunes_only_old_spent_tokens(store: Store, project: Project) -> None:
     """Old expired and old used rows go; recent spent rows and live rows stay."""
-    session = make_session(project)
     day = timedelta(days=1)
-    _backdated(store, session, "a", NOW - 2 * day, used=False)
-    _backdated(store, session, "b", NOW - 2 * day, used=True)
-    _backdated(store, session, "c", NOW - day - timedelta(minutes=1), used=False)
-    _backdated(store, session, "d", NOW - day + timedelta(minutes=1), used=False)
-    _backdated(store, session, "e", NOW - timedelta(hours=1), used=True)
-    _backdated(store, session, "f", NOW - timedelta(minutes=1), used=False)
-    token = issue_token(store, session.id, "session_close", DIGEST, DIGEST, now=NOW)
+    _backdated(store, project, "a", NOW - 2 * day, used=False)
+    _backdated(store, project, "b", NOW - 2 * day, used=True)
+    _backdated(store, project, "c", NOW - day - timedelta(minutes=1), used=False)
+    _backdated(store, project, "d", NOW - day + timedelta(minutes=1), used=False)
+    _backdated(store, project, "e", NOW - timedelta(hours=1), used=True)
+    _backdated(store, project, "f", NOW - timedelta(minutes=1), used=False)
+    token = issue_token(store, project.id, "backlog_push", DIGEST, DIGEST, now=NOW)
     with store.read() as conn:
         left = {
             row["token_sha256"]

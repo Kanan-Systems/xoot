@@ -1,16 +1,15 @@
 // The top bar: project switcher, goal selector, view tabs, legend and the
 // live indicator.
-import { NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { NavLink, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useProjects, useTree } from '../api/queries.ts';
 import { truncate } from '../lib/display.ts';
-import { PARAM, withParam } from '../lib/search.ts';
+import { PARAM } from '../lib/search.ts';
 import { LastUpdated } from './LastUpdated.tsx';
 import { Legend } from './Legend.tsx';
 
 const TABS = [
   { path: 'tree', label: 'Tree' },
-  { path: 'sessions', label: 'Sessions' },
   { path: 'backlog', label: 'Backlog' },
   { path: 'decisions', label: 'Decisions' },
 ] as const;
@@ -22,9 +21,6 @@ interface TopBarProps {
 }
 
 export function TopBar({ prefix, checkedAt, failing }: TopBarProps) {
-  const { pathname } = useLocation();
-  const onTree = (path: string) =>
-    path === 'tree' && pathname.startsWith(`/${prefix}/focus/`);
   return (
     <header className="topbar">
       <h1>xoot</h1>
@@ -35,9 +31,7 @@ export function TopBar({ prefix, checkedAt, failing }: TopBarProps) {
           <NavLink
             key={tab.path}
             to={`/${prefix}/${tab.path}`}
-            className={({ isActive }) =>
-              isActive || onTree(tab.path) ? 'tab tab-active' : 'tab'
-            }
+            className={({ isActive }) => (isActive ? 'tab tab-active' : 'tab')}
           >
             {tab.label}
           </NavLink>
@@ -74,26 +68,22 @@ function ProjectSwitcher({ prefix }: { prefix: string }) {
   );
 }
 
-// "All goals" or one goal; a goal becomes the tree's root.
+// "All goals" (the default: the project-root tree) or one goal's tree.
 function GoalSelector({ prefix }: { prefix: string }) {
   const tree = useTree(prefix);
   const [search] = useSearchParams();
   const navigate = useNavigate();
-  const goals = (tree.data?.nodes ?? []).filter(
-    (entry) => entry.depth === 0 && !entry.unfiled && entry.item.kind === 'goal',
-  );
+  const goals = (tree.data?.nodes ?? []).filter((entry) => entry.item.kind === 'goal');
   return (
     <label className="control">
       Goal{' '}
       <select
         value={search.get(PARAM.goal) ?? ''}
         onChange={(event) => {
-          const goal = event.target.value === '' ? null : event.target.value;
-          const kept = withParam(search, PARAM.item, null);
-          void navigate({
-            pathname: `/${prefix}/tree`,
-            search: withParam(new URLSearchParams(kept), PARAM.goal, goal),
-          });
+          const goal = event.target.value;
+          const next =
+            goal === '' ? '' : `?${new URLSearchParams({ goal }).toString()}`;
+          void navigate({ pathname: `/${prefix}/tree`, search: next });
         }}
       >
         <option value="">All goals</option>

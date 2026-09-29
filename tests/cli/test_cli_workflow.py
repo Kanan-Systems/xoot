@@ -82,8 +82,8 @@ def test_import_with_a_mapping_applies(
     )  # fmt: skip
     assert run.code == 0, run.err
     assert run.json()["plan"] == {
-        "removed": {"goal": ["blocked"], "batch": [], "subtask": []},
-        "remaps": {"goal": 1, "batch": 0, "subtask": 0},
+        "removed": {"goal": ["blocked"], "batch": [], "subtask": [], "backlog": []},
+        "remaps": {"goal": 1, "batch": 0, "subtask": 0, "backlog": 0},
     }
     assert get_item(store, blocked_goal.id).state == "stuck"
 

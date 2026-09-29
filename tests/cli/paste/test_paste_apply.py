@@ -1,6 +1,6 @@
 """
 `xoot paste apply`: the source is read within the cap, the plan goes to
-stderr with a SIDE EFFECTS section, and after confirmation stdout gets a
+stderr with a COMPLETION section, and after confirmation stdout gets a
 xoot-receipt block that maps refs to keys and never holds titles or bodies.
 """
 
@@ -12,13 +12,13 @@ from typing import Any
 
 import pytest
 
+from xoot.models.project.project import Project
 from xoot.repositories.item import item_db
 from xoot.services.paste.parser import MAX_BYTES
 from xoot.store.store import Store
 
 MARKER = "receipt-secret-0b9e"
 OPS = [
-    {"op": "session_start", "title": f"s {MARKER}"},
     {"op": "item_create", "ref": "g", "kind": "goal", "title": f"g {MARKER}"},
     {
         "op": "item_create",
@@ -32,6 +32,7 @@ OPS = [
     {
         "op": "decision_record",
         "ref": "d",
+        "owner": "$g",
         "title": f"d {MARKER}",
         "body": MARKER,
         "status": "locked",
@@ -47,14 +48,13 @@ def test_yes_applies_and_prints_the_plan_on_stderr(
     run = paste_cli("paste", "apply", "-", "--yes", stdin=reply(OPS))
     assert run.code == 0, run.err
     assert run.err.splitlines() == [
-        "paste plan: project xoot, session xoot-S1 (open after the block)",
-        "  op 1 session_start: xoot-S1 (new)",
-        f'  op 2 item_create: xoot-1 (new, $g) goal "g {MARKER}"',
-        '  op 3 item_create: xoot-2 (new, $b) batch "b"',
-        '  op 4 item_update: xoot-2 batch "b"',
-        "      xoot-2 state: open -> active",
-        f'  op 5 decision_record: xoot-D1 (new, $d) decision "d {MARKER}"',
-        "SIDE EFFECTS",
+        "paste plan: project xoot",
+        f'  op 1 item_create: goal-1 (new, $g) goal "g {MARKER}"',
+        '  op 2 item_create: goal-1/batch-1 (new, $b) batch "b"',
+        '  op 3 item_update: goal-1/batch-1 batch "b"',
+        "      goal-1/batch-1 state: open -> active",
+        f'  op 4 decision_record: goal-1/decision-1 (new, $d) decision "d {MARKER}"',
+        "COMPLETION",
         "  (none)",
     ]
     assert run.out.startswith("```xoot-receipt\n")
@@ -62,25 +62,29 @@ def test_yes_applies_and_prints_the_plan_on_stderr(
 
 @pytest.mark.usefixtures("project")
 def test_receipt_maps_refs_and_holds_no_text(
-    paste_cli: Callable[..., Any], reply: Callable[..., bytes], store: Store
+    paste_cli: Callable[..., Any],
+    reply: Callable[..., bytes],
+    store: Store,
+    project: Project,
 ) -> None:
     """The receipt parses, its keys are real, and no title or body leaks."""
     run = paste_cli("paste", "apply", "-", "--yes", stdin=reply(OPS))
     receipt = run.receipt()
     assert receipt == {
-        "xoot": 1,
+        "xoot": 2,
         "project": "xoot",
-        "session": "xoot-S1",
-        "session_status": "open",
-        "refs": {"g": "xoot-1", "b": "xoot-2", "d": "xoot-D1"},
+        "refs": {"g": "goal-1", "b": "goal-1/batch-1", "d": "goal-1/decision-1"},
         "items": [
-            {"key": "xoot-1", "version": 1, "state": "open"},
-            {"key": "xoot-2", "version": 2, "state": "active"},
+            {"key": "goal-1", "version": 1, "state": "open"},
+            {"key": "goal-1/batch-1", "version": 2, "state": "active"},
         ],
-        "decisions": [{"key": "xoot-D1", "version": 1, "status": "locked"}],
+        "decisions": [{"key": "goal-1/decision-1", "version": 1, "status": "locked"}],
+        "completed": [],
+        "reopened": [],
+        "blocked": [],
     }
     with store.read() as conn:
-        batch = item_db.get_by_key(conn, receipt["refs"]["b"])
+        batch = item_db.get_by_key(conn, project.id, receipt["refs"]["b"])
     assert batch is not None and batch.version == 2
     # Titles are named in the plan on stderr; bodies never appear anywhere.
     assert MARKER not in run.out and f"body {MARKER}" not in run.err
@@ -108,8 +112,8 @@ def test_json_prints_the_paste_result(
     """--json prints the full result instead of the receipt."""
     run = paste_cli("paste", "apply", "-", "--yes", "--json", stdin=reply(OPS))
     result = json.loads(run.out)
-    assert [o["op"] for o in result["outcomes"]][:2] == ["session_start", "item_create"]
-    assert result["refs"]["g"] == "xoot-1" and result["auto_backlog"] == []
+    assert [o["op"] for o in result["outcomes"]][:2] == ["item_create", "item_create"]
+    assert result["refs"]["g"] == "goal-1" and result["completed"] == []
     assert MARKER not in run.out
 
 
@@ -141,28 +145,27 @@ def test_no_terminal_and_no_yes_is_refused(
     assert row_counts() == before
 
 
-@pytest.mark.usefixtures("project")
-def test_side_effects_list_the_auto_backlog_moves(
-    paste_cli: Callable[..., Any], reply: Callable[..., bytes]
+def test_completion_section_lists_what_the_block_completes(
+    paste_cli: Callable[..., Any],
+    reply: Callable[..., bytes],
+    work_tree: tuple[Any, Any, Any, Any],
+    capture_on: Callable[..., Any],
 ) -> None:
-    """A close that retires an earlier session's backlog says so separately."""
-    park = [
-        {"op": "session_start", "title": "first"},
-        {"op": "item_create", "ref": "t", "kind": "subtask", "title": "t"},
-        {"op": "session_close", "dispositions": {"$t": "session_backlog"}},
-    ]
-    assert paste_cli("paste", "apply", "-", "--yes", stdin=reply(park)).code == 0
+    """Blocked goals and batches, and completions, are named on the plan."""
+    _, _, first, second = work_tree
+    capture_on(first)
     ops = [
-        {"op": "session_start", "title": "next"},
-        {"op": "session_close", "dispositions": {}},
-    ]
+        {"op": "item_update", "key": item.key, "expected_version": 1,
+         "changes": {"state": "done"}}
+        for item in (first, second)
+    ]  # fmt: skip
     run = paste_cli("paste", "apply", "-", "--yes", stdin=reply(ops))
     assert run.code == 0, run.err
     lines = run.err.splitlines()
-    effects = lines[lines.index("SIDE EFFECTS") + 1 :]
-    assert effects == [
-        '  xoot-1 subtask "t": moves from the backlog of xoot-S1 to the project backlog'
+    assert lines[lines.index("COMPLETION") + 1 :] == [
+        "  goal-1/batch-1 stays open: 1 open backlog item(s)"
     ]
+    assert run.receipt()["blocked"] == [{"key": "goal-1/batch-1", "open_backlog": 1}]
 
 
 @pytest.mark.usefixtures("project")
@@ -232,10 +235,10 @@ def test_op_failure_exits_1_and_names_the_op(
     paste_cli: Callable[..., Any], reply: Callable[..., bytes]
 ) -> None:
     """A failing op refuses the block with its number, before any prompt."""
-    ops = [*OPS[:2], {"op": "item_update", "key": "xoot-9", "expected_version": 1,
+    ops = [*OPS[:2], {"op": "item_update", "key": "goal-9", "expected_version": 1,
                       "changes": {"state": "done"}}]  # fmt: skip
     run = paste_cli("paste", "apply", "-", "--yes", stdin=reply(ops))
     assert (run.code, run.out) == (1, "")
     assert run.err == (
-        "error: PasteOpError: op 3 (item_update): NotFoundError: item 'xoot-9' not found\n"
+        "error: PasteOpError: op 3 (item_update): NotFoundError: item 'goal-9' not found\n"
     )

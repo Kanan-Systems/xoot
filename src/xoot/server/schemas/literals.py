@@ -4,19 +4,18 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
-from xoot.models.item.backlog_scope import BacklogScope
-
 ResolvedBy = Annotated[
-    Literal["prefix", "alias", "roots", "cwd"],
+    Literal["prefix", "alias", "qualified", "roots", "cwd"],
     Field(
         description=(
-            "How the project was found: prefix (the name given is its key "
-            "prefix), alias (the name given is one of its aliases), roots (a "
-            "client root) or cwd (the working directory)."
+            "How the project was found: prefix or alias (the project argument "
+            "is its key prefix or one of its aliases), qualified (a key was "
+            "given as <prefix>:<key>), roots (a client root) or cwd (the "
+            "working directory)."
         )
     ),
 ]
-"""How a project-level call found its project; described in every schema."""
+"""How a call found its project; described in every schema."""
 
 Phase = Literal["preview", "applied"]
 """Whether a two-phase call only planned the change or wrote it."""
@@ -24,4 +23,5 @@ Phase = Literal["preview", "applied"]
 UpdateMode = Literal["update", "drop", "reparent"]
 """Which path an item_update took."""
 
-__all__ = ["BacklogScope", "Phase", "ResolvedBy", "UpdateMode"]
+WorkKind = Literal["goal", "batch", "subtask"]
+"""The kinds item_create and items_create_bulk make; backlog comes from capture."""

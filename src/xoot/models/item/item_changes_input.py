@@ -7,8 +7,8 @@ from xoot.models.fields import Body, StateName, Title
 
 class ItemChangesInput(BaseModel):
     """
-    Fields to change; leave a field out to keep it. parent, backlog_session
-    and awaiting_decision take keys, or null to clear.
+    Fields to change; leave a field out to keep it. parent and
+    awaiting_decision take keys; awaiting_decision takes null to clear.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -20,10 +20,10 @@ class ItemChangesInput(BaseModel):
     )
     parent: str | None = Field(
         default=None,
-        description="New parent item key; null unfiles a subtask. Send it alone.",
-    )
-    backlog_session: str | None = Field(
-        default=None, description="Session key whose backlog holds the item, or null."
+        description=(
+            "New parent key: a goal for a batch, a batch for a subtask. Send "
+            "it alone. Backlog items move with backlog_push."
+        ),
     )
     awaiting_decision: str | None = Field(
         default=None, description="Decision key the item waits for, or null."

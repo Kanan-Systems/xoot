@@ -4,4 +4,4 @@ from xoot.exceptions.rule_violation_error import RuleViolationError
 
 
 class CrossProjectError(RuleViolationError):
-    """A referenced parent, session, item or decision is in another project."""
+    """A referenced parent, item or decision is in another project."""

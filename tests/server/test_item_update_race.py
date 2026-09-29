@@ -13,11 +13,12 @@ import anyio
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
+from xoot.models.event.actor import Actor
+from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
+from xoot.models.item.item_changes_input import ItemChangesInput
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
-from xoot.models.session.session import Session
-from xoot.server.schemas.item_changes_input import ItemChangesInput
 from xoot.server.tools import item_update_tool
 from xoot.services.item_service import get_item
 from xoot.store.store import Store
@@ -28,13 +29,11 @@ def fixture_call_racing(
     monkeypatch: pytest.MonkeyPatch,
     db_path: Path,
     row_counts: Callable[[], dict[str, int]],
-    project: Project,
-    make_session: Callable[..., Session],
+    claude: Actor,
 ) -> Callable[..., dict[str, int]]:
     """
-    Factory: open session xoot-S1, then call item_update in it with an
-    interleaved write between the path decision and the apply; return the
-    row counts right after that write.
+    Factory: call item_update with an interleaved write between the path
+    decision and the apply; return the row counts right after that write.
 
     The tool's database work runs inline on this thread, so the interleaved
     write can use the test's own store while the tool holds its snapshot.
@@ -44,14 +43,20 @@ def fixture_call_racing(
         with Store.open(db_path) as store:
             return work(store)
 
+    async def no_roots(_ctx: Any, _alias: str | None) -> list[str]:
+        return []
+
     monkeypatch.setattr(item_update_tool, "run_db", inline)
+    monkeypatch.setattr(item_update_tool, "root_paths", no_roots)
+    monkeypatch.setattr(
+        item_update_tool, "write_context", lambda _ctx: WriteContext(actor=claude)
+    )
 
     def call(
         interleave: Callable[[], object], key: str, **changes: Any
     ) -> dict[str, int]:
         # The hook point is the private path decision; there is no public seam.
         decide = item_update_tool._request  # pylint: disable=protected-access
-        make_session(project)
         counts: dict[str, int] = {}
 
         def racing(*args: Any) -> Any:
@@ -64,8 +69,8 @@ def fixture_call_racing(
         tool: Callable[[], Awaitable[Any]] = partial(
             item_update_tool.item_update,
             None,
-            session="xoot-S1",
             key=key,
+            project="xoot",
             expected_version=1,
             changes=ItemChangesInput(**changes),
         )

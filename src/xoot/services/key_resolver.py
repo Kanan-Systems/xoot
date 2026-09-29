@@ -1,45 +1,45 @@
 """
 Resolving public keys to rows, with no dependency on the MCP server.
 
+Keys are resolved within one project and are unqualified here; callers
+split off a "<prefix>:" qualifier first (see project_scope). An item key
+that is no longer live resolves through item_alias, so every key an item
+ever held still finds it; a decision key resolves through its owner, so it
+follows the owner's moves too.
+
 A well-formed key that names nothing, and a malformed one, both raise
-NotFoundError. Only a well-formed key is kept on the error: it can hold
-nothing but [a-z0-9-] and digits, while other text is arbitrary input.
+NotFoundError. Only a well-formed key is kept on the error: it holds nothing
+but [a-z0-9/:-], while other text is arbitrary input.
 """
 
 import sqlite3
-from collections.abc import Callable
 
 from xoot.exceptions.not_found_error import NotFoundError
 from xoot.models.decision.decision import Decision
 from xoot.models.event.entity_type import EntityType
 from xoot.models.item.item import Item
 from xoot.models.project.project import Project
-from xoot.models.session.session import Session
 from xoot.repositories.decision import decision_db
-from xoot.repositories.item import item_db
+from xoot.repositories.item import item_alias_db, item_db
 from xoot.repositories.project import project_db
-from xoot.repositories.session import session_db
 from xoot.utils.keys import (
-    DECISION_KEY,
-    ITEM_KEY,
     PREFIX_KEY,
-    SESSION_KEY,
     is_key,
-    parse_key,
+    parse_decision_key,
+    parse_item_key,
 )
 
 MALFORMED = "malformed key"
 
-type Row = Item | Decision | Session | Project
 
-
-def item_by_key(conn: sqlite3.Connection, key: str) -> Item:
+def item_by_key(conn: sqlite3.Connection, project_id: int, key: str) -> Item:
     """
-    Fetch an item by key.
+    Fetch an item by its current key or any key it held before a move.
 
     Args:
         - conn (sqlite3.Connection): a connection inside a transaction.
-        - key (str): the key as the caller sent it.
+        - project_id (int): the project the key belongs to.
+        - key (str): the unqualified key as the caller sent it.
 
     Returns:
         - item (Item): the item.
@@ -47,19 +47,25 @@ def item_by_key(conn: sqlite3.Connection, key: str) -> Item:
     Raises:
         - NotFoundError: the key is malformed or names no item.
     """
-    item = None if parse_key(ITEM_KEY, key) is None else item_db.get_by_key(conn, key)
+    item = None
+    if parse_item_key(key) is not None:
+        item = item_db.get_by_key(conn, project_id, key)
+        if item is None:
+            item_id = item_alias_db.item_id_for(conn, project_id, key)
+            item = None if item_id is None else item_db.get(conn, item_id)
     if item is None:
         raise NotFoundError("item", safe_ref(key))
     return item
 
 
-def decision_by_key(conn: sqlite3.Connection, key: str) -> Decision:
+def decision_by_key(conn: sqlite3.Connection, project_id: int, key: str) -> Decision:
     """
-    Fetch a decision by key.
+    Fetch a decision by key: its owner's key (current or old) and number.
 
     Args:
         - conn (sqlite3.Connection): a connection inside a transaction.
-        - key (str): the key as the caller sent it.
+        - project_id (int): the project the key belongs to.
+        - key (str): the unqualified key as the caller sent it.
 
     Returns:
         - decision (Decision): the decision.
@@ -67,40 +73,19 @@ def decision_by_key(conn: sqlite3.Connection, key: str) -> Decision:
     Raises:
         - NotFoundError: the key is malformed or names no decision.
     """
-    decision = (
-        None
-        if parse_key(DECISION_KEY, key) is None
-        else decision_db.get_by_key(conn, key)
-    )
+    parts = parse_decision_key(key)
+    decision = None
+    if parts is not None:
+        owner_key, number = parts
+        try:
+            owner = item_by_key(conn, project_id, owner_key)
+        except NotFoundError:
+            owner = None
+        if owner is not None:
+            decision = decision_db.get_by_owner(conn, owner.id, number)
     if decision is None:
         raise NotFoundError("decision", safe_ref(key))
     return decision
-
-
-def session_by_key(conn: sqlite3.Connection, key: str) -> Session:
-    """
-    Fetch a session by key.
-
-    Args:
-        - conn (sqlite3.Connection): a connection inside a transaction.
-        - key (str): the key as the caller sent it.
-
-    Returns:
-        - session (Session): the session.
-
-    Raises:
-        - NotFoundError: the key is malformed or names no session.
-    """
-    parts = parse_key(SESSION_KEY, key)
-    project = None if parts is None else project_db.get_by_prefix(conn, parts[0])
-    session = (
-        None
-        if parts is None or project is None
-        else session_db.get_by_number(conn, project.id, parts[1])
-    )
-    if session is None:
-        raise NotFoundError("session", safe_ref(key))
-    return session
 
 
 def project_by_key(conn: sqlite3.Connection, prefix: str) -> Project:
@@ -124,16 +109,16 @@ def project_by_key(conn: sqlite3.Connection, prefix: str) -> Project:
     return project
 
 
-def entity_by_key(conn: sqlite3.Connection, key: str) -> tuple[EntityType, int]:
+def entity_by_key(
+    conn: sqlite3.Connection, project_id: int, key: str
+) -> tuple[EntityType, int]:
     """
-    Resolve any public key: an item, decision or session key, or a prefix.
-
-    A prefix holds no dash, so text with a dash is only ever a record key and
-    text without one only a prefix; an alias is never a key.
+    Resolve an item or decision key of one project.
 
     Args:
         - conn (sqlite3.Connection): a connection inside a transaction.
-        - key (str): the key as the caller sent it.
+        - project_id (int): the project the key belongs to.
+        - key (str): the unqualified key as the caller sent it.
 
     Returns:
         - entity (tuple[EntityType, int]): the entity type and row id.
@@ -141,21 +126,9 @@ def entity_by_key(conn: sqlite3.Connection, key: str) -> tuple[EntityType, int]:
     Raises:
         - NotFoundError: the key names nothing.
     """
-    lookups: tuple[tuple[EntityType, Callable[[sqlite3.Connection, str], Row]], ...]
-    if "-" in key:
-        lookups = (
-            (EntityType.ITEM, item_by_key),
-            (EntityType.DECISION, decision_by_key),
-            (EntityType.SESSION, session_by_key),
-        )
-    else:
-        lookups = ((EntityType.PROJECT, project_by_key),)
-    for entity_type, lookup in lookups:
-        try:
-            return entity_type, lookup(conn, key).id
-        except NotFoundError:
-            continue
-    raise NotFoundError("record", safe_ref(key))
+    if parse_decision_key(key) is not None:
+        return EntityType.DECISION, decision_by_key(conn, project_id, key).id
+    return EntityType.ITEM, item_by_key(conn, project_id, key).id
 
 
 def safe_ref(key: str) -> str:

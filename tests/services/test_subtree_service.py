@@ -7,13 +7,10 @@ import pytest
 from xoot.exceptions.cross_project_error import CrossProjectError
 from xoot.exceptions.hierarchy_error import HierarchyError
 from xoot.exceptions.version_conflict_error import VersionConflictError
-from xoot.models.event.actor import Actor
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
-from xoot.models.session.session import Session
-from xoot.repositories.session import session_item_ref_db
 from xoot.services.item_service import get_item
 from xoot.services.subtree_service import (
     apply_drop,
@@ -41,31 +38,43 @@ def fixture_tree(project: Project, make_item: Callable[..., Item]) -> dict[str, 
 def test_drop_preview_writes_nothing(
     store: Store, tree: dict[str, Item], row_counts: Callable[[], dict[str, int]]
 ) -> None:
-    """The preview lists every non-terminal item in the subtree, and writes nothing."""
+    """The preview lists every open item in the subtree, deepest first."""
     before, changes = row_counts(), store.conn.total_changes
     plan = preview_drop(store, tree["goal"].id)
     assert (row_counts(), store.conn.total_changes) == (before, changes)
     assert [c.item_id for c in plan.changes] == [
-        tree[k].id for k in ("goal", "batch", "open")
+        tree[k].id for k in ("open", "batch", "goal")
     ]
     assert all(c.after == {"state": "dropped"} for c in plan.changes)
 
 
-def test_drop_apply_writes_the_plan(
+def test_drop_apply_writes_the_plan_and_completes_nothing_inside(
     store: Store, tree: dict[str, Item], ctx: WriteContext
 ) -> None:
-    """Apply drops the same items; done items keep their state."""
+    """Apply drops the same items; done items keep their state; no completion."""
     preview = preview_drop(store, tree["goal"].id)
-    assert apply_drop(store, tree["goal"].id, 1, ctx) == preview
+    applied, report = apply_drop(store, tree["goal"].id, 1, ctx)
+    assert applied == preview
+    assert report.completed == () and report.reopened == ()
     assert [
         get_item(store, tree[k].id).state for k in ("goal", "batch", "open", "done")
-    ] == [
-        "dropped",
-        "dropped",
-        "dropped",
-        "done",
-    ]
+    ] == ["dropped", "dropped", "dropped", "done"]
     assert get_item(store, tree["goal2"].id) == tree["goal2"]
+
+
+def test_dropping_the_last_open_batch_completes_its_goal(
+    store: Store,
+    project: Project,
+    tree: dict[str, Item],
+    ctx: WriteContext,
+    make_item: Callable[..., Item],
+) -> None:
+    """Above the dropped root the engine runs as usual."""
+    other = make_item(project, ItemKind.BATCH, parent_id=tree["goal"].id)
+    make_item(project, ItemKind.SUBTASK, parent_id=other.id, state="done")
+    _, report = apply_drop(store, tree["batch"].id, 1, ctx)
+    assert report.completed == (tree["goal"].key,)
+    assert get_item(store, tree["goal"].id).state == "done"
 
 
 def test_apply_revalidates_against_current_rows(
@@ -78,7 +87,7 @@ def test_apply_revalidates_against_current_rows(
     """Apply re-plans: a child added after the preview is dropped too."""
     preview = preview_drop(store, tree["batch"].id)
     late = make_item(project, ItemKind.SUBTASK, parent_id=tree["batch"].id)
-    applied = apply_drop(store, tree["batch"].id, 1, ctx)
+    applied, _ = apply_drop(store, tree["batch"].id, 1, ctx)
     assert late.id in {c.item_id for c in applied.changes} - {
         c.item_id for c in preview.changes
     }
@@ -96,46 +105,54 @@ def test_drop_checks_the_root_version(
 def test_reparent_preview(
     store: Store, tree: dict[str, Item], row_counts: Callable[[], dict[str, int]]
 ) -> None:
-    """Only the root row would change; descendants are carried; nothing written."""
+    """The root's parent, number and key change, then each descendant's key."""
     before = row_counts()
     plan = preview_reparent(store, tree["batch"].id, tree["goal2"].id)
     assert row_counts() == before
     assert [(c.item_id, c.before, c.after) for c in plan.changes] == [
         (
             tree["batch"].id,
-            {"parent_id": tree["goal"].id},
-            {"parent_id": tree["goal2"].id},
-        )
+            {"parent_id": tree["goal"].id, "key": "goal-1/batch-1", "number": 1},
+            {"parent_id": tree["goal2"].id, "key": "goal-2/batch-1", "number": 1},
+        ),
+        (
+            tree["open"].id,
+            {"key": "goal-1/batch-1/subtask-1"},
+            {"key": "goal-2/batch-1/subtask-1"},
+        ),
+        (
+            tree["done"].id,
+            {"key": "goal-1/batch-1/subtask-2"},
+            {"key": "goal-2/batch-1/subtask-2"},
+        ),
     ]
-    assert plan.carried_item_ids == (tree["open"].id, tree["done"].id)
 
 
-def test_reparent_apply(
+def test_reparent_apply(store: Store, tree: dict[str, Item], ctx: WriteContext) -> None:
+    """Apply moves the root and re-keys the children under it."""
+    plan, _ = apply_reparent(store, tree["batch"].id, tree["goal2"].id, 1, ctx)
+    assert len(plan.changes) == 3
+    moved = get_item(store, tree["batch"].id)
+    assert (moved.parent_id, moved.key) == (tree["goal2"].id, "goal-2/batch-1")
+    child = get_item(store, tree["open"].id)
+    assert (child.parent_id, child.key) == (
+        tree["batch"].id,
+        "goal-2/batch-1/subtask-1",
+    )
+
+
+def test_reparent_a_subtask_to_another_batch(
     store: Store,
     project: Project,
     tree: dict[str, Item],
-    make_session: Callable[..., Session],
-    user: Actor,
+    ctx: WriteContext,
+    make_item: Callable[..., Item],
 ) -> None:
-    """Apply moves the root, keeps the children under it, and links the root."""
-    session = make_session(project)
-    in_session = WriteContext(actor=user, session_id=session.id)
-    plan = apply_reparent(store, tree["batch"].id, tree["goal2"].id, 1, in_session)
-    assert [c.item_id for c in plan.changes] == [tree["batch"].id]
-    assert get_item(store, tree["batch"].id).parent_id == tree["goal2"].id
-    assert get_item(store, tree["open"].id).parent_id == tree["batch"].id
-    with store.read() as conn:
-        assert session_item_ref_db.open_session_ids(conn, tree["batch"].id) == [
-            session.id
-        ]
-
-
-def test_reparent_to_unfiled(
-    store: Store, tree: dict[str, Item], ctx: WriteContext
-) -> None:
-    """A subtask can be detached from its batch."""
-    apply_reparent(store, tree["open"].id, None, 1, ctx)
-    assert get_item(store, tree["open"].id).unfiled
+    """A subtask takes the next number of its new batch."""
+    target = make_item(project, ItemKind.BATCH, parent_id=tree["goal2"].id)
+    make_item(project, ItemKind.SUBTASK, parent_id=target.id)
+    apply_reparent(store, tree["open"].id, target.id, 1, ctx)
+    assert get_item(store, tree["open"].id).key == "goal-2/batch-1/subtask-2"
 
 
 def test_reparent_enforces_the_hierarchy(
@@ -147,6 +164,8 @@ def test_reparent_enforces_the_hierarchy(
     """Previews reject bad parents too, not only applies."""
     with pytest.raises(HierarchyError):
         preview_reparent(store, tree["batch"].id, None)
+    with pytest.raises(HierarchyError):
+        preview_reparent(store, tree["open"].id, None)
     with pytest.raises(HierarchyError):
         preview_reparent(store, tree["batch"].id, tree["open"].id)
     foreign = make_item(other_project, ItemKind.GOAL)

@@ -7,9 +7,9 @@ from xoot.models.fields import Id, KeyPrefix, Timestamp, Title
 
 class Project(BaseModel):
     """
-    A registered project: its key prefix, number counters and active
-    workflow. Item and decision keys are derived from key_prefix. next_seq
-    orders session starts and closes, independent of the clock.
+    A registered project: its key prefix, the counters for the items that
+    sit directly on it (goals and the project backlog) and its active
+    workflow. Keys qualify as "<key_prefix>:<key>".
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -17,8 +17,7 @@ class Project(BaseModel):
     id: Id
     key_prefix: KeyPrefix
     name: Title
-    next_item_number: Id
-    next_decision_number: Id
-    next_seq: Id
+    next_goal_number: Id
+    next_backlog_number: Id
     active_workflow_id: Id | None
     created_at: Timestamp

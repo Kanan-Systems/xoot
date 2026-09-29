@@ -51,8 +51,8 @@ def fixture_recorder(monkeypatch: pytest.MonkeyPatch) -> Recorded:
         "/api/v1/projects/xoot/brief",
         "/api/v1/projects/xoot/tree",
         "/api/v1/projects/xoot/changes",
-        "/api/v1/items/xoot-1",
-        "/api/v1/items/xoot-99",
+        "/api/v1/projects/xoot/items/goal-1/batch-1",
+        "/api/v1/projects/xoot/items/goal-99",
     ],
 )
 def test_one_store_per_request_closed_before_the_reply(

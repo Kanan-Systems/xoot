@@ -11,7 +11,8 @@ The writer emits exactly one structure, per item kind:
 An empty transitions table means "restricted, nothing allowed"; a missing one
 means unrestricted, so the two stay distinct across a round trip. The reader
 parses with tomllib and validates with WorkflowDefinition, which rejects any
-key outside that structure.
+key outside that structure. A file from xoot 0.2, which still uses the
+removed "backlogged" category, is refused with a message that says so.
 """
 
 import os
@@ -25,6 +26,13 @@ from xoot.models.item.item_kind import ItemKind
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
 
 MAX_BYTES = 64 * 1024
+LEGACY_CATEGORY = "backlogged"
+BACKLOGGED_REMOVED = (
+    'the workflow file uses the "backlogged" category from xoot 0.2; it was '
+    "removed in 0.3, where backlog is an item kind: drop those states and the "
+    "backlogged default, add done defaults, and give the backlog kind a "
+    "workflow (export the current one for an example)"
+)
 
 _BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 _ESCAPES = {
@@ -86,7 +94,7 @@ def load_workflow(data: bytes) -> WorkflowDefinition:
 
     Raises:
         - WorkflowFileError: the data is over MAX_BYTES, not UTF-8 or not
-          TOML.
+          TOML, or uses the removed "backlogged" category.
         - pydantic.ValidationError: the TOML is not a valid definition.
     """
     if len(data) > MAX_BYTES:
@@ -95,7 +103,28 @@ def load_workflow(data: bytes) -> WorkflowDefinition:
         document = tomllib.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         raise WorkflowFileError("the workflow file is not valid UTF-8 TOML") from exc
+    if _names_backlogged(document):
+        raise WorkflowFileError(BACKLOGGED_REMOVED)
     return WorkflowDefinition.model_validate(document)
+
+
+def _names_backlogged(document: dict[str, object]) -> bool:
+    """Whether a 0.2 file uses the removed category, as a state or a default."""
+    kinds = document.get("kinds")
+    if not isinstance(kinds, dict):
+        return False
+    for table in kinds.values():
+        if not isinstance(table, dict):
+            continue
+        states = table.get("states")
+        if isinstance(states, list) and any(
+            isinstance(s, dict) and s.get("category") == LEGACY_CATEGORY for s in states
+        ):
+            return True
+        defaults = table.get("defaults")
+        if isinstance(defaults, dict) and LEGACY_CATEGORY in defaults:
+            return True
+    return False
 
 
 def read_workflow_file(path: Path) -> WorkflowDefinition:

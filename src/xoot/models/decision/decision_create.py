@@ -10,17 +10,18 @@ from xoot.models.fields import Body, Id, Title
 
 class DecisionCreate(BaseModel):
     """
-    A new decision. When supersedes_id is set the older decision becomes
+    A new decision on the goal, batch or subtask it was made on. When
+    supersedes_id is set the older decision, on the same goal, becomes
     superseded in the same transaction.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    owner_item_id: Id
     title: Title
     body: Body = ""
     status: DecisionStatus = DecisionStatus.LOCKED
     supersedes_id: Id | None = None
-    scope_item_id: Id | None = None
 
     @model_validator(mode="after")
     def _not_born_superseded(self) -> Self:

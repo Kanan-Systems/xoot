@@ -9,13 +9,13 @@ from xoot.models.item.planned_item import PlannedItem
 class BulkPlan(BaseModel):
     """
     Every item the bulk create would insert, in insert order. Keys are
-    planned from the project's counter; the apply reports the keys actually
+    planned from the parents' counters; the apply reports the keys actually
     assigned. plan_sha256 digests the post-apply entry of every planned
     item.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    session_id: Id
+    project_id: Id
     items: tuple[PlannedItem, ...]
     plan_sha256: Sha256Hex

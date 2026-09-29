@@ -5,8 +5,8 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from xoot.models.event.actor_kind import ActorKind
+from xoot.models.event.client import Client
 from xoot.models.event.event_action import EventAction
-from xoot.models.session.client import Client
 
 
 class EventEntry(BaseModel):
@@ -20,7 +20,6 @@ class EventEntry(BaseModel):
     action: EventAction
     actor_kind: ActorKind
     client: Client
-    session: str | None
     created_at: str
     redacted: bool
     changed: list[str]

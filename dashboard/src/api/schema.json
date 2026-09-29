@@ -1,7 +1,7 @@
 {
   "$defs": {
     "ActorKind": {
-      "description": "Claude acting through a client, the user directly, or xoot itself.\n\nSYSTEM is for changes xoot derives from another actor's write (stale\nbacklog moves, workflow remaps); they keep that write's client and\nsession.",
+      "description": "Claude acting through a client, the user directly, or xoot itself.\n\nSYSTEM is for changes xoot derives from another actor's write (a goal or\nbatch completing or reopening, workflow remaps); they keep that write's\nclient.",
       "enum": [
         "claude",
         "user",
@@ -11,19 +11,8 @@
       "type": "string"
     },
     "BacklogRow": {
-      "description": "The item summary plus when the item was created.",
+      "description": "The backlog entry plus when the item was created and why it was\ncaptured: the first line of its body, cut to WHY_MAX characters.",
       "properties": {
-        "backlog_session": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Backlog Session"
-        },
         "category": {
           "anyOf": [
             {
@@ -38,12 +27,32 @@
           "title": "Created At",
           "type": "string"
         },
+        "found_on": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Found On"
+        },
         "key": {
           "title": "Key",
           "type": "string"
         },
         "kind": {
           "$ref": "#/$defs/ItemKind"
+        },
+        "level": {
+          "enum": [
+            "project",
+            "goal",
+            "batch"
+          ],
+          "title": "Level",
+          "type": "string"
         },
         "parent": {
           "anyOf": [
@@ -67,6 +76,10 @@
         "version": {
           "title": "Version",
           "type": "integer"
+        },
+        "why": {
+          "title": "Why",
+          "type": "string"
         }
       },
       "required": [
@@ -76,63 +89,63 @@
         "state",
         "category",
         "parent",
-        "backlog_session",
         "version",
-        "created_at"
+        "level",
+        "found_on",
+        "created_at",
+        "why"
       ],
       "title": "BacklogRow",
       "type": "object"
     },
-    "BacklogsView": {
-      "description": "Each open session's backlog, the project backlog and the unfiled\nsubtasks. A capture shows under its session and under unfiled.",
+    "BacklogView": {
+      "description": "Open backlog items of every level, project level first, then by key;\ntruncated when the cap hid items.",
       "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/BacklogRow"
+          },
+          "title": "Items",
+          "type": "array"
+        },
         "project": {
           "title": "Project",
           "type": "string"
         },
-        "project_backlog": {
-          "items": {
-            "$ref": "#/$defs/BacklogRow"
-          },
-          "title": "Project Backlog",
-          "type": "array"
-        },
-        "project_backlog_truncated": {
-          "title": "Project Backlog Truncated",
-          "type": "boolean"
-        },
-        "sessions": {
-          "items": {
-            "$ref": "#/$defs/SessionBacklogEntry"
-          },
-          "title": "Sessions",
-          "type": "array"
-        },
-        "unfiled": {
-          "items": {
-            "$ref": "#/$defs/BacklogRow"
-          },
-          "title": "Unfiled",
-          "type": "array"
-        },
-        "unfiled_truncated": {
-          "title": "Unfiled Truncated",
+        "truncated": {
+          "title": "Truncated",
           "type": "boolean"
         }
       },
       "required": [
         "project",
-        "sessions",
-        "project_backlog",
-        "project_backlog_truncated",
-        "unfiled",
-        "unfiled_truncated"
+        "items",
+        "truncated"
       ],
-      "title": "BacklogsView",
+      "title": "BacklogView",
+      "type": "object"
+    },
+    "BlockedEntry": {
+      "description": "Every child is done or dropped, but open_backlog backlog items still sit\non it: cover them, resolve them (item_update to done) or push them up.",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "open_backlog": {
+          "title": "Open Backlog",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "open_backlog"
+      ],
+      "title": "BlockedEntry",
       "type": "object"
     },
     "BriefView": {
-      "description": "The brief_get picture without its MCP-only fields: counts, open\nsessions, work in flight, backlogs, recent decisions and the workflow.",
+      "description": "The brief_get picture without its MCP-only fields: counts, open goals\nwith batch progress, work in flight, what open backlog blocks, open\nbacklog per level, recent decisions and the workflow.",
       "properties": {
         "active": {
           "items": {
@@ -148,6 +161,27 @@
           "title": "Awaiting Input",
           "type": "array"
         },
+        "backlog_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "project",
+              "goal",
+              "batch"
+            ]
+          },
+          "title": "Backlog Counts",
+          "type": "object"
+        },
+        "blocked": {
+          "items": {
+            "$ref": "#/$defs/BlockedEntry"
+          },
+          "title": "Blocked",
+          "type": "array"
+        },
         "counts": {
           "additionalProperties": {
             "type": "integer"
@@ -158,41 +192,19 @@
           "title": "Counts",
           "type": "object"
         },
-        "open_session_backlog": {
+        "open_goals": {
           "items": {
-            "$ref": "#/$defs/ItemSummary"
+            "$ref": "#/$defs/GoalProgressEntry"
           },
-          "title": "Open Session Backlog",
+          "title": "Open Goals",
           "type": "array"
         },
-        "open_session_backlog_truncated": {
-          "title": "Open Session Backlog Truncated",
+        "open_goals_truncated": {
+          "title": "Open Goals Truncated",
           "type": "boolean"
-        },
-        "open_sessions": {
-          "items": {
-            "$ref": "#/$defs/SessionSummary"
-          },
-          "title": "Open Sessions",
-          "type": "array"
-        },
-        "open_sessions_truncated": {
-          "title": "Open Sessions Truncated",
-          "type": "boolean"
-        },
-        "pending_session_backlog": {
-          "items": {
-            "$ref": "#/$defs/ItemSummary"
-          },
-          "title": "Pending Session Backlog",
-          "type": "array"
         },
         "project": {
           "$ref": "#/$defs/ProjectInfo"
-        },
-        "project_backlog_count": {
-          "title": "Project Backlog Count",
-          "type": "integer"
         },
         "recent_decisions": {
           "items": {
@@ -215,30 +227,27 @@
       "required": [
         "project",
         "workflow",
+        "open_goals",
+        "open_goals_truncated",
+        "blocked",
+        "backlog_counts",
         "counts",
         "active",
         "awaiting_input",
-        "open_sessions",
-        "open_sessions_truncated",
-        "open_session_backlog",
-        "open_session_backlog_truncated",
-        "pending_session_backlog",
-        "project_backlog_count",
         "recent_decisions"
       ],
       "title": "BriefView",
       "type": "object"
     },
     "Category": {
-      "description": "The fixed set of categories. Project workflows name their own states,\nbut every state belongs to exactly one of these, and domain rules\n(backlogs, session close, tree filtering) reason only in categories.",
+      "description": "The fixed set of categories. Project workflows name their own states,\nbut every state belongs to exactly one of these, and domain rules\n(completion, backlog counts, tree filtering) reason only in categories.\nBacklog is an item kind, not a category.",
       "enum": [
         "open",
         "active",
         "blocked",
         "awaiting_input",
         "done",
-        "dropped",
-        "backlogged"
+        "dropped"
       ],
       "title": "Category",
       "type": "string"
@@ -296,7 +305,7 @@
       "type": "object"
     },
     "Client": {
-      "description": "Where a write came from; recorded on sessions and on every event.",
+      "description": "Where a write came from; recorded on every event.",
       "enum": [
         "chat",
         "code",
@@ -321,7 +330,7 @@
           "title": "Key",
           "type": "string"
         },
-        "scope": {
+        "owner": {
           "anyOf": [
             {
               "type": "string"
@@ -330,7 +339,7 @@
               "type": "null"
             }
           ],
-          "title": "Scope"
+          "title": "Owner"
         },
         "status": {
           "$ref": "#/$defs/DecisionStatus"
@@ -363,7 +372,7 @@
         "key",
         "title",
         "status",
-        "scope",
+        "owner",
         "supersedes",
         "version",
         "updated_at",
@@ -384,13 +393,13 @@
       "type": "string"
     },
     "DecisionSummary": {
-      "description": "A decision's key, title, status, references and version.",
+      "description": "A decision's key (<owner key>/decision-<n>), title, status, the item it\nwas made on, the decision it supersedes, and its version.",
       "properties": {
         "key": {
           "title": "Key",
           "type": "string"
         },
-        "scope": {
+        "owner": {
           "anyOf": [
             {
               "type": "string"
@@ -399,7 +408,7 @@
               "type": "null"
             }
           ],
-          "title": "Scope"
+          "title": "Owner"
         },
         "status": {
           "$ref": "#/$defs/DecisionStatus"
@@ -432,7 +441,7 @@
         "key",
         "title",
         "status",
-        "scope",
+        "owner",
         "supersedes",
         "version",
         "updated_at"
@@ -480,17 +489,6 @@
       "title": "DecisionsView",
       "type": "object"
     },
-    "Disposition": {
-      "description": "carry_over keeps the state; session_backlog and project_backlog move the\nitem to the default backlogged state (with or without this session);\ndropped moves it to the default dropped state.",
-      "enum": [
-        "carry_over",
-        "session_backlog",
-        "project_backlog",
-        "dropped"
-      ],
-      "title": "Disposition",
-      "type": "string"
-    },
     "ErrorOutput": {
       "description": "The error class name and a safe message, built by the same rules as MCP\ntool errors: never driver text, SQL or an arbitrary input value.",
       "properties": {
@@ -515,9 +513,6 @@
       "enum": [
         "create",
         "update",
-        "link",
-        "dispose",
-        "close",
         "add_alias",
         "add_path",
         "remove_alias",
@@ -577,24 +572,12 @@
         "redacted": {
           "title": "Redacted",
           "type": "boolean"
-        },
-        "session": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Session"
         }
       },
       "required": [
         "action",
         "actor_kind",
         "client",
-        "session",
         "created_at",
         "redacted",
         "changed",
@@ -604,9 +587,71 @@
       "title": "EventEntry",
       "type": "object"
     },
-    "ItemDetail": {
-      "description": "The summary plus the body, the awaited decision and timestamps.",
+    "GoalProgressEntry": {
+      "description": "batches_done of batches_total are done (dropped batches count in\nneither); open_backlog counts the open backlog anywhere in the goal.",
       "properties": {
+        "batches_done": {
+          "title": "Batches Done",
+          "type": "integer"
+        },
+        "batches_total": {
+          "title": "Batches Total",
+          "type": "integer"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Category"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "open_backlog": {
+          "title": "Open Backlog",
+          "type": "integer"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "state",
+        "category",
+        "batches_done",
+        "batches_total",
+        "open_backlog",
+        "version"
+      ],
+      "title": "GoalProgressEntry",
+      "type": "object"
+    },
+    "ItemDetail": {
+      "description": "The summary plus the body, the awaited decision, the backlog links\n(found_on and covered_by on a backlog item, origin on a subtask made\nfrom one), every older key that still resolves to it, and timestamps.",
+      "properties": {
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
         "awaiting_decision": {
           "anyOf": [
             {
@@ -617,17 +662,6 @@
             }
           ],
           "title": "Awaiting Decision"
-        },
-        "backlog_session": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Backlog Session"
         },
         "body": {
           "title": "Body",
@@ -643,9 +677,31 @@
             }
           ]
         },
+        "covered_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Covered By"
+        },
         "created_at": {
           "title": "Created At",
           "type": "string"
+        },
+        "found_on": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Found On"
         },
         "key": {
           "title": "Key",
@@ -653,6 +709,17 @@
         },
         "kind": {
           "$ref": "#/$defs/ItemKind"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Origin"
         },
         "parent": {
           "anyOf": [
@@ -672,10 +739,6 @@
         "title": {
           "title": "Title",
           "type": "string"
-        },
-        "unfiled": {
-          "title": "Unfiled",
-          "type": "boolean"
         },
         "updated_at": {
           "title": "Updated At",
@@ -693,11 +756,13 @@
         "state",
         "category",
         "parent",
-        "backlog_session",
         "version",
         "body",
         "awaiting_decision",
-        "unfiled",
+        "found_on",
+        "covered_by",
+        "origin",
+        "aliases",
         "created_at",
         "updated_at"
       ],
@@ -705,29 +770,19 @@
       "type": "object"
     },
     "ItemKind": {
-      "description": "A goal holds batches, a batch holds subtasks; subtasks may be unfiled.",
+      "description": "A goal holds batches, a batch holds subtasks. A backlog item is open work\nfound along the way; it sits on a batch, a goal or the project.",
       "enum": [
         "goal",
         "batch",
-        "subtask"
+        "subtask",
+        "backlog"
       ],
       "title": "ItemKind",
       "type": "string"
     },
     "ItemSummary": {
-      "description": "Enough to recognize, pick and update an item. category is the fixed\nmeaning of the project-defined state; version is what item_update needs.",
+      "description": "Enough to recognize, pick and update an item. key is its nested path\nwithin the project; category is the fixed meaning of the\nproject-defined state; version is what item_update needs.",
       "properties": {
-        "backlog_session": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Backlog Session"
-        },
         "category": {
           "anyOf": [
             {
@@ -776,14 +831,13 @@
         "state",
         "category",
         "parent",
-        "backlog_session",
         "version"
       ],
       "title": "ItemSummary",
       "type": "object"
     },
     "ItemView": {
-      "description": "One item in full: its children, most recent events (newest first), the\nsessions it is linked to and the decisions scoped to it, with bodies.",
+      "description": "One item in full: its children (work first, then backlog), its most\nrecent events (newest first) and the decisions made on it, with bodies.",
       "properties": {
         "children": {
           "$ref": "#/$defs/ChildrenSummary"
@@ -804,20 +858,12 @@
         },
         "item": {
           "$ref": "#/$defs/ItemDetail"
-        },
-        "sessions": {
-          "items": {
-            "$ref": "#/$defs/SessionSummary"
-          },
-          "title": "Sessions",
-          "type": "array"
         }
       },
       "required": [
         "item",
         "children",
         "events",
-        "sessions",
         "decisions"
       ],
       "title": "ItemView",
@@ -881,231 +927,6 @@
       "title": "ProjectsOutput",
       "type": "object"
     },
-    "SessionBacklogEntry": {
-      "description": "An open session and the items parked in its backlog.",
-      "properties": {
-        "items": {
-          "items": {
-            "$ref": "#/$defs/BacklogRow"
-          },
-          "title": "Items",
-          "type": "array"
-        },
-        "session": {
-          "$ref": "#/$defs/SessionSummary"
-        },
-        "truncated": {
-          "title": "Truncated",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "session",
-        "items",
-        "truncated"
-      ],
-      "title": "SessionBacklogEntry",
-      "type": "object"
-    },
-    "SessionItemEntry": {
-      "description": "The item as it is now, the disposition the session's close gave it\n(None while the session is open, or when the item was no longer open at\nclose), and whether the session captured it.",
-      "properties": {
-        "captured": {
-          "title": "Captured",
-          "type": "boolean"
-        },
-        "disposition": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Disposition"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "item": {
-          "$ref": "#/$defs/ItemSummary"
-        }
-      },
-      "required": [
-        "item",
-        "disposition",
-        "captured"
-      ],
-      "title": "SessionItemEntry",
-      "type": "object"
-    },
-    "SessionRow": {
-      "description": "The session summary plus how many items it is linked to.",
-      "properties": {
-        "client": {
-          "$ref": "#/$defs/Client"
-        },
-        "closed_at": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Closed At"
-        },
-        "key": {
-          "title": "Key",
-          "type": "string"
-        },
-        "linked_items": {
-          "title": "Linked Items",
-          "type": "integer"
-        },
-        "started_at": {
-          "title": "Started At",
-          "type": "string"
-        },
-        "status": {
-          "$ref": "#/$defs/SessionStatus"
-        },
-        "title": {
-          "title": "Title",
-          "type": "string"
-        }
-      },
-      "required": [
-        "key",
-        "title",
-        "client",
-        "status",
-        "started_at",
-        "closed_at",
-        "linked_items"
-      ],
-      "title": "SessionRow",
-      "type": "object"
-    },
-    "SessionStatus": {
-      "description": "Sessions start open and are closed exactly once.",
-      "enum": [
-        "open",
-        "closed"
-      ],
-      "title": "SessionStatus",
-      "type": "string"
-    },
-    "SessionSummary": {
-      "description": "A session's key, title, client, status and timestamps.",
-      "properties": {
-        "client": {
-          "$ref": "#/$defs/Client"
-        },
-        "closed_at": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Closed At"
-        },
-        "key": {
-          "title": "Key",
-          "type": "string"
-        },
-        "started_at": {
-          "title": "Started At",
-          "type": "string"
-        },
-        "status": {
-          "$ref": "#/$defs/SessionStatus"
-        },
-        "title": {
-          "title": "Title",
-          "type": "string"
-        }
-      },
-      "required": [
-        "key",
-        "title",
-        "client",
-        "status",
-        "started_at",
-        "closed_at"
-      ],
-      "title": "SessionSummary",
-      "type": "object"
-    },
-    "SessionView": {
-      "description": "One session, its close summary, the keys of the items it is linked to\n(which the tree filter uses) and those items with their outcomes.",
-      "properties": {
-        "items": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Items",
-          "type": "array"
-        },
-        "linked": {
-          "items": {
-            "$ref": "#/$defs/SessionItemEntry"
-          },
-          "title": "Linked",
-          "type": "array"
-        },
-        "session": {
-          "$ref": "#/$defs/SessionSummary"
-        },
-        "summary": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Summary"
-        }
-      },
-      "required": [
-        "session",
-        "summary",
-        "items",
-        "linked"
-      ],
-      "title": "SessionView",
-      "type": "object"
-    },
-    "SessionsView": {
-      "description": "Sessions, open ones first, then newest first.",
-      "properties": {
-        "project": {
-          "title": "Project",
-          "type": "string"
-        },
-        "sessions": {
-          "items": {
-            "$ref": "#/$defs/SessionRow"
-          },
-          "title": "Sessions",
-          "type": "array"
-        },
-        "truncated": {
-          "title": "Truncated",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "project",
-        "sessions",
-        "truncated"
-      ],
-      "title": "SessionsView",
-      "type": "object"
-    },
     "StateSpec": {
       "additionalProperties": false,
       "description": "A project-chosen state name and the fixed category it belongs to.",
@@ -1135,23 +956,25 @@
         },
         "item": {
           "$ref": "#/$defs/ItemSummary"
-        },
-        "unfiled": {
-          "title": "Unfiled",
-          "type": "boolean"
         }
       },
       "required": [
         "depth",
-        "unfiled",
         "item"
       ],
       "title": "TreeEntry",
       "type": "object"
     },
     "TreeView": {
-      "description": "Tree nodes in pre-order; truncated says the bounds hid items.",
+      "description": "Tree nodes in pre-order; truncated says the bounds hid items. blocked\nlists every goal and batch of the project that open backlog holds open,\nuncapped, so any node can show it.",
       "properties": {
+        "blocked": {
+          "items": {
+            "$ref": "#/$defs/BlockedEntry"
+          },
+          "title": "Blocked",
+          "type": "array"
+        },
         "nodes": {
           "items": {
             "$ref": "#/$defs/TreeEntry"
@@ -1171,7 +994,8 @@
       "required": [
         "project",
         "nodes",
-        "truncated"
+        "truncated",
+        "blocked"
       ],
       "title": "TreeView",
       "type": "object"

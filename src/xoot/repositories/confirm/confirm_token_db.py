@@ -9,7 +9,7 @@ from xoot.models.confirm.new_confirm_token import NewConfirmToken
 from xoot.models.fields import format_timestamp
 
 _COLUMNS = (
-    "id, token_sha256, tool, args_sha256, plan_sha256, session_id, expires_at, "
+    "id, token_sha256, project_id, tool, args_sha256, plan_sha256, expires_at, "
     "used_at"
 )
 
@@ -26,9 +26,9 @@ def insert(conn: sqlite3.Connection, new: NewConfirmToken) -> ConfirmToken:
         - token (ConfirmToken): the stored row.
     """
     row = conn.execute(
-        "INSERT INTO confirm_token (token_sha256, tool, args_sha256, plan_sha256, "
-        "session_id, expires_at) VALUES (:token_sha256, :tool, :args_sha256, "
-        f":plan_sha256, :session_id, :expires_at) RETURNING {_COLUMNS}",
+        "INSERT INTO confirm_token (token_sha256, project_id, tool, args_sha256, "
+        "plan_sha256, expires_at) VALUES (:token_sha256, :project_id, :tool, "
+        f":args_sha256, :plan_sha256, :expires_at) RETURNING {_COLUMNS}",
         new.model_dump(mode="json"),
     ).fetchone()
     return ConfirmToken.model_validate(dict(row))

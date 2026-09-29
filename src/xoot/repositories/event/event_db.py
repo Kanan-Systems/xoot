@@ -18,7 +18,7 @@ from xoot.models.fields import format_timestamp
 
 _COLUMNS = (
     "id, project_id, entity_type, entity_id, action, actor_kind, client, "
-    "session_id, before, after, created_at, redacted_at"
+    "before, after, created_at, redacted_at"
 )
 
 
@@ -39,9 +39,9 @@ def append(conn: sqlite3.Connection, new: NewEvent) -> Event:
     params["after"] = _to_json(params["after"])
     row = conn.execute(
         "INSERT INTO event (project_id, entity_type, entity_id, action, actor_kind, "
-        "client, session_id, before, after, created_at) VALUES (:project_id, "
-        ":entity_type, :entity_id, :action, :actor_kind, :client, :session_id, "
-        f":before, :after, :created_at) RETURNING {_COLUMNS}",
+        "client, before, after, created_at) VALUES (:project_id, :entity_type, "
+        ":entity_id, :action, :actor_kind, :client, :before, :after, :created_at) "
+        f"RETURNING {_COLUMNS}",
         params,
     ).fetchone()
     return _to_event(row)
@@ -153,29 +153,6 @@ def latest_id(conn: sqlite3.Connection, project_id: int) -> int:
         (project_id,),
     ).fetchone()
     return int(row[0])
-
-
-def created_in_session_backlog(conn: sqlite3.Connection, session_id: int) -> set[int]:
-    """
-    Return the items created straight into a session's backlog in it.
-
-    That is what a capture writes: the create event is attributed to the
-    session and the new item's backlog_session_id is that session.
-
-    Args:
-        - conn (sqlite3.Connection): open connection.
-        - session_id (int): session id.
-
-    Returns:
-        - item_ids (set[int]): the captured item ids.
-    """
-    rows = conn.execute(
-        "SELECT entity_id FROM event WHERE entity_type = 'item' "
-        "AND action = 'create' AND session_id = ? "
-        "AND json_extract(after, '$.backlog_session_id') = ?",
-        (session_id, session_id),
-    ).fetchall()
-    return {int(row[0]) for row in rows}
 
 
 def _to_json(value: dict[str, Any] | None) -> str | None:

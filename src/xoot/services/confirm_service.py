@@ -1,8 +1,8 @@
 """
 Issuing and consuming confirm tokens for two-phase writes.
 
-A preview issues a token bound to one tool, one argument digest, one plan
-digest and one open session. The apply presents it inside its own write
+A preview issues a token bound to one project, one tool, one argument
+digest and one plan digest. The apply presents it inside its own write
 transaction, which checks and consumes it first, then re-plans and compares
 the plan digest before writing, so the token is spent only if the write
 commits, and only for the plan the preview showed.
@@ -15,15 +15,13 @@ from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 
 from xoot.exceptions.confirm_token_error import ConfirmTokenError
-from xoot.exceptions.session_state_error import SessionStateError
 from xoot.models.confirm.confirm_token import ConfirmToken
 from xoot.models.confirm.confirmation import Confirmation
 from xoot.models.confirm.new_confirm_token import NewConfirmToken
 from xoot.models.confirm.plan_entry import PlanEntry
-from xoot.models.session.session_status import SessionStatus
 from xoot.repositories.confirm import confirm_token_db
 from xoot.services.id_checks import check_id
-from xoot.services.lookups import require_session
+from xoot.services.lookups import require_project
 from xoot.store.store import Store
 from xoot.utils.utils import canonical_sha256
 
@@ -68,7 +66,7 @@ def plan_digest(entries: Iterable[PlanEntry]) -> str:
 # One parameter per bound value, plus the clock override tests use.
 def issue_token(  # pylint: disable=too-many-arguments
     store: Store,
-    session_id: int,
+    project_id: int,
     tool: str,
     args_sha256: str,
     plan_sha256: str,
@@ -83,7 +81,7 @@ def issue_token(  # pylint: disable=too-many-arguments
 
     Args:
         - store (Store): the database.
-        - session_id (int): the open session the write belongs to.
+        - project_id (int): the project the write belongs to.
         - tool (str): the tool the token is valid for.
         - args_sha256 (str): digest of the previewed call's arguments.
         - plan_sha256 (str): plan_digest of the previewed plan.
@@ -93,25 +91,23 @@ def issue_token(  # pylint: disable=too-many-arguments
         - token (str): the token; only its digest is stored.
 
     Raises:
-        - InvalidIdError: session_id is not an int id.
-        - NotFoundError: no such session.
-        - SessionStateError: the session is closed.
+        - InvalidIdError: project_id is not an int id.
+        - NotFoundError: no such project.
         - pydantic.ValidationError: tool or a digest is malformed.
     """
-    check_id("session_id", session_id)
+    check_id("project_id", project_id)
     issued_at = datetime.now(UTC) if now is None else now
     token = secrets.token_urlsafe(TOKEN_BYTES)
     new = NewConfirmToken(
         token_sha256=hash_token(token),
+        project_id=project_id,
         tool=tool,
         args_sha256=args_sha256,
         plan_sha256=plan_sha256,
-        session_id=session_id,
         expires_at=issued_at + TOKEN_TTL,
     )
     with store.write() as conn:
-        if require_session(conn, session_id).status is not SessionStatus.OPEN:
-            raise SessionStateError(f"session {session_id} is closed")
+        require_project(conn, project_id)
         # No issue time is stored; it is always expires_at - TOKEN_TTL.
         confirm_token_db.delete_spent(
             conn, issued_at, issued_at - PRUNE_AGE + TOKEN_TTL
@@ -123,7 +119,7 @@ def issue_token(  # pylint: disable=too-many-arguments
 def consume_token(
     conn: sqlite3.Connection,
     confirmation: Confirmation,
-    session_id: int | None,
+    project_id: int,
     now: datetime | None = None,
 ) -> ConfirmToken:
     """
@@ -136,7 +132,7 @@ def consume_token(
     Args:
         - conn (sqlite3.Connection): connection inside that transaction.
         - confirmation (Confirmation): the token, tool and argument digest.
-        - session_id (int | None): the session of the write.
+        - project_id (int): the project of the write.
         - now (datetime | None): use time; the current UTC time when None.
 
     Returns:
@@ -144,7 +140,7 @@ def consume_token(
 
     Raises:
         - ConfirmTokenError: the token is unknown, bound to another tool,
-          session or arguments, already used, or expired.
+          project or arguments, already used, or expired.
     """
     used_at = datetime.now(UTC) if now is None else now
     row = confirm_token_db.get_by_hash(conn, hash_token(confirmation.token))
@@ -152,8 +148,8 @@ def consume_token(
         raise ConfirmTokenError("the confirm token is unknown")
     if row.tool != confirmation.tool:
         raise ConfirmTokenError("the confirm token was issued for another tool")
-    if row.session_id != session_id:
-        raise ConfirmTokenError("the confirm token was issued for another session")
+    if row.project_id != project_id:
+        raise ConfirmTokenError("the confirm token was issued for another project")
     if row.args_sha256 != confirmation.args_sha256:
         raise ConfirmTokenError("the confirm token does not match these arguments")
     if row.used_at is not None:

@@ -52,7 +52,7 @@ def fixture_reply() -> Callable[..., bytes]:
     """Factory: a chat reply, as bytes, holding one xoot block built from ops."""
 
     def build(ops: list[dict[str, Any]], **top: Any) -> bytes:
-        block = {"xoot": 1, "project": "xo", **top, "ops": ops}
+        block = {"xoot": 2, "project": "xo", **top, "ops": ops}
         return f"Sure:\n\n```xoot\n{json.dumps(block)}\n```\n".encode()
 
     return build

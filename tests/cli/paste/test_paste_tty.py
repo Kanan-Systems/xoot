@@ -12,8 +12,8 @@ import pytest
 from xoot.models.project.project import Project
 
 OPS = [
-    {"op": "session_start", "title": "plan"},
     {"op": "item_create", "ref": "g", "kind": "goal", "title": "goal"},
+    {"op": "capture", "found_on": "$g", "title": "later", "body": "why"},
 ]
 
 
@@ -27,9 +27,9 @@ def test_payload_on_stdin_and_yes_on_the_tty_applies(
     before = row_counts()
     run = spawn("paste", "apply", "-", stdin=reply(OPS), answer="y")
     assert run.code == 0, run.err
-    assert "op 2 item_create: xoot-1 (new, $g)" in run.err
+    assert "op 1 item_create: goal-1 (new, $g)" in run.err
     assert "Apply? [y/N] " in run.err
-    assert run.receipt()["refs"] == {"g": "xoot-1"}
+    assert run.receipt()["refs"] == {"g": "goal-1"}
     assert row_counts() != before
 
 
@@ -54,7 +54,7 @@ def test_no_terminal_and_no_yes_is_refused(
     reply: Callable[..., bytes],
     row_counts: Callable[[], dict[str, int]],
 ) -> None:
-    """A new session with no controlling terminal cannot be asked."""
+    """A process with no controlling terminal cannot be asked."""
     before = row_counts()
     run = spawn("paste", "apply", "-", stdin=reply(OPS), answer=None)
     assert (run.code, run.out) == (1, "")
@@ -73,8 +73,6 @@ def test_yes_without_a_terminal_applies_and_prints_the_plan(
     """--yes skips the question, never the plan."""
     run = spawn("paste", "apply", "-", "--yes", stdin=reply(OPS), answer=None)
     assert run.code == 0, run.err
-    assert run.err.startswith(
-        f"paste plan: project {project.key_prefix}, session xoot-S1"
-    )
+    assert run.err.startswith(f"paste plan: project {project.key_prefix}\n")
     assert "Apply?" not in run.err
-    assert run.receipt()["session"] == "xoot-S1"
+    assert run.receipt()["refs"] == {"g": "goal-1"}

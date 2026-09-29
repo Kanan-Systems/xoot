@@ -11,7 +11,7 @@ MAX_ITEMS = 1000
 class TreeQuery(BaseModel):
     """
     Which part of a project's tree to return. Without root_id the tree
-    starts at goals and unfiled subtasks. Done and dropped items (and
+    starts at the goals and the project backlog. Done and dropped items (and
     everything under them) are left out unless include_terminal is set.
     """
 

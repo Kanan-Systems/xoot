@@ -26,7 +26,7 @@ def test_registration_applies_the_default_workflow(
     assert project.active_workflow_id == workflow.id
     assert workflow.version == 1
     assert workflow.definition == WorkflowDefinition.default()
-    assert (project.next_item_number, project.next_decision_number) == (1, 1)
+    assert (project.next_goal_number, project.next_backlog_number) == (1, 1)
 
 
 @pytest.mark.usefixtures("project")

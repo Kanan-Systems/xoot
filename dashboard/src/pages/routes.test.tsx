@@ -1,9 +1,12 @@
 // The routes: each tab, the ?item drawer over any view, Back and Escape,
-// the goal selector and the redirects.
+// the goal selector, focus and item links with nested keys in the query,
+// and the redirects.
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { mockApi, projectRoutes } from '../test/api.ts';
+import { PROJECT_ID } from '../lib/tree.ts';
+import { mockApi, projectRoutes, urlOf } from '../test/api.ts';
+import { B1, B1_BACKLOG, G1, P_BACKLOG } from '../test/fixtures.ts';
 import { mockReactFlowDom } from '../test/reactFlow.ts';
 import { renderApp } from '../test/renderApp.tsx';
 
@@ -17,11 +20,17 @@ async function at(path: string): Promise<void> {
   });
 }
 
+function shownNode(id: string): Element | null {
+  return document.querySelector(`.react-flow__node[data-id="${id}"]`);
+}
+
 describe('routes', () => {
+  let fetchMock: ReturnType<typeof mockApi>;
+
   beforeEach(() => {
     vi.unstubAllGlobals();
     mockReactFlowDom();
-    mockApi(projectRoutes());
+    fetchMock = mockApi(projectRoutes());
   });
 
   it('/ redirects to the first project tree', async () => {
@@ -37,8 +46,18 @@ describe('routes', () => {
     await at('/x/tree');
   });
 
+  it('has exactly the Tree, Backlog and Decisions tabs', async () => {
+    renderApp('/x/tree');
+    const views = await screen.findByRole('navigation', { name: 'Views' });
+    const tabs = within(views).getAllByRole('link');
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Tree',
+      'Backlog',
+      'Decisions',
+    ]);
+  });
+
   it.each([
-    ['Sessions', '/x/sessions'],
     ['Backlog', '/x/backlog'],
     ['Decisions', '/x/decisions'],
     ['Tree', '/x/tree'],
@@ -50,69 +69,88 @@ describe('routes', () => {
     expect(within(views).getByRole('link', { name: tab })).toHaveClass('tab-active');
   });
 
-  it('?item opens the drawer on top of the current view', async () => {
-    renderApp('/x/backlog?item=x-9');
-    expect(
-      await screen.findByRole('complementary', { name: 'Details of x-9' }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Backlog' })).toBeInTheDocument();
+  it('an unknown view says so', async () => {
+    renderApp('/x/nowhere');
+    expect(await screen.findByText('No such view.')).toBeInTheDocument();
   });
 
-  it('a row click opens the drawer; Back closes it', async () => {
+  it('?item with a nested key opens the drawer and fetches it by path', async () => {
+    renderApp(`/x/backlog?item=${encodeURIComponent(B1_BACKLOG)}`);
+    expect(
+      await screen.findByRole('complementary', { name: `Details of ${B1_BACKLOG}` }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Backlog' })).toBeInTheDocument();
+    const urls = fetchMock.mock.calls.map(([input]) => urlOf(input));
+    expect(urls).toContain(`/api/v1/projects/x/items/${B1_BACKLOG}`);
+  });
+
+  it('a row click opens the drawer with the key in the query; Back closes it', async () => {
     renderApp('/x/backlog');
-    const [link] = await screen.findAllByRole('link', { name: 'title of x-9 x-9' });
-    fireEvent.click(link as HTMLElement);
-    await at('/x/backlog?item=x-9');
+    const link = await screen.findByRole('link', {
+      name: /title of goal-1\/batch-1\/backlog-1/,
+    });
+    fireEvent.click(link);
+    const expected = `/x/backlog?item=${encodeURIComponent(B1_BACKLOG)}`;
+    await at(expected);
     expect(await screen.findByRole('complementary')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Test back' }));
     await at('/x/backlog');
     expect(screen.queryByRole('complementary')).toBeNull();
   });
 
-  it('Escape and the close button close the drawer', async () => {
-    renderApp('/x/sessions?item=x-2');
-    await screen.findByRole('complementary', { name: 'Details of x-2' });
+  it('Escape closes the drawer', async () => {
+    renderApp(`/x/decisions?item=${encodeURIComponent(B1)}`);
+    await screen.findByRole('complementary', { name: `Details of ${B1}` });
     fireEvent.keyDown(window, { key: 'Escape' });
-    await at('/x/sessions');
+    await at('/x/decisions');
     expect(screen.queryByRole('complementary')).toBeNull();
   });
 
-  it('the B4a item link redirects to the drawer on the tree', async () => {
-    renderApp('/x/item/x-2');
-    await at('/x/tree?item=x-2');
-  });
-
-  it('the session filter in "only" mode keeps its items and their ancestors', async () => {
-    renderApp('/x/tree?session=x-S1&mode=only');
-    // x-S1 links x-2, x-4 (done, collapsed into x-2's badge) and x-7 (unfiled).
+  it('a focus deep link round-trips a nested key through the URL', async () => {
+    renderApp(`/x/tree?focus=${encodeURIComponent(B1)}`);
     await waitFor(() => {
-      expect(document.querySelector('.react-flow__node[data-id="x-2"]')).not.toBeNull();
+      expect(shownNode(B1)).not.toBeNull();
     });
-    const shown = [...document.querySelectorAll<HTMLElement>('.react-flow__node')].map(
-      (node) => node.dataset.id,
-    );
-    expect(shown.sort()).toEqual(['unfiled', 'x-1', 'x-2']);
-    expect(screen.getByRole('radio', { name: 'Only this session' })).toBeChecked();
+    expect(shownNode(G1)).toBeNull();
+    expect(shownNode(PROJECT_ID)).toBeNull();
+    expect(screen.getByText(/^Focus:/)).toHaveTextContent(`title of ${B1} (${B1})`);
+    fireEvent.click(screen.getByRole('link', { name: 'Show the whole tree' }));
+    await at('/x/tree');
+    await waitFor(() => {
+      expect(shownNode(PROJECT_ID)).not.toBeNull();
+    });
   });
 
-  it('the goal selector sets the tree root', async () => {
+  it('the drawer focus button moves the key into ?focus', async () => {
+    renderApp(`/x/backlog?item=${encodeURIComponent(B1)}`);
+    fireEvent.click(await screen.findByRole('button', { name: /Focus on this batch/ }));
+    await at(`/x/tree?focus=${encodeURIComponent(B1)}`);
+  });
+
+  it.each([
+    [`/x/item/${B1}`, `/x/tree?item=${encodeURIComponent(B1)}`],
+    [`/x/focus/${B1}`, `/x/tree?focus=${encodeURIComponent(B1)}`],
+  ])('the old path link %s redirects into the query', async (from, to) => {
+    renderApp(from);
+    await at(to);
+  });
+
+  it('the goal selector narrows the project-root tree to one goal', async () => {
     renderApp('/x/tree');
     await waitFor(() => {
-      expect(
-        document.querySelector('.react-flow__node[data-id="unfiled"]'),
-      ).not.toBeNull();
+      expect(shownNode(P_BACKLOG)).not.toBeNull();
     });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Goal' }), {
-      target: { value: 'x-1' },
-    });
-    await at('/x/tree?goal=x-1');
+    const goal = screen.getByRole('combobox', { name: 'Goal' });
+    expect(goal).toHaveValue('');
+    expect(within(goal).getAllByRole('option')[0]).toHaveTextContent('All goals');
+    fireEvent.change(goal, { target: { value: G1 } });
+    await at('/x/tree?goal=goal-1');
     await waitFor(() => {
-      expect(document.querySelector('.react-flow__node[data-id="unfiled"]')).toBeNull();
+      expect(shownNode(P_BACKLOG)).toBeNull();
     });
-    expect(document.querySelector('.react-flow__node[data-id="x-1"]')).not.toBeNull();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Goal' }), {
-      target: { value: '' },
-    });
+    expect(shownNode(PROJECT_ID)).toBeNull();
+    expect(shownNode(G1)).not.toBeNull();
+    fireEvent.change(goal, { target: { value: '' } });
     await at('/x/tree');
   });
 });

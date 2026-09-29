@@ -27,7 +27,7 @@ CASES: dict[str, list[str]] = {
         "{tmp}/o.toml",
     ],
     "workflow import": ["workflow", "import", "{toml}", "--project", "xo", "--yes"],
-    "redact": ["redact", "xoot-1", "title", "--yes"],
+    "redact": ["redact", "xoot:goal-1", "title", "--yes"],
     "db stats": ["db", "stats"],
     "db vacuum": ["db", "vacuum"],
 }
@@ -70,11 +70,13 @@ def test_results_say_what_happened(
     assert listing[1].split() == ["PREFIX", "NAME", "ALIASES", "PATHS"]
     assert listing[3].split() == ["xoot", "xoot", "xo", "/work/xoot"]
     tree = xoot("tree", "--project", "xoot").out
-    assert tree == f"xoot-1  goal  open (open)  t {marker}\n"
+    assert tree == f"goal-1  goal  open (open)  t {marker}\n"
     assert "Counts\n  open: 1" in xoot("brief", "--project", "xo").out
     exported = xoot("workflow", "export", "--project", "xo", "-o", str(tmp_path / "w"))
     assert exported.out == f"wrote xoot workflow version 1 to {tmp_path / 'w'}\n"
-    redacted = xoot("redact", secret_item.key, "body", "--yes", "--json").json()
+    redacted = xoot(
+        "redact", f"xoot:{secret_item.key}", "body", "--yes", "--json"
+    ).json()
     assert (redacted["field"], redacted["version"], redacted["purged"]) == (
         "body",
         2,

@@ -2,9 +2,9 @@
 /**
  * Claude acting through a client, the user directly, or xoot itself.
  *
- * SYSTEM is for changes xoot derives from another actor's write (stale
- * backlog moves, workflow remaps); they keep that write's client and
- * session.
+ * SYSTEM is for changes xoot derives from another actor's write (a goal or
+ * batch completing or reopening, workflow remaps); they keep that write's
+ * client.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
  * via the `definition` "ActorKind".
@@ -13,34 +13,22 @@ export type ActorKind = 'claude' | 'user' | 'system';
 /**
  * The fixed set of categories. Project workflows name their own states,
  * but every state belongs to exactly one of these, and domain rules
- * (backlogs, session close, tree filtering) reason only in categories.
+ * (completion, backlog counts, tree filtering) reason only in categories.
+ * Backlog is an item kind, not a category.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
  * via the `definition` "Category".
  */
 export type Category =
-  'open' | 'active' | 'blocked' | 'awaiting_input' | 'done' | 'dropped' | 'backlogged';
+  'open' | 'active' | 'blocked' | 'awaiting_input' | 'done' | 'dropped';
 /**
- * A goal holds batches, a batch holds subtasks; subtasks may be unfiled.
+ * A goal holds batches, a batch holds subtasks. A backlog item is open work
+ * found along the way; it sits on a batch, a goal or the project.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
  * via the `definition` "ItemKind".
  */
-export type ItemKind = 'goal' | 'batch' | 'subtask';
-/**
- * Where a write came from; recorded on sessions and on every event.
- *
- * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "Client".
- */
-export type Client = 'chat' | 'code' | 'paste' | 'cli';
-/**
- * Sessions start open and are closed exactly once.
- *
- * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "SessionStatus".
- */
-export type SessionStatus = 'open' | 'closed';
+export type ItemKind = 'goal' | 'batch' | 'subtask' | 'backlog';
 /**
  * Superseded is terminal and only reached by a newer decision.
  *
@@ -49,15 +37,12 @@ export type SessionStatus = 'open' | 'closed';
  */
 export type DecisionStatus = 'locked' | 'deferred' | 'superseded';
 /**
- * carry_over keeps the state; session_backlog and project_backlog move the
- * item to the default backlogged state (with or without this session);
- * dropped moves it to the default dropped state.
+ * Where a write came from; recorded on every event.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "Disposition".
+ * via the `definition` "Client".
  */
-export type Disposition =
-  'carry_over' | 'session_backlog' | 'project_backlog' | 'dropped';
+export type Client = 'chat' | 'code' | 'paste' | 'cli';
 /**
  * The kind of mutation an event row describes.
  *
@@ -67,9 +52,6 @@ export type Disposition =
 export type EventAction =
   | 'create'
   | 'update'
-  | 'link'
-  | 'dispose'
-  | 'close'
   | 'add_alias'
   | 'add_path'
   | 'remove_alias'
@@ -80,15 +62,84 @@ export interface XootDashboardApi {
   [k: string]: unknown;
 }
 /**
- * The item summary plus when the item was created.
+ * The backlog entry plus when the item was created and why it was
+ * captured: the first line of its body, cut to WHY_MAX characters.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
  * via the `definition` "BacklogRow".
  */
 export interface BacklogRow {
-  backlog_session: string | null;
   category: Category | null;
   created_at: string;
+  found_on: string | null;
+  key: string;
+  kind: ItemKind;
+  level: 'project' | 'goal' | 'batch';
+  parent: string | null;
+  state: string;
+  title: string;
+  version: number;
+  why: string;
+}
+/**
+ * Open backlog items of every level, project level first, then by key;
+ * truncated when the cap hid items.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "BacklogView".
+ */
+export interface BacklogView {
+  items: BacklogRow[];
+  project: string;
+  truncated: boolean;
+}
+/**
+ * Every child is done or dropped, but open_backlog backlog items still sit
+ * on it: cover them, resolve them (item_update to done) or push them up.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "BlockedEntry".
+ */
+export interface BlockedEntry {
+  key: string;
+  open_backlog: number;
+}
+/**
+ * The brief_get picture without its MCP-only fields: counts, open goals
+ * with batch progress, work in flight, what open backlog blocks, open
+ * backlog per level, recent decisions and the workflow.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "BriefView".
+ */
+export interface BriefView {
+  active: ItemSummary[];
+  awaiting_input: ItemSummary[];
+  backlog_counts: {
+    [k: string]: number;
+  };
+  blocked: BlockedEntry[];
+  counts: {
+    [k: string]: number;
+  };
+  open_goals: GoalProgressEntry[];
+  open_goals_truncated: boolean;
+  project: ProjectInfo;
+  recent_decisions: DecisionSummary[];
+  workflow: {
+    [k: string]: WorkflowEntry;
+  };
+}
+/**
+ * Enough to recognize, pick and update an item. key is its nested path
+ * within the project; category is the fixed meaning of the
+ * project-defined state; version is what item_update needs.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "ItemSummary".
+ */
+export interface ItemSummary {
+  category: Category | null;
   key: string;
   kind: ItemKind;
   parent: string | null;
@@ -97,83 +148,18 @@ export interface BacklogRow {
   version: number;
 }
 /**
- * Each open session's backlog, the project backlog and the unfiled
- * subtasks. A capture shows under its session and under unfiled.
+ * batches_done of batches_total are done (dropped batches count in
+ * neither); open_backlog counts the open backlog anywhere in the goal.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "BacklogsView".
+ * via the `definition` "GoalProgressEntry".
  */
-export interface BacklogsView {
-  project: string;
-  project_backlog: BacklogRow[];
-  project_backlog_truncated: boolean;
-  sessions: SessionBacklogEntry[];
-  unfiled: BacklogRow[];
-  unfiled_truncated: boolean;
-}
-/**
- * An open session and the items parked in its backlog.
- *
- * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "SessionBacklogEntry".
- */
-export interface SessionBacklogEntry {
-  items: BacklogRow[];
-  session: SessionSummary;
-  truncated: boolean;
-}
-/**
- * A session's key, title, client, status and timestamps.
- *
- * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "SessionSummary".
- */
-export interface SessionSummary {
-  client: Client;
-  closed_at: string | null;
-  key: string;
-  started_at: string;
-  status: SessionStatus;
-  title: string;
-}
-/**
- * The brief_get picture without its MCP-only fields: counts, open
- * sessions, work in flight, backlogs, recent decisions and the workflow.
- *
- * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "BriefView".
- */
-export interface BriefView {
-  active: ItemSummary[];
-  awaiting_input: ItemSummary[];
-  counts: {
-    [k: string]: number;
-  };
-  open_session_backlog: ItemSummary[];
-  open_session_backlog_truncated: boolean;
-  open_sessions: SessionSummary[];
-  open_sessions_truncated: boolean;
-  pending_session_backlog: ItemSummary[];
-  project: ProjectInfo;
-  project_backlog_count: number;
-  recent_decisions: DecisionSummary[];
-  workflow: {
-    [k: string]: WorkflowEntry;
-  };
-}
-/**
- * Enough to recognize, pick and update an item. category is the fixed
- * meaning of the project-defined state; version is what item_update needs.
- *
- * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "ItemSummary".
- */
-export interface ItemSummary {
-  backlog_session: string | null;
+export interface GoalProgressEntry {
+  batches_done: number;
+  batches_total: number;
   category: Category | null;
   key: string;
-  kind: ItemKind;
-  parent: string | null;
+  open_backlog: number;
   state: string;
   title: string;
   version: number;
@@ -191,14 +177,15 @@ export interface ProjectInfo {
   name: string;
 }
 /**
- * A decision's key, title, status, references and version.
+ * A decision's key (<owner key>/decision-<n>), title, status, the item it
+ * was made on, the decision it supersedes, and its version.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
  * via the `definition` "DecisionSummary".
  */
 export interface DecisionSummary {
   key: string;
-  scope: string | null;
+  owner: string | null;
   status: DecisionStatus;
   supersedes: string | null;
   title: string;
@@ -259,7 +246,7 @@ export interface DecisionDetail {
   body: string;
   created_at: string;
   key: string;
-  scope: string | null;
+  owner: string | null;
   status: DecisionStatus;
   supersedes: string | null;
   title: string;
@@ -317,32 +304,35 @@ export interface EventEntry {
   client: Client;
   created_at: string;
   redacted: boolean;
-  session: string | null;
 }
 /**
- * The summary plus the body, the awaited decision and timestamps.
+ * The summary plus the body, the awaited decision, the backlog links
+ * (found_on and covered_by on a backlog item, origin on a subtask made
+ * from one), every older key that still resolves to it, and timestamps.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
  * via the `definition` "ItemDetail".
  */
 export interface ItemDetail {
+  aliases: string[];
   awaiting_decision: string | null;
-  backlog_session: string | null;
   body: string;
   category: Category | null;
+  covered_by: string | null;
   created_at: string;
+  found_on: string | null;
   key: string;
   kind: ItemKind;
+  origin: string | null;
   parent: string | null;
   state: string;
   title: string;
-  unfiled: boolean;
   updated_at: string;
   version: number;
 }
 /**
- * One item in full: its children, most recent events (newest first), the
- * sessions it is linked to and the decisions scoped to it, with bodies.
+ * One item in full: its children (work first, then backlog), its most
+ * recent events (newest first) and the decisions made on it, with bodies.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
  * via the `definition` "ItemView".
@@ -352,7 +342,6 @@ export interface ItemView {
   decisions: DecisionDetail[];
   events: EventEntry[];
   item: ItemDetail;
-  sessions: SessionSummary[];
 }
 /**
  * The running xoot version.
@@ -373,58 +362,6 @@ export interface ProjectsOutput {
   projects: ProjectInfo[];
 }
 /**
- * The item as it is now, the disposition the session's close gave it
- * (None while the session is open, or when the item was no longer open at
- * close), and whether the session captured it.
- *
- * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "SessionItemEntry".
- */
-export interface SessionItemEntry {
-  captured: boolean;
-  disposition: Disposition | null;
-  item: ItemSummary;
-}
-/**
- * The session summary plus how many items it is linked to.
- *
- * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "SessionRow".
- */
-export interface SessionRow {
-  client: Client;
-  closed_at: string | null;
-  key: string;
-  linked_items: number;
-  started_at: string;
-  status: SessionStatus;
-  title: string;
-}
-/**
- * One session, its close summary, the keys of the items it is linked to
- * (which the tree filter uses) and those items with their outcomes.
- *
- * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "SessionView".
- */
-export interface SessionView {
-  items: string[];
-  linked: SessionItemEntry[];
-  session: SessionSummary;
-  summary: string | null;
-}
-/**
- * Sessions, open ones first, then newest first.
- *
- * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "SessionsView".
- */
-export interface SessionsView {
-  project: string;
-  sessions: SessionRow[];
-  truncated: boolean;
-}
-/**
  * An item and its depth below the query's roots.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
@@ -433,15 +370,17 @@ export interface SessionsView {
 export interface TreeEntry {
   depth: number;
   item: ItemSummary;
-  unfiled: boolean;
 }
 /**
- * Tree nodes in pre-order; truncated says the bounds hid items.
+ * Tree nodes in pre-order; truncated says the bounds hid items. blocked
+ * lists every goal and batch of the project that open backlog holds open,
+ * uncapped, so any node can show it.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
  * via the `definition` "TreeView".
  */
 export interface TreeView {
+  blocked: BlockedEntry[];
   nodes: TreeEntry[];
   project: string;
   truncated: boolean;

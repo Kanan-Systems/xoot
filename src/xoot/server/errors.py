@@ -10,16 +10,17 @@ masked, since those come from the caller.
 
 from pydantic import BaseModel, ValidationError
 
+from xoot.exceptions.backlog_error import BacklogError
 from xoot.exceptions.confirm_token_error import ConfirmTokenError
 from xoot.exceptions.cross_project_error import CrossProjectError
 from xoot.exceptions.decision_error import DecisionError
-from xoot.exceptions.disposition_error import DispositionError
 from xoot.exceptions.duplicate_error import DuplicateError
 from xoot.exceptions.hierarchy_error import HierarchyError
 from xoot.exceptions.invalid_id_error import InvalidIdError
+from xoot.exceptions.legacy_database_error import LegacyDatabaseError
 from xoot.exceptions.not_found_error import NotFoundError
+from xoot.exceptions.qualifier_error import QualifierError
 from xoot.exceptions.schema_version_error import SchemaVersionError
-from xoot.exceptions.session_state_error import SessionStateError
 from xoot.exceptions.stale_write_error import StaleWriteError
 from xoot.exceptions.state_error import StateError
 from xoot.exceptions.store_error import StoreError
@@ -27,35 +28,33 @@ from xoot.exceptions.unsafe_path_error import UnsafePathError
 from xoot.exceptions.version_conflict_error import VersionConflictError
 from xoot.exceptions.xoot_error import XootError
 from xoot.models.confirm.confirmation import Confirmation
+from xoot.models.decision.decision_changes_input import DecisionChangesInput
 from xoot.models.decision.decision_create import DecisionCreate
 from xoot.models.decision.decision_update import DecisionUpdate
 from xoot.models.item.bulk_create import BulkCreate
 from xoot.models.item.bulk_item import BulkItem
+from xoot.models.item.item_changes_input import ItemChangesInput
 from xoot.models.item.item_create import ItemCreate
 from xoot.models.item.item_draft import ItemDraft
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.item.tree_query import TreeQuery
-from xoot.models.session.session_close import SessionClose
-from xoot.models.session.session_start import SessionStart
-from xoot.server.keys import is_key
 from xoot.server.schemas.bulk_item_input import BulkItemInput
-from xoot.server.schemas.decision_changes_input import DecisionChangesInput
-from xoot.server.schemas.item_changes_input import ItemChangesInput
+from xoot.utils.keys import is_key
 
 # Every tool argument name; a test keeps this in step with the registered tools.
 TOOL_ARGUMENTS = frozenset(
     {
-        "body", "changes", "confirm_token", "depth", "dispositions",
-        "expected_version", "focus", "include_done", "items", "key", "kind",
-        "limit", "parent", "project", "root", "scope", "session", "status",
-        "summary", "supersedes", "title",
+        "at", "batch", "body", "changes", "confirm_token", "depth",
+        "expected_version", "found_on", "include_closed", "include_done",
+        "items", "key", "kind", "limit", "owner", "parent", "project", "root",
+        "status", "supersedes", "title",
     }
 )  # fmt: skip
 
 _VALIDATED_MODELS: tuple[type[BaseModel], ...] = (
     BulkCreate, BulkItem, BulkItemInput, Confirmation, DecisionChangesInput,
     DecisionCreate, DecisionUpdate, ItemChangesInput, ItemCreate, ItemDraft,
-    ItemUpdate, SessionClose, SessionStart, TreeQuery,
+    ItemUpdate, TreeQuery,
 )  # fmt: skip
 
 KNOWN_FIELDS = TOOL_ARGUMENTS | frozenset(
@@ -65,30 +64,22 @@ KNOWN_FIELDS = TOOL_ARGUMENTS | frozenset(
 # Stored reference columns and the public names tools use for them.
 PUBLIC_NAMES = {
     "parent_id": "parent",
-    "backlog_session_id": "backlog_session",
     "awaiting_decision_id": "awaiting_decision",
-    "scope_item_id": "scope",
+    "owner_item_id": "owner",
     "supersedes_id": "supersedes",
+    "found_on_item_id": "found_on",
+    "covered_by_item_id": "covered_by",
+    "origin_item_id": "origin",
     "item_id": "item",
-    "session_id": "session",
 }
 
 _REASONS: dict[type[XootError], str] = {
-    CrossProjectError: "a referenced item, session or decision belongs to another project",
+    CrossProjectError: "a referenced item or decision belongs to another project",
     HierarchyError: (
-        "the parent breaks the hierarchy: a goal has no parent, a batch sits "
-        "under a goal, a subtask under a batch or nowhere"
+        "the parent breaks the hierarchy: a goal sits on the project, a batch "
+        "in a goal, a subtask in a batch; backlog items come from capture"
     ),
-    StateError: (
-        "the state is not in the workflow, the transition is not allowed, or "
-        "a session backlog was set outside a backlogged state"
-    ),
-    SessionStateError: "the session is not open",
-    DispositionError: (
-        "dispositions are missing or name items that need none; call "
-        "session_close without confirm_token to see the required items"
-    ),
-    DecisionError: "the decision is superseded; record a new decision instead",
+    StateError: "the state is not in the workflow, or the transition is not allowed",
     DuplicateError: "the value is already registered",
     NotFoundError: "a referenced record does not exist",
     InvalidIdError: "an id or version is not a valid integer",
@@ -96,14 +87,19 @@ _REASONS: dict[type[XootError], str] = {
     UnsafePathError: "the database path failed the ownership and permission checks",
     SchemaVersionError: "the database was written by a newer xoot",
 }
+# Errors whose messages are fixed text plus stored keys or prefixes only.
+_DETAILED: tuple[type[XootError], ...] = (
+    BacklogError, ConfirmTokenError, DecisionError, LegacyDatabaseError,
+    QualifierError,
+)  # fmt: skip
 
 
 def not_found_message(key: str) -> str:
     """
     Build the message for a key that resolves to nothing.
 
-    A well-formed key is echoed (it can only hold [a-z0-9-] and digits); any
-    other text is not, since it is arbitrary caller input.
+    A well-formed key is echoed (it can only hold [a-z0-9/:-]); any other
+    text is not, since it is arbitrary caller input.
 
     Args:
         - key (str): the key as the caller sent it.
@@ -129,8 +125,8 @@ def safe_message(exc: XootError | ValidationError) -> str:
     if isinstance(exc, VersionConflictError):
         return _conflict_message(exc)
     name = type(exc).__name__
-    if isinstance(exc, ConfirmTokenError):
-        # A fixed set of reasons written by the confirm service; never the token.
+    if isinstance(exc, _DETAILED):
+        # Written by the services from fixed text and stored keys; never input.
         return f"{name}: {exc}"
     for cls in type(exc).__mro__:
         if cls in _REASONS:

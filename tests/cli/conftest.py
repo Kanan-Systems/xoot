@@ -89,7 +89,7 @@ def fixture_xoot(
 
 @pytest.fixture(name="secret_item")
 def fixture_secret_item(project: Project, make_item: Callable[..., Item]) -> Item:
-    """xoot-1: a goal whose title and body carry MARKER."""
+    """goal-1: a goal whose title and body carry MARKER."""
     return make_item(project, ItemKind.GOAL, title=f"t {MARKER}", body=f"body {MARKER}")
 
 

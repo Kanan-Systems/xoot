@@ -2,17 +2,20 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from xoot.server.schemas.item_summary import ItemSummary
-from xoot.server.schemas.literals import BacklogScope, ResolvedBy
+from xoot.server.schemas.backlog_entry import BacklogEntry
+from xoot.server.schemas.literals import ResolvedBy
 
 
 class BacklogOutput(BaseModel):
-    """Backlog items by number; truncated when the cap hid items."""
+    """
+    Backlog items, project level first, then by key; truncated when the cap
+    hid items. at is the goal or batch whose own backlog was asked for.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     project: str
     resolved_by: ResolvedBy
-    scope: BacklogScope
-    items: list[ItemSummary]
+    at: str | None
+    items: list[BacklogEntry]
     truncated: bool

@@ -5,23 +5,23 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from xoot.models.fields import Body, Title
-from xoot.services.paste.models.fields import KeyOrRef, RefName
+from xoot.services.paste.models.fields import DecisionKeyOrRef, ItemKeyOrRef, RefName
 
 
 class DecisionRecordOp(BaseModel):
     """
-    A new decision. status is locked or deferred, as in the
-    decision_record tool: superseded is reached only by a newer decision.
-    scope is an item key or item ref; supersedes is a decision key or
-    decision ref, which becomes superseded.
+    A new decision on the goal, batch or subtask it was made on (owner, a
+    key or item ref). status is locked or deferred, as in the
+    decision_record tool. supersedes is a decision key or ref of the same
+    goal, which becomes superseded.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     op: Literal["decision_record"]
     ref: RefName | None = None
+    owner: ItemKeyOrRef
     title: Title
     body: Body
     status: Literal["locked", "deferred"]
-    scope: KeyOrRef | None = None
-    supersedes: KeyOrRef | None = None
+    supersedes: DecisionKeyOrRef | None = None

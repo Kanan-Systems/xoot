@@ -19,7 +19,7 @@ from xoot.cli.commands import (
     redact,
     workflow,
 )
-from xoot.dashboard.runner import DEFAULT_PORT
+from xoot.dashboard.ports import DEFAULT_PORT
 from xoot.models.event.redactable_field import RedactableField
 from xoot.models.item.tree_query import MAX_DEPTH
 
@@ -128,7 +128,7 @@ def _init(
         action="append",
         default=[],
         help="an alias; may be repeated; may contain dashes but must not look "
-        "like a key (xoot-12, xoot-d3, xoot-s4)",
+        "like a key segment (goal-12, backlog-3)",
     )
     command.set_defaults(handler=init.run_init)
 
@@ -173,7 +173,9 @@ def _views(
     tree = commands.add_parser("tree", parents=[common], help="show the item tree")
     _select(tree)
     group = tree.add_argument_group("tree")
-    group.add_argument("--root", metavar="KEY", help="item key to start from")
+    group.add_argument(
+        "--root", metavar="KEY", help="item key to start from (or <prefix>:<key>)"
+    )
     group.add_argument(
         "--depth",
         type=_depth,
@@ -225,11 +227,15 @@ def _redact(
         "redact", parents=[common], help="clear a text field and its history"
     )
     command.add_argument(
-        "key", metavar="KEY", help="an item, decision or session key, or a prefix"
+        "key",
+        metavar="KEY",
+        help="an item or decision key (optionally <prefix>:<key>), or a key "
+        "prefix alone for the project name",
     )
     command.add_argument(
         "field", metavar="FIELD", choices=[f.value for f in RedactableField]
     )
+    _select(command)
     _confirm(command)
     command.set_defaults(handler=redact.run_redact)
 

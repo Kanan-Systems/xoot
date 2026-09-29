@@ -23,7 +23,7 @@ from xoot.store.paths import prepare_db_file
 from xoot.store.store import Store
 
 PROCESSES = 4
-BROKEN = [(1, "CREATE TABLE a (x INTEGER) STRICT; SELECT nope();")]
+BROKEN = [(2, "CREATE TABLE a (x INTEGER) STRICT; SELECT nope();")]
 
 
 def _open_and_report(db_path: str, barrier: Any, results: Any) -> None:
@@ -50,7 +50,7 @@ def test_shipped_migrations_apply(db_path: Path) -> None:
         ).fetchall()
     assert {name for name, _ in tables} == {
         "project", "project_alias", "project_path", "workflow", "item",
-        "session", "session_item_ref", "decision", "event", "confirm_token",
+        "item_alias", "decision", "event", "confirm_token",
     }  # fmt: skip
     assert all(strict == 1 for _, strict in tables)
 
@@ -59,14 +59,14 @@ def test_apply_in_order(tmp_path: Path) -> None:
     """Each migration builds on the previous one, lowest version first."""
     migrations = order_migrations(
         [
-            ("0002_add.sql", "ALTER TABLE a ADD COLUMN y INTEGER;"),
-            ("0001_create.sql", "CREATE TABLE a (x INTEGER) STRICT;"),
+            ("0003_add.sql", "ALTER TABLE a ADD COLUMN y INTEGER;"),
+            ("0002_create.sql", "CREATE TABLE a (x INTEGER) STRICT;"),
         ]
     )
-    assert [version for version, _ in migrations] == [1, 2]
+    assert [version for version, _ in migrations] == [2, 3]
     conn = connect(tmp_path / "xoot.db")
     try:
-        assert migrate(conn, migrations) == 2
+        assert migrate(conn, migrations) == 3
         columns = [row[1] for row in conn.execute("PRAGMA table_info(a)")]
         assert columns == ["x", "y"]
     finally:
@@ -98,8 +98,8 @@ def test_failed_migration_rolls_back(tmp_path: Path) -> None:
         assert _schema(conn) == []
     finally:
         conn.close()
-    assert caught.value.version == 1
-    assert str(caught.value) == "migrating to schema version 1 failed (SQLITE_ERROR)"
+    assert caught.value.version == 2
+    assert str(caught.value) == "migrating to schema version 2 failed (SQLITE_ERROR)"
     assert isinstance(caught.value.__cause__, sqlite3.OperationalError)
     _assert_no_sql(caught.value)
 
@@ -125,10 +125,15 @@ def test_store_open_surfaces_migration_failures(
 
 @pytest.mark.parametrize(
     "names",
-    [["0001_a.sql", "0003_c.sql"], ["0002_b.sql"], ["0001_a.sql", "0001_b.sql"]],
+    [
+        ["0002_a.sql", "0004_c.sql"],
+        ["0003_b.sql"],
+        ["0001_a.sql"],
+        ["0002_a.sql", "0002_b.sql"],
+    ],
 )
 def test_gaps_and_duplicates_are_rejected(names: list[str]) -> None:
-    """Versions must run 1, 2, 3... so no file can be skipped silently."""
+    """Versions must run 2, 3, 4... from the baseline; none is skipped silently."""
     with pytest.raises(MigrationError, match="contiguous"):
         order_migrations([(name, "") for name in names])
 
@@ -206,7 +211,7 @@ def test_newer_database_is_refused(db_path: Path) -> None:
 
 def test_latest_version_is_the_newest_shipped() -> None:
     """latest_version names the last shipped migration, which a fresh DB reaches."""
-    assert latest_version() == load_migrations()[-1][0] >= 1
+    assert latest_version() == load_migrations()[-1][0] == 2
 
 
 def test_latest_version_without_migrations(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,7 +1,7 @@
 """
-A full round trip: the brief gives versions, block A starts a session and
-changes items, its receipt gives new versions, and block B uses them to
-update again and close the session.
+A full round trip: the brief gives versions; block A creates a goal, works
+it and captures backlog; its receipt gives keys and versions; block B covers
+the backlog item, finishes the work, and the goal completes.
 """
 
 import json
@@ -23,39 +23,47 @@ def test_brief_then_two_blocks_with_receipt_versions(
     paste_cli: Callable[..., Any],
     reply: Callable[..., bytes],
 ) -> None:
-    """Block B passes the versions block A's receipt reported."""
-    goal = make_item(project, ItemKind.GOAL, state="active")
+    """Block B uses block A's receipt; the receipts report what completed."""
+    existing = make_item(project, ItemKind.GOAL, state="active")
     brief = paste_cli("paste", "brief", "--project", "xoot").out
-    version = int(re.search(rf"`{goal.key}` goal active v(\d+)", brief).group(1))
+    version = int(re.search(rf"`{existing.key}` active v(\d+)", brief).group(1))
 
     block_a = [
-        {"op": "session_start", "title": "round trip", "focus": [goal.key]},
-        {"op": "item_create", "ref": "b", "kind": "batch", "title": "b", "parent": goal.key},
-        {"op": "item_update", "key": goal.key, "expected_version": version,
-         "changes": {"title": "renamed goal"}},
+        {"op": "item_create", "ref": "g", "kind": "goal", "title": "export"},
+        {"op": "item_create", "ref": "b", "kind": "batch", "title": "writer",
+         "parent": "$g"},
+        {"op": "item_create", "ref": "t", "kind": "subtask", "title": "rows",
+         "parent": "$b"},
+        {"op": "capture", "ref": "c", "found_on": "$t", "title": "BOM",
+         "body": "Excel adds one"},
+        {"op": "item_update", "key": "$t", "changes": {"state": "done"}},
+        {"op": "item_update", "key": existing.key, "expected_version": version,
+         "changes": {"title": "renamed"}},
     ]  # fmt: skip
-    first = paste_cli("paste", "apply", "-", "--yes", stdin=reply(block_a))
-    assert first.code == 0, first.err
-    receipt = first.receipt()
-    versions = {entry["key"]: entry["version"] for entry in receipt["items"]}
+    run_a = paste_cli("paste", "apply", "-", "--yes", stdin=reply(block_a))
+    assert run_a.code == 0, run_a.err
+    receipt = run_a.receipt()
+    assert receipt["refs"] == {
+        "g": "goal-2",
+        "b": "goal-2/batch-1",
+        "t": "goal-2/batch-1/subtask-1",
+        "c": "goal-2/batch-1/backlog-1",
+    }
+    assert receipt["blocked"] == [{"key": "goal-2/batch-1", "open_backlog": 1}]
+    versions = {item["key"]: item["version"] for item in receipt["items"]}
 
     block_b = [
-        {"op": "item_update", "key": goal.key, "expected_version": versions[goal.key],
-         "changes": {"state": "done"}},
-        {"op": "item_update", "key": receipt["refs"]["b"],
-         "expected_version": versions[receipt["refs"]["b"]],
-         "changes": {"state": "done"}},
-        {"op": "session_close", "summary": "all done", "dispositions": {}},
+        {"op": "backlog_cover", "ref": "s", "key": receipt["refs"]["c"]},
+        {"op": "item_update", "key": "$s", "changes": {"state": "done"}},
+        {"op": "item_update", "key": existing.key,
+         "expected_version": versions[existing.key], "changes": {"state": "done"}},
     ]  # fmt: skip
-    second = paste_cli(
-        "paste", "apply", "-", "--yes", stdin=reply(block_b, session=receipt["session"])
-    )
-    assert second.code == 0, second.err
-    final = second.receipt()
-    assert final["session_status"] == "closed"
-    assert {e["key"]: (e["state"], e["version"]) for e in final["items"]} == {
-        goal.key: ("done", 3),
-        receipt["refs"]["b"]: ("done", 2),
-    }
-    assert get_item(store, goal.id).title == "renamed goal"
-    assert json.loads(json.dumps(final)) == final
+    run_b = paste_cli("paste", "apply", "-", "--yes", stdin=reply(block_b))
+    assert run_b.code == 0, run_b.err
+    final = run_b.receipt()
+    assert final["refs"] == {"s": "goal-2/batch-1/subtask-2"}
+    assert final["completed"] == ["goal-2/batch-1", "goal-2"]
+    assert final["blocked"] == []
+    assert "COMPLETION" in run_b.err
+    assert get_item(store, existing.id).state == "done"
+    assert json.dumps(final).count("Excel") == 0

@@ -1,39 +1,34 @@
 // One tree node. React Flow's node wrapper is the focusable, clickable
 // element (see TreeCanvas); the card only draws the item. The title comes
 // first, after the kind as icon and word; the key is secondary. The category
-// shows as colour, icon and state name together.
+// shows as colour, icon and state name together. A backlog item has its own
+// icon, word and dashed card. A goal or batch held open by backlog says so,
+// with a read-only hint of what to ask for.
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { MouseEvent } from 'react';
 
 import { categoryClass, categoryGlyph, KIND, truncate } from '../lib/display.ts';
-import type { ItemNodeData } from '../lib/tree.ts';
+import { blockedHint, blockedLine, type ItemNodeData } from '../lib/tree.ts';
+import { HiddenBadges } from './HiddenBadges.tsx';
 import { useNodeActions } from './nodeActions.ts';
 
 export type ItemFlowNode = Node<ItemNodeData, 'item'>;
 
-// Inner buttons act alone: their click must not also open the drawer.
-function only(action: () => void) {
-  return (event: MouseEvent) => {
-    event.stopPropagation();
-    action();
-  };
-}
-
 export function ItemNode({ data }: NodeProps<ItemFlowNode>) {
-  const { item, hiddenDone, decisions, highlighted, dimmed } = data;
+  const { item, hidden, decisions, blocked } = data;
   const actions = useNodeActions();
   const kind = KIND[item.kind];
   const category = categoryGlyph(item.category);
   const title = truncate(item.title);
   const focusable = item.kind === 'goal' || item.kind === 'batch';
-  const classes = [
-    'node',
-    `node-${item.kind}`,
-    highlighted ? 'node-highlighted' : '',
-    dimmed ? 'node-dimmed' : '',
-  ]
+  const classes = ['node', `node-${item.kind}`, blocked === null ? '' : 'node-blocked']
     .filter(Boolean)
     .join(' ');
+  const focus = (event: MouseEvent) => {
+    event.stopPropagation();
+    actions.focus(item.key);
+  };
+  const hint = blocked === null ? null : blockedHint(item.key, blocked);
   return (
     <div className={classes}>
       <Handle type="target" position={Position.Left} isConnectable={false} />
@@ -42,7 +37,7 @@ export function ItemNode({ data }: NodeProps<ItemFlowNode>) {
           <span className="node-kind" aria-hidden="true" title={kind.label}>
             {kind.icon}
           </span>{' '}
-          <span className="node-kind-label">{item.kind}</span> ·{' '}
+          <span className="node-kind-label">{kind.label}</span> ·{' '}
           <span title={title.truncated ? item.title : undefined}>{title.text}</span>
         </span>
         <span className="node-meta">
@@ -64,25 +59,24 @@ export function ItemNode({ data }: NodeProps<ItemFlowNode>) {
               className="node-focus"
               title={`Focus on this ${item.kind}`}
               aria-label={`Focus on ${item.key}`}
-              onClick={only(() => {
-                actions.focus(item.key);
-              })}
+              onClick={focus}
             >
               ⌖
             </button>
           )}
         </span>
+        {blocked !== null && hint !== null && (
+          <>
+            <span className="node-blocked-line">
+              <span aria-hidden="true">⚑</span> {blockedLine(blocked)}
+            </span>
+            <span className="node-hint" title={hint}>
+              {hint}
+            </span>
+          </>
+        )}
       </div>
-      {hiddenDone > 0 && (
-        <button
-          type="button"
-          className="badge badge-done"
-          onClick={only(actions.showDone)}
-          aria-label={`Show ${String(hiddenDone)} hidden done or dropped items`}
-        >
-          {hiddenDone} done
-        </button>
-      )}
+      <HiddenBadges hidden={hidden} />
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
   );

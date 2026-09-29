@@ -1,6 +1,6 @@
 """
-Changes xoot derives on its own (stale backlog moves, workflow remaps) are
-recorded as the system's, with the triggering write's client and session.
+Changes xoot derives on its own (completion, reopening, workflow remaps) are
+recorded as the system's, with the triggering write's client.
 """
 
 from collections.abc import Callable
@@ -10,20 +10,16 @@ from xoot.models.event.entity_type import EntityType
 from xoot.models.event.event import Event
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
-from xoot.models.item.item_draft import ItemDraft
 from xoot.models.item.item_kind import ItemKind
+from xoot.models.item.item_update import ItemUpdate
 from xoot.models.project.project import Project
-from xoot.models.session.disposition import Disposition
-from xoot.models.session.session import Session
-from xoot.models.session.session_close import SessionClose
 from xoot.models.workflow.category import Category
-from xoot.models.workflow.kind_workflow import KindWorkflow
+from xoot.models.workflow.kind_workflow import REQUIRED_DEFAULTS, KindWorkflow
 from xoot.models.workflow.state_spec import StateSpec
 from xoot.models.workflow.workflow_change import WorkflowChange
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.event import event_db
-from xoot.services.item_service import capture
-from xoot.services.session_close_service import close_session
+from xoot.services.item_service import update_item
 from xoot.services.workflow_service import set_workflow
 from xoot.store.store import Store
 
@@ -33,65 +29,53 @@ def _project_events(store: Store, project: Project) -> list[Event]:
         return event_db.list_for_project(conn, project.id)
 
 
-def _who(event: Event) -> tuple[str, str, int | None]:
-    return (event.actor_kind.value, event.client.value, event.session_id)
+def _who(event: Event) -> tuple[str, str]:
+    return (event.actor_kind.value, event.client.value)
 
 
-def test_f9_moves_are_logged_as_system(
+def test_completion_is_logged_as_system(
     store: Store,
     project: Project,
     claude: Actor,
-    make_session: Callable[..., Session],
     make_item: Callable[..., Item],
 ) -> None:
-    """The closer's own disposition is theirs; the stale backlog move is the system's."""
-    early = make_session(project)
-    parked = capture(store, early.id, ItemDraft(title="parked"), claude)
-    close_session(
-        store,
-        early.id,
-        SessionClose(dispositions={parked.id: Disposition.SESSION_BACKLOG}),
-        claude,
-    )
-    focus = make_item(project, ItemKind.SUBTASK)
-    current = make_session(project, focus.id)
+    """The caller's own update is theirs; the batch and goal completions are not."""
+    goal = make_item(project, ItemKind.GOAL)
+    batch = make_item(project, ItemKind.BATCH, parent_id=goal.id)
+    subtask = make_item(project, ItemKind.SUBTASK, parent_id=batch.id)
     seen = len(_project_events(store, project))
-    close_session(
-        store,
-        current.id,
-        SessionClose(dispositions={focus.id: Disposition.DROPPED}),
-        claude,
+    update_item(
+        store, subtask.id, 1, ItemUpdate(state="done"), WriteContext(actor=claude)
     )
-    item_updates = {
-        e.entity_id: _who(e)
+    updates = [
+        (e.entity_id, *_who(e))
         for e in _project_events(store, project)[seen:]
         if e.entity_type is EntityType.ITEM
-    }
-    assert item_updates == {
-        focus.id: ("claude", "code", current.id),
-        parked.id: ("system", "code", current.id),
-    }
+    ]
+    assert updates == [
+        (subtask.id, "claude", "code"),
+        (batch.id, "system", "code"),
+        (goal.id, "system", "code"),
+    ]
 
 
 def test_workflow_remaps_are_logged_as_system(
     store: Store,
     project: Project,
     claude: Actor,
-    make_session: Callable[..., Session],
     make_item: Callable[..., Item],
 ) -> None:
     """The workflow change is the caller's; each remapped item is the system's."""
-    blocked = make_item(project, ItemKind.SUBTASK, state="blocked")
-    session = make_session(project)
+    goal = make_item(project, ItemKind.GOAL)
+    batch = make_item(project, ItemKind.BATCH, parent_id=goal.id)
+    blocked = make_item(project, ItemKind.SUBTASK, parent_id=batch.id, state="blocked")
     subtask = KindWorkflow(
         states=tuple(
             StateSpec(name=c.value, category=c)
             for c in Category
             if c.value != "blocked"
         ),
-        defaults={
-            c: c.value for c in (Category.OPEN, Category.BACKLOGGED, Category.DROPPED)
-        },
+        defaults={c: c.value for c in REQUIRED_DEFAULTS},
     )
     kinds = dict(WorkflowDefinition.default().kinds) | {ItemKind.SUBTASK: subtask}
     change = WorkflowChange(
@@ -99,14 +83,11 @@ def test_workflow_remaps_are_logged_as_system(
         mapping={ItemKind.SUBTASK: {"blocked": "active"}},
     )
     seen = len(_project_events(store, project))
-    set_workflow(
-        store, project.id, change, WriteContext(actor=claude, session_id=session.id)
-    )
+    set_workflow(store, project.id, change, WriteContext(actor=claude))
     events = _project_events(store, project)[seen:]
     assert [(e.entity_type.value, e.action.value, *_who(e)) for e in events] == [
-        ("workflow", "create", "claude", "code", session.id),
-        ("project", "update", "claude", "code", session.id),
-        ("item", "update", "system", "code", session.id),
-        ("session", "link", "claude", "code", session.id),
+        ("workflow", "create", "claude", "code"),
+        ("project", "update", "claude", "code"),
+        ("item", "update", "system", "code"),
     ]
     assert events[2].entity_id == blocked.id

@@ -9,7 +9,7 @@ from xoot.models.workflow.category import Category
 from xoot.models.workflow.state_spec import StateSpec
 
 MAX_STATES = 64
-REQUIRED_DEFAULTS = frozenset({Category.OPEN, Category.BACKLOGGED, Category.DROPPED})
+REQUIRED_DEFAULTS = frozenset({Category.OPEN, Category.DONE, Category.DROPPED})
 
 
 class KindWorkflow(BaseModel):
@@ -17,7 +17,7 @@ class KindWorkflow(BaseModel):
     States for one item kind.
 
     Defaults name the state the system uses when it moves an item into a
-    category (new items, backlogs, drops). When transitions is None any
+    category (new items, completion, reopening, drops). When transitions is None any
     state may move to any other; otherwise only the listed moves are allowed.
     """
 
@@ -68,7 +68,7 @@ class KindWorkflow(BaseModel):
         Return the state the system uses for a category.
 
         Args:
-            - category (Category): open, backlogged or dropped.
+            - category (Category): open, done or dropped.
 
         Returns:
             - state (str): the configured default state.

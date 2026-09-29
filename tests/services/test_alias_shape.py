@@ -1,7 +1,7 @@
 """
-Aliases may hold dashes but must not look like an item, decision or session
-key, in the model, the service and SQL; re-adding a project's own alias says
-so rather than naming the project as a stranger.
+Aliases may hold dashes but must not look like an item or decision key
+segment, in the model, the service and SQL; re-adding a project's own alias
+says so rather than naming the project as a stranger.
 """
 
 from typing import Any
@@ -17,10 +17,12 @@ from xoot.models.project.project_registration import ProjectRegistration
 from xoot.services.project_service import add_alias, get_overview
 from xoot.store.store import Store
 
-KEY_WORDS = "an alias must not look like an item, decision or session key"
+KEY_WORDS = "an alias must not look like an item or decision key"
 
 
-@pytest.mark.parametrize("alias", ["xoot-12", "xoot-d3", "ab-s1"])
+@pytest.mark.parametrize(
+    "alias", ["goal-12", "batch-3", "subtask-1", "backlog-4", "decision-2x"]
+)
 def test_key_shaped_alias_is_refused_everywhere(
     store: Store, project: Project, ctx: WriteContext, row_counts: Any, alias: str
 ) -> None:
@@ -41,7 +43,7 @@ def test_key_shaped_alias_is_refused_everywhere(
     assert row_counts() == before
 
 
-@pytest.mark.parametrize("alias", ["my-app", "a-b-c"])
+@pytest.mark.parametrize("alias", ["my-app", "a-b-c", "xoot-12", "goals-1"])
 def test_dashed_alias_that_is_no_key_is_accepted(
     store: Store, project: Project, ctx: WriteContext, alias: str
 ) -> None:

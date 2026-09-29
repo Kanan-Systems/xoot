@@ -21,7 +21,7 @@ def test_plan_change_lists_only_real_changes(
     change = plan_change(item, {"state": "active", "title": item.title})
     assert change is not None
     assert (change.key, change.before, change.after) == (
-        "xoot-1",
+        "goal-1",
         {"state": "open"},
         {"state": "active"},
     )

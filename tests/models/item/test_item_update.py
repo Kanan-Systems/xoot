@@ -8,8 +8,8 @@ from xoot.models.item.item_update import ItemUpdate
 
 def test_provided_returns_only_set_fields() -> None:
     """Unset fields are left out; an explicit None on a reference is kept."""
-    update = ItemUpdate(title="new", backlog_session_id=None)
-    assert update.provided() == {"backlog_session_id": None, "title": "new"}
+    update = ItemUpdate(title="new", awaiting_decision_id=None)
+    assert update.provided() == {"awaiting_decision_id": None, "title": "new"}
 
 
 @pytest.mark.parametrize("field", ["title", "body", "state"])

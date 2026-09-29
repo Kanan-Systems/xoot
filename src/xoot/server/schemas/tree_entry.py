@@ -11,5 +11,4 @@ class TreeEntry(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     depth: int
-    unfiled: bool
     item: ItemSummary

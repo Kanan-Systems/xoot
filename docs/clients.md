@@ -9,7 +9,7 @@ Register xoot once, at user scope, one way or the other: never both, or
 Claude Code gets the same tools twice.
 
 - **The plugin** (recommended, and what `install.sh` offers): the xoot MCP
-  server plus the `xoot-session` skill. The checkout is a local plugin
+  server plus the `xoot-workflow` skill. The checkout is a local plugin
   marketplace:
 
   ```sh
@@ -67,8 +67,8 @@ What to expect:
 - Each Desktop launch starts two server processes. Both open the same
   database.
 - Desktop does not show a tool's `destructiveHint`. xoot's safeguard is the
-  two-phase confirm: bulk creates, subtree drops and moves, and session
-  closes return a plan and a single-use `confirm_token` first, and write
+  two-phase confirm: bulk creates, subtree drops and moves, and backlog
+  pushes return a plan and a single-use `confirm_token` first, and write
   nothing until the same call is repeated with that token.
 
 ## Browser (no MCP)
@@ -111,13 +111,13 @@ The server logs the database path it uses to stderr once at start.
 
 Observed on Windows with WSL2 in live verifications of the server (2026-09):
 by inspecting the running `xoot-mcp` processes and from what the server
-received at initialization and in `session_start`.
+received at initialization.
 
 | | Claude Code 2.1.283 (in WSL) | Claude Desktop (Windows, via `wsl.exe`) |
 |---|---|---|
 | Working directory | The directory Claude Code was launched in | `/mnt/c/WINDOWS/System32` |
 | Environment | The environment Claude Code was started with | 21 variable names, minimal, no `CLAUDE_*`, no `XDG_DATA_HOME`: `DBUS_SESSION_BUS_ADDRESS`, `DISPLAY`, `HOME`, `HOSTTYPE`, `LANG`, `LOGNAME`, `NAME`, `PATH`, `PULSE_SERVER`, `PWD`, `SHELL`, `SHLVL`, `TERM`, `USER`, `WAYLAND_DISPLAY`, `WSL2_GUI_APPS_ENABLED`, `WSLENV`, `WSL_DISTRO_NAME`, `WSL_INTEROP`, `XDG_RUNTIME_DIR`, `_` |
 | Roots | Sent; the project resolved by roots (`resolved_by: roots`) | Never matched a project; values not measured |
-| `client_info` | `claude-code` 2.1.283, so sessions record client `code` | `claude-ai` 0.1.0, so sessions record client `chat` |
+| `client_info` | `claude-code` 2.1.283, so writes record client `code` | `claude-ai` 0.1.0, so writes record client `chat` |
 | Protocol version | `2025-11-25` | Not measured |
-| Server processes | One per Claude Code session | Two per Desktop launch |
+| Server processes | One per running Claude Code | Two per Desktop launch |

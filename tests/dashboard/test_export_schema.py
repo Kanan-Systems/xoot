@@ -31,7 +31,7 @@ def test_every_response_has_a_definition() -> None:
     text = export_schema.export()
     for model in export_schema.RESPONSES:
         assert f'"{model.__name__}": {{' in text
-    for leaf in ("ItemSummary", "SessionSummary", "DecisionDetail", "EventEntry"):
+    for leaf in ("ItemSummary", "GoalProgressEntry", "DecisionDetail", "EventEntry"):
         assert f'"{leaf}": {{' in text
     for dropped in ("resolved_by", "db_path", '"header"'):
         assert dropped not in text

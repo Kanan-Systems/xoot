@@ -34,6 +34,16 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
+      # A report in the job summary, never a gate: the step cannot fail.
+      - name: npm audit (report only)
+        run: |
+          {
+            echo '## npm audit --omit=dev'
+            echo '```'
+            npm audit --omit=dev || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: eslint
         run: npm run lint
 

@@ -2,11 +2,13 @@
 The request guard: every request passes through it before any route.
 
 In order it checks the Host header against the allowlist (400), the method
-(405: the dashboard is read-only), exchanges a ?token query for the session
-cookie (a redirect that drops the query), and on /api requires a same-origin
-Origin, if any (403), and the cookie (401). It adds the security headers to
-every response, its own refusals included. Token comparisons are constant
-time, and the token is never logged or echoed.
+(405: the dashboard is read-only), exchanges a ?token query, or a one-time
+?launch code, for the session cookie (a redirect that drops the query), and
+on /api requires a same-origin Origin, if any (403), and the cookie (401).
+The cookie is named after the port, so dashboards on two ports never
+overwrite each other's cookie. It adds the security headers to every
+response, its own refusals included. Token comparisons are constant time,
+and neither the token nor a code is ever logged or echoed.
 """
 
 import hmac
@@ -19,14 +21,30 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from xoot.dashboard.headers import ALWAYS, API_ONLY
+from xoot.dashboard.launch_codes import LaunchCodes
 from xoot.dashboard.schemas.error_output import ErrorOutput
 
-COOKIE = "xoot_token"
+COOKIE_PREFIX = "xoot_token_"
 ALLOWED_METHODS = ("GET", "HEAD")
 HOST_NAMES = ("xoot.localhost", "localhost", "127.0.0.1")
 
 
-def guard(app: ASGIApp, token: str, port: int) -> ASGIApp:
+def cookie_name(port: int) -> str:
+    """
+    Name the session cookie of the dashboard on one port.
+
+    Args:
+        - port (int): the served port.
+
+    Returns:
+        - name (str): "xoot_token_<port>".
+    """
+    return f"{COOKIE_PREFIX}{port}"
+
+
+def guard(
+    app: ASGIApp, token: str, port: int, launch_codes: LaunchCodes | None = None
+) -> ASGIApp:
     """
     Wrap an app in the dashboard's access rules for one launch.
 
@@ -34,12 +52,15 @@ def guard(app: ASGIApp, token: str, port: int) -> ASGIApp:
         - app (ASGIApp): the routed application.
         - token (str): the per-launch token.
         - port (int): the port the server listens on.
+        - launch_codes (LaunchCodes | None): the one-time codes a ?launch
+          query may redeem; none are accepted when None.
 
     Returns:
         - guarded (ASGIApp): the app behind the guard.
     """
     expected = token.encode("ascii")
     hosts = frozenset(f"{name}:{port}" for name in HOST_NAMES)
+    cookie = cookie_name(port)
 
     def valid(candidate: str) -> bool:
         try:
@@ -54,19 +75,26 @@ def guard(app: ASGIApp, token: str, port: int) -> ASGIApp:
         early = _host_or_method(scope, host, hosts)
         if early is not None:
             return early
-        offered = parse_qs(scope["query_string"].decode("latin-1")).get("token")
+        query = parse_qs(scope["query_string"].decode("latin-1"))
+        offered = query.get("token")
         if offered is not None:
             if len(offered) == 1 and valid(offered[0]):
-                return _exchange(scope["path"], offered[0])
+                return _exchange(scope["path"], cookie, token)
             return _error(401, "Unauthorized", "the token is not valid")
+        launch = query.get("launch")
+        if launch is not None:
+            if len(launch) == 1 and launch_codes is not None:
+                if launch_codes.redeem(launch[0]):
+                    return _exchange(scope["path"], cookie, token)
+            return _error(401, "Unauthorized", "the launch code is not valid")
         return api_access(headers, host) if is_api else None
 
     def api_access(headers: Headers, host: str | None) -> Response | None:
         origin = headers.get("origin")
         if origin is not None and origin != f"http://{host}":
             return _error(403, "Forbidden", "the Origin is not allowed")
-        cookie = cookie_parser(headers.get("cookie", "")).get(COOKIE)
-        if cookie is None or not valid(cookie):
+        presented = cookie_parser(headers.get("cookie", "")).get(cookie)
+        if presented is None or not valid(presented):
             return _error(401, "Unauthorized", "a valid session cookie is required")
         return None
 
@@ -102,11 +130,11 @@ def _host_or_method(
     return None
 
 
-def _exchange(path: str, token: str) -> Response:
+def _exchange(path: str, cookie: str, token: str) -> Response:
     """Set the cookie and redirect to the same path without the query."""
     response = Response(status_code=303, headers={"location": _same_path(path)})
     response.headers["cache-control"] = "no-store"
-    response.set_cookie(COOKIE, token, path="/", httponly=True, samesite="strict")
+    response.set_cookie(cookie, token, path="/", httponly=True, samesite="strict")
     return response
 
 

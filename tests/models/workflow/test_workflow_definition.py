@@ -9,20 +9,30 @@ from xoot.models.workflow.workflow_definition import WorkflowDefinition
 
 
 def test_default_has_one_state_per_category_per_kind() -> None:
-    """Every kind gets one state per category, named after it, unrestricted."""
+    """Work kinds get one state per category; backlog open, done, dropped."""
     definition = WorkflowDefinition.default()
     assert set(definition.kinds) == set(ItemKind)
     for kind in ItemKind:
         workflow = definition.for_kind(kind)
+        categories = (
+            [Category.OPEN, Category.DONE, Category.DROPPED]
+            if kind is ItemKind.BACKLOG
+            else list(Category)
+        )
         assert [(s.name, s.category) for s in workflow.states] == [
-            (c.value, c) for c in Category
+            (c.value, c) for c in categories
         ]
         assert workflow.defaults == {
             Category.OPEN: "open",
-            Category.BACKLOGGED: "backlogged",
+            Category.DONE: "done",
             Category.DROPPED: "dropped",
         }
         assert workflow.transitions is None
+
+
+def test_backlogged_is_no_longer_a_category() -> None:
+    """Backlog is an item kind now; the old category is gone."""
+    assert "backlogged" not in {c.value for c in Category}
 
 
 def test_every_kind_is_required() -> None:

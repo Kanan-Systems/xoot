@@ -14,9 +14,9 @@ import pytest
     [
         (["ok", "Bad!"], "String should match pattern '^[a-z][a-z0-9-]{1,31}$'"),
         (
-            ["xoot-12"],
-            "an alias must not look like an item, decision or session key (a "
-            "prefix, a dash, then a number, such as xoot-12, xoot-d3 or ab-s1)",
+            ["goal-12"],
+            "an alias must not look like an item or decision key (a kind, a "
+            "dash, then a number, such as goal-12, backlog-3 or decision-1)",
         ),
     ],
 )

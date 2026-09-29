@@ -13,23 +13,21 @@ import pytest
 
 from xoot.models.event.actor import Actor
 from xoot.models.event.actor_kind import ActorKind
+from xoot.models.event.client import Client
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
 from xoot.models.item.item_create import ItemCreate
+from xoot.models.item.item_draft import ItemDraft
 from xoot.models.item.item_kind import ItemKind
+from xoot.models.item.item_update import ItemUpdate
 from xoot.models.project.project import Project
 from xoot.models.project.project_registration import ProjectRegistration
-from xoot.models.session.client import Client
-from xoot.models.session.disposition import Disposition
-from xoot.models.session.session import Session
-from xoot.models.session.session_close import SessionClose
-from xoot.models.session.session_start import SessionStart
 from xoot.models.workflow.category import Category
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.event import event_db
-from xoot.services.item_service import create_item
+from xoot.services.backlog_service import capture
+from xoot.services.item_service import create_item, update_item
 from xoot.services.project_service import register_project
-from xoot.services.session_service import start_session
 from xoot.store.store import Store
 
 WORKER_TIMEOUT_S = 180
@@ -76,7 +74,7 @@ def fixture_claude() -> Actor:
 
 @pytest.fixture(name="ctx")
 def fixture_ctx(user: Actor) -> WriteContext:
-    """A write context for the user, outside any session."""
+    """A write context for the user, through the CLI."""
     return WriteContext(actor=user)
 
 
@@ -114,39 +112,46 @@ def fixture_make_item(store: Store, ctx: WriteContext) -> Callable[..., Item]:
 
     def make(project: Project, kind: ItemKind, **fields: Any) -> Item:
         fields.setdefault("title", f"{kind} item")
-        return create_item(store, project.id, ItemCreate(kind=kind, **fields), ctx)
+        return create_item(store, project.id, ItemCreate(kind=kind, **fields), ctx)[0]
 
     return make
 
 
-@pytest.fixture(name="make_session")
-def fixture_make_session(store: Store, user: Actor) -> Callable[..., Session]:
-    """Factory: start a session in a project, optionally with focus items."""
+@pytest.fixture(name="capture_on")
+def fixture_capture_on(store: Store, ctx: WriteContext) -> Callable[..., Item]:
+    """Factory: capture a backlog item found on an item."""
 
-    def make(project: Project, *focus: int) -> Session:
-        request = SessionStart(title="session", focus_item_ids=focus)
-        return start_session(store, project.id, request, user).session
+    def make(found_on: Item, title: str = "found work", body: str = "why") -> Item:
+        draft = ItemDraft(title=title, body=body)
+        return capture(store, found_on.project_id, found_on.id, draft, ctx)[0]
 
     return make
 
 
-@pytest.fixture(name="carried_backlog")
-def fixture_carried_backlog(
-    project: Project,
-    make_item: Callable[..., Item],
-    make_session: Callable[..., Session],
-) -> tuple[Item, Session, SessionClose]:
-    """
-    A subtask parked in one open session's backlog, linked to a second
-    session, and a close request for the second that carries it over.
-    """
-    other = make_session(project)
-    item = make_item(
-        project, ItemKind.SUBTASK, state="backlogged", backlog_session_id=other.id
-    )
-    session = make_session(project, item.id)
-    request = SessionClose(dispositions={item.id: Disposition.CARRY_OVER})
-    return item, session, request
+@pytest.fixture(name="set_state")
+def fixture_set_state(store: Store, ctx: WriteContext) -> Callable[..., Item]:
+    """Factory: move an item to a state at its current version."""
+
+    def move(item: Item, state: str) -> Item:
+        with store.read() as conn:
+            current = conn.execute(
+                "SELECT version FROM item WHERE id = ?", (item.id,)
+            ).fetchone()[0]
+        return update_item(store, item.id, current, ItemUpdate(state=state), ctx)[0]
+
+    return move
+
+
+@pytest.fixture(name="work_tree")
+def fixture_work_tree(
+    project: Project, make_item: Callable[..., Item]
+) -> tuple[Item, Item, Item, Item]:
+    """goal-1, its batch goal-1/batch-1, and two subtasks in that batch."""
+    goal = make_item(project, ItemKind.GOAL, title="goal")
+    batch = make_item(project, ItemKind.BATCH, title="batch", parent_id=goal.id)
+    first = make_item(project, ItemKind.SUBTASK, title="one", parent_id=batch.id)
+    second = make_item(project, ItemKind.SUBTASK, title="two", parent_id=batch.id)
+    return goal, batch, first, second
 
 
 @pytest.fixture(name="event_kinds")

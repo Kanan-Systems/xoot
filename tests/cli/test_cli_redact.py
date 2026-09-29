@@ -17,7 +17,6 @@ from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
 from xoot.models.project.project_registration import ProjectRegistration
-from xoot.models.session.session import Session
 from xoot.repositories.event import event_db
 from xoot.services.confirm_service import issue_token
 from xoot.services.item_service import get_item
@@ -29,11 +28,9 @@ DIGEST = "c" * 64
 
 
 @pytest.fixture(name="pending_token")
-def fixture_pending_token(
-    store: Store, project: Project, make_session: Callable[..., Session]
-) -> None:
-    """An unused confirm token of an open session."""
-    issue_token(store, make_session(project).id, "session_close", DIGEST, DIGEST)
+def fixture_pending_token(store: Store, project: Project) -> None:
+    """An unused confirm token of the project."""
+    issue_token(store, project.id, "backlog_push", DIGEST, DIGEST)
 
 
 @pytest.mark.usefixtures("pending_token")
@@ -48,11 +45,11 @@ def test_redact_item_field(
     """Row, events, tokens and raw bytes are all clean afterwards."""
     marker = getattr(secret_item, field)
     assert disk_hits(marker) > 0
-    run = xoot("redact", secret_item.key, field, "--yes")
+    key = f"xoot:{secret_item.key}"
+    run = xoot("redact", key, field, "--yes")
     assert run.code == 0, run.err
     assert run.out == (
-        f"redacted {field} of item {secret_item.key}, now version 2; "
-        "1 event rewritten\n"
+        f"redacted {field} of item {key}, now version 2; " "1 event rewritten\n"
     )
     assert getattr(get_item(store, secret_item.id), field) == REDACTED
     with store.read() as conn:
@@ -88,18 +85,26 @@ def test_redact_project_name_by_prefix(
 @pytest.mark.parametrize(
     ("argv", "error"),
     [
-        (["xoot-99", "title"], "error: NotFoundError: record 'xoot-99' not found\n"),
         (
-            ["x\x1b[2J", "title"],
-            "error: NotFoundError: record 'malformed key' not found\n",
+            ["xoot:goal-99", "title"],
+            "error: NotFoundError: item 'goal-99' not found\n",
+        ),
+        (
+            ["x\x1b[2J", "title", "--project", "xoot"],
+            "error: NotFoundError: item 'malformed key' not found\n",
         ),
         (
             ["xoot", "title"],
             "error: RedactionError: cannot redact project field title\n",
         ),
         (
-            ["xoot-1", "summary"],
-            "error: RedactionError: cannot redact item field summary\n",
+            ["goal-1", "name", "--project", "xoot"],
+            "error: RedactionError: cannot redact item field name\n",
+        ),
+        (
+            ["nova:goal-1", "title", "--project", "xoot"],
+            "error: QualifierError: a key is qualified with another project than "
+            "the one named\n",
         ),
     ],
 )
@@ -130,10 +135,10 @@ def fixture_lookalike(
 
 @pytest.mark.parametrize(
     "case",
-    [("ab-12", "title", "item"), ("ab", "name", "ab"), ("cd", "name", "cd")],
+    [("ab:goal-12", "title", "item"), ("ab", "name", "ab"), ("cd", "name", "cd")],
     ids=["item-key", "prefix-ab", "prefix-cd"],
 )
-def test_key_with_a_dash_is_an_entity_key(
+def test_key_or_prefix_names_one_entity(
     xoot: Any,
     store: Store,
     lookalike: tuple[Project, Item, Project],

@@ -9,8 +9,8 @@ from xoot.models.item.item_kind import ItemKind
 class WorkflowPlan(BaseModel):
     """
     Per item kind: the states the new definition removes, and how many
-    items the change would rewrite (a remapped state or a dropped session
-    backlog). Every kind appears in both maps, with () or 0 when unaffected.
+    items the change would remap to another state. Every kind appears in
+    both maps, with () or 0 when unaffected.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")

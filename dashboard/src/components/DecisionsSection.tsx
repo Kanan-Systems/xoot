@@ -1,13 +1,14 @@
-// The decisions list: title (key second), status chip, the scoped item
-// (opens the drawer) and supersede links, each shown as "title (key)". A
-// body loads when its row is expanded and is shown as plain text.
+// One goal's decisions: title (key second), status chip, the owner's level
+// and title (opens the drawer) and supersede links, each shown as "title
+// (key)". A body loads when its row is expanded and is shown as plain text.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { useDecision } from '../api/queries.ts';
 import type { DecisionSummary } from '../api/types.gen.ts';
 import { useDrawer } from '../hooks/useDrawer.ts';
-import { DECISION_STATUS } from '../lib/display.ts';
+import { DECISION_STATUS, OWNER_LEVEL } from '../lib/display.ts';
+import { ownerLevel } from '../lib/keys.ts';
 import type { Titles } from '../lib/titles.ts';
 import { QueryState } from './QueryState.tsx';
 import { KeyLabel, KeyTag, TitleText } from './Titled.tsx';
@@ -16,38 +17,25 @@ export function anchorOf(key: string): string {
   return `decision-${key}`;
 }
 
-// Which decision supersedes each one, from the supersedes links.
-export function supersededBy(
-  decisions: readonly DecisionSummary[],
-): Map<string, string> {
-  const next = new Map<string, string>();
-  for (const decision of decisions) {
-    if (decision.supersedes !== null) {
-      next.set(decision.supersedes, decision.key);
-    }
-  }
-  return next;
-}
-
 interface DecisionsSectionProps {
+  prefix: string;
   decisions: readonly DecisionSummary[];
   successors: ReadonlyMap<string, string>;
   titles: Titles;
 }
 
 export function DecisionsSection({
+  prefix,
   decisions,
   successors,
   titles,
 }: DecisionsSectionProps) {
-  if (decisions.length === 0) {
-    return <p className="muted">No decisions match.</p>;
-  }
   return (
     <ul className="decision-list">
       {decisions.map((decision) => (
         <DecisionRow
           key={decision.key}
+          prefix={prefix}
           decision={decision}
           successor={successors.get(decision.key) ?? null}
           titles={titles}
@@ -58,15 +46,17 @@ export function DecisionsSection({
 }
 
 interface DecisionRowProps {
+  prefix: string;
   decision: DecisionSummary;
   successor: string | null;
   titles: Titles;
 }
 
-function DecisionRow({ decision, successor, titles }: DecisionRowProps) {
+function DecisionRow({ prefix, decision, successor, titles }: DecisionRowProps) {
   const [expanded, setExpanded] = useState(false);
   const { hrefFor } = useDrawer();
   const status = DECISION_STATUS[decision.status];
+  const level = decision.owner === null ? null : ownerLevel(decision.owner);
   const bodyId = `${anchorOf(decision.key)}-body`;
   return (
     <li id={anchorOf(decision.key)} className="decision-row">
@@ -88,11 +78,13 @@ function DecisionRow({ decision, successor, titles }: DecisionRowProps) {
         <span className={`chip chip-${decision.status}`}>
           <span aria-hidden="true">{status.icon}</span> {status.label}
         </span>
-        {decision.scope !== null && (
+        {decision.owner === null ? (
+          <span className="muted">Owner gone</span>
+        ) : (
           <span>
-            Scope:{' '}
-            <Link to={hrefFor(decision.scope)}>
-              <KeyLabel itemKey={decision.scope} titles={titles} />
+            {level === null ? 'Owner' : OWNER_LEVEL[level]}:{' '}
+            <Link to={hrefFor(decision.owner)}>
+              <KeyLabel itemKey={decision.owner} titles={titles} />
             </Link>
           </span>
         )}
@@ -115,15 +107,21 @@ function DecisionRow({ decision, successor, titles }: DecisionRowProps) {
       </div>
       {expanded && (
         <div id={bodyId}>
-          <DecisionBody decisionKey={decision.key} />
+          <DecisionBody prefix={prefix} decisionKey={decision.key} />
         </div>
       )}
     </li>
   );
 }
 
-function DecisionBody({ decisionKey }: { decisionKey: string }) {
-  const query = useDecision(decisionKey, true);
+function DecisionBody({
+  prefix,
+  decisionKey,
+}: {
+  prefix: string;
+  decisionKey: string;
+}) {
+  const query = useDecision(prefix, decisionKey, true);
   return (
     <QueryState query={query} what="decision">
       {(view) => <pre className="body">{view.decision.body}</pre>}

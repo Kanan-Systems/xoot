@@ -1,8 +1,11 @@
-"""Mapping the connected MCP client to the client recorded on a session."""
+"""Mapping the connected MCP client to the actor every tool write records."""
 
 from mcp.server.mcpserver import Context
 
-from xoot.models.session.client import Client
+from xoot.models.event.actor import Actor
+from xoot.models.event.actor_kind import ActorKind
+from xoot.models.event.client import Client
+from xoot.models.event.write_context import WriteContext
 from xoot.server.schemas.client_info_entry import ClientInfoEntry
 
 CODE_MARKER = "claude-code"
@@ -27,12 +30,29 @@ def client_info(ctx: Context) -> ClientInfoEntry | None:
     )
 
 
-def session_client(info: ClientInfoEntry | None) -> Client:
+def write_context(ctx: Context) -> WriteContext:
     """
-    Choose the client a new session records.
+    Build the context of one tool write: Claude, through the mapped client.
+
+    Mapped per call, so any number of conversations and clients can work on
+    the same goal, each write labelled with its own client.
+
+    Args:
+        - ctx (Context): the tool's request context.
+
+    Returns:
+        - write (WriteContext): actor claude and client code or chat.
+    """
+    actor = Actor(kind=ActorKind.CLAUDE, client=map_client(client_info(ctx)))
+    return WriteContext(actor=actor)
+
+
+def map_client(info: ClientInfoEntry | None) -> Client:
+    """
+    Choose the client a write records.
 
     The name is self-reported and unauthenticated; it only labels the
-    session, it grants nothing.
+    write, it grants nothing.
 
     Args:
         - info (ClientInfoEntry | None): the client's reported info.

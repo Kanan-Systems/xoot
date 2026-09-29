@@ -12,15 +12,22 @@ from typing import Any
 import pytest
 
 from xoot.cli.render.paste import ENCODING_ADVICE, ENCODING_HEADING
+from xoot.models.project.project import Project
 from xoot.repositories.item import item_db
 from xoot.store.store import Store
 
 MARKER = "damage-secret-7f3a"
 DAMAGED = f"verificaci?n {MARKER}"
 OPS = [
-    {"op": "session_start", "title": "Paste LV A"},
+    {"op": "item_create", "kind": "goal", "title": "Paste LV A"},
     {"op": "item_create", "ref": "g", "kind": "goal", "title": DAMAGED},
-    {"op": "capture", "ref": "c", "title": "fine", "body": f"a?b {MARKER}"},
+    {
+        "op": "capture",
+        "ref": "c",
+        "found_on": "$g",
+        "title": "fine",
+        "body": f"a?b {MARKER}",
+    },
 ]
 
 
@@ -34,11 +41,11 @@ def _section(err: str) -> list[str]:
 def test_section_names_fields_never_content(
     paste_cli: Callable[..., Any], reply: Callable[..., bytes]
 ) -> None:
-    """The section follows SIDE EFFECTS and holds no stored text."""
+    """The section follows COMPLETION and holds no stored text."""
     run = paste_cli("paste", "apply", "-", "--yes", stdin=reply(OPS))
     assert run.code == 0, run.err
     lines = run.err.splitlines()
-    assert lines.index(ENCODING_HEADING) > lines.index("SIDE EFFECTS")
+    assert lines.index(ENCODING_HEADING) > lines.index("COMPLETION")
     section = _section(run.err)
     assert section == [
         ENCODING_HEADING,
@@ -51,7 +58,10 @@ def test_section_names_fields_never_content(
 
 @pytest.mark.usefixtures("project")
 def test_apply_still_works_after_yes(
-    paste_cli: Callable[..., Any], reply: Callable[..., bytes], store: Store
+    paste_cli: Callable[..., Any],
+    reply: Callable[..., bytes],
+    store: Store,
+    project: Project,
 ) -> None:
     """A y on the terminal applies the block as pasted; the receipt is as usual."""
     run = paste_cli("paste", "apply", "-", stdin=reply(OPS), answer="y")
@@ -59,10 +69,11 @@ def test_apply_still_works_after_yes(
     assert ENCODING_HEADING in run.err and "Apply? [y/N] " in run.err
     receipt = run.receipt()
     assert set(receipt) == {
-        "xoot", "project", "session", "session_status", "refs", "items", "decisions"
+        "xoot", "project", "refs", "items", "decisions", "completed", "reopened",
+        "blocked",
     }  # fmt: skip
     with store.read() as conn:
-        goal = item_db.get_by_key(conn, receipt["refs"]["g"])
+        goal = item_db.get_by_key(conn, project.id, receipt["refs"]["g"])
     assert goal is not None and goal.title == DAMAGED
 
 
@@ -98,7 +109,7 @@ def test_clean_block_has_no_section(
     paste_cli: Callable[..., Any], reply: Callable[..., bytes]
 ) -> None:
     """Without damage there is no section, and --json shows an empty list."""
-    ops = [{"op": "session_start", "title": "Why? verificación"}]
+    ops = [{"op": "item_create", "kind": "goal", "title": "Why? verificación"}]
     run = paste_cli("paste", "apply", "-", "--yes", "--json", stdin=reply(ops))
     assert ENCODING_HEADING not in run.err
     assert json.loads(run.out)["warnings"] == []

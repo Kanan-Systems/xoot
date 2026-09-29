@@ -1,4 +1,4 @@
-"""Public keys resolve to rows without the MCP server, raising XootErrors."""
+"""Public keys resolve to rows within a project, raising XootErrors."""
 
 from collections.abc import Callable
 
@@ -11,11 +11,8 @@ from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
-from xoot.models.project.project_registration import ProjectRegistration
-from xoot.models.session.session import Session
 from xoot.services import key_resolver
 from xoot.services.decision_service import create_decision
-from xoot.services.project_service import register_project
 from xoot.store.store import Store
 
 
@@ -23,66 +20,64 @@ def test_every_kind_of_key(
     store: Store,
     project: Project,
     ctx: WriteContext,
-    make_item: Callable[..., Item],
-    make_session: Callable[..., Session],
+    work_tree: tuple[Item, Item, Item, Item],
+    capture_on: Callable[..., Item],
 ) -> None:
-    """Items, decisions, sessions and prefixes resolve, alone and via entity_by_key."""
-    item = make_item(project, ItemKind.GOAL)
-    decision = create_decision(store, project.id, DecisionCreate(title="d"), ctx)
-    session = make_session(project)
+    """Items at every depth, backlog items, decisions and prefixes resolve."""
+    goal, batch, first, _ = work_tree
+    backlog = capture_on(first)
+    decision = create_decision(
+        store, project.id, DecisionCreate(owner_item_id=batch.id, title="d"), ctx
+    )
     with store.read() as conn:
-        assert key_resolver.item_by_key(conn, "xoot-1").id == item.id
-        assert key_resolver.decision_by_key(conn, "xoot-D1").id == decision.id
-        assert key_resolver.session_by_key(conn, "xoot-S1").id == session.id
+        for item in (goal, batch, first, backlog):
+            assert key_resolver.item_by_key(conn, project.id, item.key).id == item.id
+        assert decision.key == "goal-1/batch-1/decision-1"
+        found = key_resolver.decision_by_key(conn, project.id, decision.key)
+        assert found.id == decision.id
         assert key_resolver.project_by_key(conn, "xoot").id == project.id
         resolved = [
-            key_resolver.entity_by_key(conn, key)
-            for key in ("xoot-1", "xoot-D1", "xoot-S1", "xoot")
+            key_resolver.entity_by_key(conn, project.id, key)
+            for key in ("goal-1/batch-1/subtask-1", "goal-1/batch-1/decision-1")
         ]
     assert resolved == [
-        (EntityType.ITEM, item.id),
+        (EntityType.ITEM, first.id),
         (EntityType.DECISION, decision.id),
-        (EntityType.SESSION, session.id),
-        (EntityType.PROJECT, project.id),
     ]
 
 
 @pytest.mark.parametrize(
     ("key", "ref"),
     [
-        ("xoot-99", "xoot-99"),
-        ("zz-S1", "zz-S1"),
+        ("goal-99", "goal-99"),
+        ("goal-1/decision-7", "goal-1/decision-7"),
         ("NOT A KEY\x1b[2J", "malformed key"),
-        ("xo", "malformed key"),
+        ("xoot-1", "malformed key"),
+        ("goal-1/subtask-1", "malformed key"),
     ],
 )
-@pytest.mark.usefixtures("project")
-def test_unknown_keys_do_not_echo_input(store: Store, key: str, ref: str) -> None:
-    """Only a well-formed key is kept on the error; an alias is not a key."""
+@pytest.mark.usefixtures("work_tree")
+def test_unknown_keys_do_not_echo_input(
+    store: Store, project: Project, key: str, ref: str
+) -> None:
+    """Only a well-formed key is kept on the error."""
     with store.read() as conn:
         with pytest.raises(NotFoundError) as caught:
-            key_resolver.entity_by_key(conn, key)
+            key_resolver.entity_by_key(conn, project.id, key)
     assert caught.value.ref == ref
 
 
-def test_a_dash_makes_a_record_key_and_an_alias_is_never_a_key(
-    store: Store, project: Project, ctx: WriteContext, make_item: Callable[..., Item]
+def test_keys_are_per_project(
+    store: Store,
+    project: Project,
+    other_project: Project,
+    make_item: Callable[..., Item],
 ) -> None:
-    """ "xoot-1" is item 1 of xoot; a dashed alias never resolves as a key."""
-    other = register_project(
-        store,
-        ProjectRegistration(key_prefix="other", name="n", aliases=("xoot-one",)),
-        ctx.actor,
-    )
+    """goal-1 of one project is not goal-1 of another."""
+    mine = make_item(project, ItemKind.GOAL)
+    theirs = make_item(other_project, ItemKind.GOAL)
+    assert mine.key == theirs.key == "goal-1"
     with store.read() as conn:
-        with pytest.raises(NotFoundError) as caught:
-            key_resolver.entity_by_key(conn, "xoot-1")
-        with pytest.raises(NotFoundError):
-            key_resolver.entity_by_key(conn, "xoot-one")
-    assert caught.value.ref == "xoot-1"
-    item = make_item(project, ItemKind.GOAL)
-    with store.read() as conn:
-        resolved = [
-            key_resolver.entity_by_key(conn, key) for key in ("xoot-1", "other")
-        ]
-    assert resolved == [(EntityType.ITEM, item.id), (EntityType.PROJECT, other.id)]
+        assert key_resolver.item_by_key(conn, project.id, "goal-1").id == mine.id
+        found = key_resolver.item_by_key(conn, other_project.id, "goal-1")
+    assert found.id == theirs.id

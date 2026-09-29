@@ -10,9 +10,9 @@ def render_tree(output: TreeOutput) -> str:
     """
     Render tree nodes in pre-order, indented by depth.
 
-    Each line shows the key, kind, state, category and title; unfiled
-    subtasks are marked. The indented key, the kind and the state with its
-    category are padded to columns, so every title starts at one offset.
+    Each line shows the key, kind, state, category and title. The indented
+    key, the kind and the state with its category are padded to columns, so
+    every title starts at one offset.
 
     Args:
         - output (TreeOutput): the tree.
@@ -33,7 +33,6 @@ def render_tree(output: TreeOutput) -> str:
     widths = [max(len(cells[i]) for cells in columns) for i in range(3)]
     lines = []
     for node, cells in zip(output.nodes, columns):
-        unfiled = " [unfiled]" if node.unfiled else ""
         padded = "  ".join(cell.ljust(width) for cell, width in zip(cells, widths))
-        lines.append(f"{padded}  {clean(node.item.title)}{unfiled}")
+        lines.append(f"{padded}  {clean(node.item.title)}")
     return "\n".join(lines)

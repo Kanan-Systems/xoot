@@ -1,33 +1,48 @@
 import { describe, expect, it } from 'vitest';
 
-import { backlogsView } from '../test/api.ts';
+import { backlogView } from '../test/api.ts';
+import { B1, B1_BACKLOG, G1, G1_BACKLOG, P_BACKLOG } from '../test/fixtures.ts';
 import { backlogGroups } from './backlogGroups.ts';
 
+const TITLES = new Map([
+  [G1, 'Ship export'],
+  [B1, 'Writer'],
+]);
+
 describe('backlogGroups', () => {
-  it('lists each open session, then the project backlog, then unfiled', () => {
-    const groups = backlogGroups(backlogsView());
-    expect(groups.map((group) => [group.heading, group.key])).toEqual([
-      ['open one', 'x-S2'],
-      ['Project backlog', null],
-      ['Unfiled', null],
-    ]);
+  it('orders batch backlog, then goal backlog, then the project backlog', () => {
+    const groups = backlogGroups(backlogView(), TITLES);
+    expect(groups.map((group) => group.level)).toEqual(['batch', 'goal', 'project']);
     expect(groups.map((group) => group.items.map((row) => row.key))).toEqual([
-      ['x-9'],
-      ['x-10'],
-      ['x-9', 'x-7'],
+      [B1_BACKLOG],
+      [G1_BACKLOG],
+      [P_BACKLOG],
     ]);
   });
 
-  it('skips a session that is no longer open', () => {
-    const view = backlogsView();
-    const [first] = view.sessions;
-    if (first === undefined) {
-      throw new Error('fixture has a session');
+  it('heads a batch group with its goal and batch titles, keys second', () => {
+    const [batch, goal, project] = backlogGroups(backlogView(), TITLES);
+    expect(batch?.holders).toEqual([
+      { key: G1, title: 'Ship export' },
+      { key: B1, title: 'Writer' },
+    ]);
+    expect(goal?.holders).toEqual([{ key: G1, title: 'Ship export' }]);
+    expect(project?.holders).toEqual([]);
+  });
+
+  it('sorts groups of one level by key, naturally', () => {
+    const view = backlogView();
+    const base = view.items[1];
+    if (base === undefined) {
+      throw new Error('fixture has a goal row');
     }
-    view.sessions = [{ ...first, session: { ...first.session, status: 'closed' } }];
-    expect(backlogGroups(view).map((group) => group.id)).toEqual([
-      'project',
-      'unfiled',
+    view.items = [
+      { ...base, key: 'goal-10/backlog-1', parent: 'goal-10' },
+      { ...base, key: 'goal-2/backlog-1', parent: 'goal-2' },
+    ];
+    expect(backlogGroups(view, TITLES).map((group) => group.id)).toEqual([
+      'goal:goal-2',
+      'goal:goal-10',
     ]);
   });
 });

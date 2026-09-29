@@ -1,15 +1,15 @@
 # xoot
 
-Keep goals, batches and subtasks straight across Claude sessions.
+Keep goals, batches and subtasks straight across Claude conversations.
 
 [![Stars](https://img.shields.io/github/stars/Kanan-Systems/xoot?style=flat)](https://github.com/Kanan-Systems/xoot/stargazers)
 [![License](https://img.shields.io/github/license/Kanan-Systems/xoot)](LICENSE)
 [![backend-gates](https://github.com/Kanan-Systems/xoot/actions/workflows/backend-gates.yml/badge.svg)](https://github.com/Kanan-Systems/xoot/actions/workflows/backend-gates.yml)
 
-xoot is a local-only tracker that Claude reads and writes through MCP. A
-session starts with a brief and focus items, captures side work the moment it
-appears, records decisions with their rationale, and closes by giving every
-open item a disposition, so the next session picks up where this one stopped.
+xoot is a local-only tracker that Claude reads and writes through MCP. Work
+starts with a brief, captures side work the moment it appears, records
+decisions with their rationale, and picks up where the last conversation
+stopped.
 State lives in one SQLite file on your machine; nothing is sent anywhere.
 
 ## Status
@@ -63,23 +63,22 @@ Register the project once, from its directory: `xoot init --prefix myapp`.
 
 ## Docs
 
-- [Concepts](docs/concepts.md): projects, items, sessions, backlogs,
+- [Concepts](docs/concepts.md): projects, items, backlogs,
   decisions, keys and history.
 - [Clients](docs/clients.md): setup per client and the measured facts.
-- [Workflow](docs/workflow.md): the session loop and working patterns.
+- [Workflow](docs/workflow.md): the working loop and patterns.
 
 ## CLI
 
 `xoot` (or `python -m xoot.cli`) is the user's own entry point. Every write
-is recorded as the user, client `cli`, outside any session, except paste
-mode's.
+is recorded as the user, client `cli`, except paste mode's.
 
 ```sh
 xoot init [PATH] --prefix xoot [--name N] [--alias A]...
 xoot project list | show | add-alias A | remove-alias A | add-path P | remove-path P
 xoot brief | tree [--root KEY] [--depth N] [--all]
 xoot workflow export [-o FILE] | import FILE [--map kind:old=new]... [--yes]
-xoot redact KEY FIELD [--yes]      # KEY: item, decision or session key, or a prefix
+xoot redact KEY FIELD [--yes]      # KEY: item or decision key, or a prefix
 xoot paste brief | apply SOURCE [--yes]
 xoot db stats | vacuum
 xoot dashboard [--port N] [--open]
@@ -98,11 +97,11 @@ without starting the server.
 
 For chats without MCP, `xoot paste` carries changes by copy and paste.
 `xoot paste brief [--project NAME]` prints a markdown brief (at most 16 KiB):
-the workflow, open sessions, items in flight with their versions, recent
+the workflow, items in flight with their versions, recent
 decisions and the reply protocol. Paste it into the chat; Claude replies with
-at most one fenced ```` ```xoot ```` JSON block of ops (session_start,
-capture, item_create, item_update, decision_record, decision_update,
-session_close). Copy the reply with the copy button under the whole message:
+at most one fenced ```` ```xoot ```` JSON block of ops (item_create,
+item_update, capture, backlog_cover, backlog_push, decision_record,
+decision_update). Copy the reply with the copy button under the whole message:
 a code block's own copy button drops the fence lines. Then:
 
 ```sh
@@ -164,8 +163,8 @@ http://xoot.localhost:7373/?token=<per-launch token>
 Open it in a browser on the same machine. The token is new at every launch
 and is swapped for a cookie on first use. `--open` opens it for you
 (`wslview` under WSL, else the default browser); it honours `--db`. Views:
-the item tree (done work collapsed, focus mode, a session overlay), item
-details, sessions, backlogs and decisions, refreshed every two seconds.
+the item tree (done work collapsed, focus mode), item details, backlogs and
+decisions, refreshed every two seconds.
 Read-only for now; see [SECURITY.md](SECURITY.md#dashboard).
 
 ## Screenshots

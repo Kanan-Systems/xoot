@@ -84,7 +84,7 @@ def test_incomplete_purge_exits_3(
 ) -> None:
     """A reader pinning the WAL leaves the redaction committed but unpurged."""
     write_lock("read")
-    run = xoot("redact", secret_item.key, "title", "--yes", "--json")
+    run = xoot("redact", f"xoot:{secret_item.key}", "title", "--yes", "--json")
     assert run.code == 3
     assert run.json()["purged"] is False
     assert run.err.startswith("warning: the redaction is committed")

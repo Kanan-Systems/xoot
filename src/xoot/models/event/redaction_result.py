@@ -9,8 +9,8 @@ from xoot.models.fields import Id
 
 class RedactionResult(BaseModel):
     """
-    The redacted entity and field, the row's new version (None for sessions
-    and projects, which have none), the events whose before/after were
+    The redacted entity and field, the row's new version (None for projects,
+    which have none), the events whose before/after were
     rewritten, and whether the WAL checkpoint completed.
 
     purged is False when another connection kept the checkpoint from

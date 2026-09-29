@@ -1,5 +1,5 @@
 // The only network access the dashboard makes: same-origin GETs under
-// /api/v1, with the HttpOnly session cookie the server set.
+// /api/v1, with the HttpOnly login cookie the server set.
 import type { ErrorOutput } from './types.gen.ts';
 
 export const API_BASE = '/api/v1';

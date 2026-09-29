@@ -18,18 +18,16 @@ from xoot.models.decision.decision_update import DecisionUpdate
 from xoot.models.event.entity_type import EntityType
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item_create import ItemCreate
+from xoot.models.item.item_draft import ItemDraft
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.project.project import Project
 from xoot.models.project.project_registration import ProjectRegistration
-from xoot.models.session.session_close import SessionClose
-from xoot.models.session.session_start import SessionStart
+from xoot.services.backlog_service import capture
 from xoot.services.decision_service import create_decision, update_decision
 from xoot.services.item_service import create_item, get_item, update_item
 from xoot.services.project_service import add_alias, register_project
 from xoot.services.redaction_service import REDACTED, redact_field
-from xoot.services.session_close_service import close_session
-from xoot.services.session_service import start_session
 from xoot.store.store import Store
 
 type Planted = tuple[EntityType, int, str]
@@ -52,7 +50,7 @@ def _item(field: str, overflow: bool) -> Planter:
     def plant(s: Store, p: Project, ctx: WriteContext, secret: str) -> Planted:
         text = _overflow(secret) if overflow else secret
         request = ItemCreate(kind=ItemKind.GOAL, **{"title": "t", field: text})
-        item = create_item(s, p.id, request, ctx)
+        item, _ = create_item(s, p.id, request, ctx)
         update_item(s, item.id, 1, ItemUpdate(state="active"), ctx)
         return EntityType.ITEM, item.id, field
 
@@ -62,7 +60,10 @@ def _item(field: str, overflow: bool) -> Planter:
 def _decision(field: str, overflow: bool) -> Planter:
     def plant(s: Store, p: Project, ctx: WriteContext, secret: str) -> Planted:
         text = _overflow(secret) if overflow else secret
-        request = DecisionCreate(**{"title": "t", field: text})
+        goal, _ = create_item(s, p.id, ItemCreate(kind=ItemKind.GOAL, title="g"), ctx)
+        request = DecisionCreate(
+            **{"owner_item_id": goal.id, "title": "t", field: text}
+        )
         decision = create_decision(s, p.id, request, ctx)
         deferred = DecisionUpdate(status=DecisionStatus.DEFERRED)
         update_decision(s, decision.id, 1, deferred, ctx)
@@ -71,14 +72,14 @@ def _decision(field: str, overflow: bool) -> Planter:
     return plant
 
 
-def _session(field: str, overflow: bool) -> Planter:
+def _backlog(field: str, overflow: bool) -> Planter:
     def plant(s: Store, p: Project, ctx: WriteContext, secret: str) -> Planted:
         text = _overflow(secret) if overflow else secret
-        title = text if field == "title" else "s"
-        summary = text if field == "summary" else None
-        session = start_session(s, p.id, SessionStart(title=title), ctx.actor).session
-        close_session(s, session.id, SessionClose(summary=summary), ctx.actor)
-        return EntityType.SESSION, session.id, field
+        goal, _ = create_item(s, p.id, ItemCreate(kind=ItemKind.GOAL, title="g"), ctx)
+        draft = ItemDraft(**{"title": "t", "body": "why", field: text})
+        item, _ = capture(s, p.id, goal.id, draft, ctx)
+        update_item(s, item.id, 1, ItemUpdate(state="done"), ctx)
+        return EntityType.ITEM, item.id, field
 
     return plant
 
@@ -97,9 +98,8 @@ PLANTERS: dict[str, Planter] = {
     "decision-title": _decision("title", overflow=False),
     "decision-body": _decision("body", overflow=False),
     "decision-body-overflow": _decision("body", overflow=True),
-    "session-title": _session("title", overflow=False),
-    "session-summary": _session("summary", overflow=False),
-    "session-summary-overflow": _session("summary", overflow=True),
+    "backlog-title": _backlog("title", overflow=False),
+    "backlog-body-overflow": _backlog("body", overflow=True),
     "project-name": _project_name,
 }
 
@@ -110,7 +110,7 @@ def test_raw_overwrite_without_secure_delete_leaves_the_secret(
     """Negative control: without secure_delete the freed bytes stay on disk."""
     secret = f"secret-{uuid.uuid4().hex}"
     request = ItemCreate(kind=ItemKind.GOAL, title="t", body=_overflow(secret))
-    item = create_item(store, project.id, request, ctx)
+    item, _ = create_item(store, project.id, request, ctx)
     raw = sqlite3.connect(store.path, autocommit=True)
     try:
         raw.execute("PRAGMA secure_delete = OFF")

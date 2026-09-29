@@ -11,81 +11,123 @@ registers the working directory (or a given path) as a project; `xoot
 project add-path` adds more directories.
 
 A key prefix is 2-32 lowercase letters or digits, starting with a letter,
-with no dashes: every key splits on its first dash, so `ab-12` can only be
-item 12 of project `ab`. An alias may contain dashes (`my-app`) but must not
-look like an item, decision or session key (`xoot-12`, `xoot-d3`, `ab-s1`).
-Prefixes and aliases share one namespace, so every name finds exactly one
-project.
+with no dashes. An alias may contain dashes (`my-app`) but must not look
+like a key segment (`goal-12`, `backlog-3`). Prefixes and aliases share one
+namespace, so every name finds exactly one project.
 
-## Items: goal, batch, subtask
+## Items: goal, batch, subtask, backlog
 
-Work is a tree of three kinds of item:
+Work is a tree of four kinds of item:
 
-- **goal**: a top-level outcome. A goal has no parent.
-- **batch**: a slice of a goal. A batch always has a goal as its parent.
-- **subtask**: one piece of work. Its parent is a batch, or none at all.
+- **goal**: a top-level outcome. A goal sits on the project.
+- **batch**: a slice of a goal. Its parent is always a goal.
+- **subtask**: one piece of work. Its parent is always a batch.
+- **backlog**: open work found along the way. It sits on a batch, on a
+  goal, or on the project (the project backlog).
 
-A subtask with no parent is **unfiled**. Captured side items start unfiled
-and can be moved under a batch later. The database itself rejects a batch
-under a batch or a subtask under a goal.
+The database itself rejects any other parent. Every item has a title (up to
+200 characters), a body (up to 32 KiB), a state and a version that goes up
+with each change.
 
-Every item has a title (up to 200 characters), a body (up to 32 KiB), a
-state and a version that goes up with each change.
+Items belong to goals, not to conversations: any number of conversations,
+chats and Claude Code agents may work on the same goal at once. Every write
+records its actor and client (see below).
 
-## Session
+## Keys
 
-A session is one sitting of work by one client. It starts with a title and
-optional focus items (the items it means to work on), links every item it
-touches, and ends with a close. Several sessions can be open at once; a
-session start warns when a focus item is also held by another open session.
+Keys are nested paths, unique within one project. Each number is allocated
+by the item's parent (the project, for goals and the project backlog), from
+a counter that only grows, so a key is never handed out twice.
+
+| Item | Key shape | Example |
+|---|---|---|
+| goal | `goal-<n>` | `goal-1` |
+| batch | `goal-<n>/batch-<m>` | `goal-1/batch-2` |
+| subtask | `goal-<n>/batch-<m>/subtask-<k>` | `goal-1/batch-2/subtask-3` |
+| project backlog | `backlog-<k>` | `backlog-4` |
+| goal backlog | `goal-<n>/backlog-<k>` | `goal-1/backlog-5` |
+| batch backlog | `goal-<n>/batch-<m>/backlog-<k>` | `goal-1/batch-2/backlog-6` |
+| decision | `<goal, batch or subtask key>/decision-<j>` | `goal-1/batch-2/decision-1` |
+
+Any key may be qualified with its project: `<prefix>:<key>`, e.g.
+`xoot:goal-1/batch-2`. A call's project comes from the explicit project
+argument, then the qualifier of its keys, then the client's roots, then the
+working directory (Claude Code). Chat clients pass the project.
+
+When an item moves (a reparent, or a backlog push), it takes the next
+number of its new parent and every key below it changes with it. Each old
+key is recorded as an **alias** and keeps resolving to the item forever. A
+decision's key follows its owner's current key.
+
+## Completion
+
+Goals and batches complete on their own; nobody sets them done by hand.
+
+- A **batch** completes when every subtask is done or dropped **and** no
+  open backlog item sits on the batch. It moves to its default `done`
+  state, or to its default `dropped` state when every subtask was dropped.
+- A **goal** completes the same way: every batch done or dropped, and no
+  open backlog on the goal itself.
+- A batch or goal with no children never completes.
+- Open backlog **blocks** completion. While every child is closed but open
+  backlog remains, nothing changes and the write reports the item as
+  `blocked` with its open backlog count; the brief lists it too.
+- A closed batch or goal **reopens** (back to its default `open` state)
+  when it gains open work: a new or reopened subtask, a new batch, or new
+  or pushed-in open backlog.
+
+These writes are recorded as the `system` actor in the same transaction.
+Every write result lists the keys it `completed` and `reopened`, and what
+stays `blocked`.
 
 ## Backlog
 
-An item that is parked rather than worked on is **backlogged**. There are
-two backlogs:
+A backlog item is work found along the way that is not yet a subtask. It
+is closed in one of three ways, each of which counts toward completion:
 
-- **session backlog**: parked by a session's close, with that session
-  named. The next session's start lists these items under `pending`, so
-  work parked at a close is offered again for triage.
-- **project backlog**: parked with no session attached.
+- **cover**: `backlog_cover` turns it into a subtask (same title and body)
+  and closes it. The subtask records the item as its `origin`, the item
+  records the subtask as `covered_by`. It lands in the item's own batch,
+  or in a named batch: of the same goal for an item on a goal, of any goal
+  for a project-level item.
+- **resolve**: `item_update` to its done (or dropped) state, when the work
+  is done without a subtask.
+- **push**: `backlog_push` moves it one level up: batch to goal, goal to
+  project. It is two-phase (preview, then apply with a token). The project
+  is the top.
 
-Triage happens at the next session. When a session closes, items still
-parked in the backlog of a session that had already closed before this one
-started move to the project backlog. These are the **auto-backlog** moves:
-the close preview lists them as warnings, and they are recorded as the
-system's writes, not the closer's.
-
-## Dispositions
-
-Closing a session needs a disposition for every open item linked to it:
-
-| Disposition | Effect |
-|---|---|
-| `carry_over` | Keeps the item's state; the next session picks it up. |
-| `session_backlog` | Moves it to the default backlogged state, in this session's backlog. |
-| `project_backlog` | Moves it to the default backlogged state, in the project backlog. |
-| `dropped` | Moves it to the default dropped state. |
-
-Done and dropped items need none. A close that leaves any item without a
-disposition fails and names the missing keys.
+Backlog **cascades upward**: batch, then goal, then project. Pushing an item
+off a batch can let that batch complete; pushing it onto a closed goal
+reopens the goal.
 
 ## Capture
 
-Capture records a side item the moment it appears, without derailing the
-session: it creates an unfiled subtask parked in the current session's
-backlog. Check the tree and the backlog first; one finding is one item.
+`capture` records a backlog item the moment it appears. `found_on` is the
+item it was found on (any kind) and the body says why. It lands:
+
+| found_on | Lands on |
+|---|---|
+| a subtask | the subtask's batch |
+| a batch | that batch |
+| a goal | that goal |
+| a backlog item | the same level as that item (the project for a project-level one) |
+
+A capture reopens a done batch or goal, since open backlog now sits on it.
+Check `backlog_list` first: one finding is one item.
 
 ## Decision
 
-A decision is a recorded choice with its rationale: a title, a body that
-explains why, and optionally the item it is scoped to. An item can also be
-marked as awaiting a decision. Its status is one of:
+A decision is a recorded choice with its rationale: a title and a body that
+explains why. It belongs to the goal, batch or subtask it was made on, which
+numbers it. An item can also be marked as awaiting a decision. Its status is
+one of:
 
 - **locked**: in force.
 - **deferred**: deliberately postponed.
-- **superseded**: replaced by a newer decision. Recording a decision that
-  supersedes another changes the older one's status in the same
-  transaction. Superseded is terminal and only reached this way.
+- **superseded**: replaced by a newer decision of the same goal. Recording
+  a decision that supersedes another changes the older one's status in the
+  same transaction. A decision is superseded at most once, and superseded
+  is terminal.
 
 Title, body and status stay editable (except the status of a superseded
 decision), and every change is kept in the history.
@@ -93,39 +135,25 @@ decision), and every change is kept in the history.
 ## Workflow states and categories
 
 Each project names its own states, per item kind. Every state belongs to
-exactly one of seven fixed categories, and xoot's rules (backlogs, session
-close, tree filtering) reason only in categories:
+exactly one of six fixed categories, and xoot's rules (completion, backlog
+counts, tree filtering) reason only in categories:
 
-`open`, `active`, `blocked`, `awaiting_input`, `done`, `dropped`,
-`backlogged`.
+`open`, `active`, `blocked`, `awaiting_input`, `done`, `dropped`.
 
-`done` and `dropped` are terminal. The default workflow has one state per
-category, named after it, with no transition restrictions. `xoot workflow
-export` and `xoot workflow import` change it as a TOML file.
-
-## Keys
-
-- `<prefix>-<n>` for items. One counter per project is shared by goals,
-  batches and subtasks, so a key never encodes the kind or the parent and
-  survives a reparent unchanged.
-- `<prefix>-D<n>` for decisions.
-- `<prefix>-S<n>` for sessions.
-
-Keys are never reused.
+`done` and `dropped` are terminal. Every kind needs a default state for
+`open`, `done` and `dropped`. See [Workflow](workflow.md).
 
 ## History and redaction
 
-Every write appends an event with the actor, the client, the session (if
-any) and the before and after values of what changed. The event log is
-append-only: the database refuses deletes and every update except a
-redaction.
+Every write appends an event with the actor, the client and the before and
+after values of what changed. The event log is append-only: the database
+refuses deletes and every update except a redaction.
 
 `xoot redact KEY FIELD` is the one sanctioned rewrite. Only the user can run
-it, from the CLI. It clears a title, body, summary or project name to
-`[redacted]`, removes that field's content from every event of the entity,
-records a `redact` event that names the field but never the content, and
-purges the old text from the database files. Key prefixes and aliases are
-part of every key and cannot be redacted.
+it, from the CLI. It clears an item or decision title or body, or a project
+name, to `[redacted]`, removes that field's content from every event of the
+entity, records a `redact` event that names the field but never the
+content, and purges the old text from the database files.
 
 ## Actors and clients
 
@@ -135,7 +163,7 @@ Every event records who wrote it and through which client.
 |---|---|
 | `claude` | Claude, through an MCP client or paste mode. |
 | `user` | The user, through the CLI. |
-| `system` | xoot itself, as a consequence of another write (auto-backlog moves, workflow remaps). |
+| `system` | xoot itself, as a consequence of another write (completion, reopening, workflow remaps). |
 
 | Client | Where the write came from |
 |---|---|
@@ -144,5 +172,5 @@ Every event records who wrote it and through which client.
 | `cli` | The `xoot` command. |
 | `paste` | `xoot paste apply`, confirmed by the user at the terminal. |
 
-The client name comes from what the MCP client reports at initialization. It
-is unauthenticated: it labels the session and grants nothing.
+The MCP client is mapped per call from what it reported at initialization.
+The name is unauthenticated: it labels the write and grants nothing.

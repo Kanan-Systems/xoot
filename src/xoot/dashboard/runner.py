@@ -4,7 +4,9 @@ Serving the dashboard in the foreground.
 The socket is bound here, before uvicorn starts, so a port in use fails
 fast with a clear message, and the browser can be opened once the socket
 already queues connections. Uvicorn runs with its access log off, since
-request lines would carry the token, and at warning level.
+request lines would carry the token, and at warning level. --open hands the
+browser opener a one-time launch code, never the session token: an
+opener's argv is readable by every local user.
 """
 
 import errno
@@ -17,9 +19,11 @@ import uvicorn
 
 from xoot.dashboard.app import create_app
 from xoot.dashboard.browser import open_url
+from xoot.dashboard.launch_codes import LaunchCodes
+from xoot.dashboard.ports import DEFAULT_PORT
 
 HOST = "127.0.0.1"
-DEFAULT_PORT = 7373
+__all__ = ["DEFAULT_PORT", "PortUnavailableError", "bind", "serve"]
 
 
 class PortUnavailableError(OSError):
@@ -65,6 +69,20 @@ def dashboard_url(port: int, token: str) -> str:
     return f"http://xoot.localhost:{port}/?token={token}"
 
 
+def launch_url(port: int, code: str) -> str:
+    """
+    Build the URL handed to the browser opener.
+
+    Args:
+        - port (int): the served port.
+        - code (str): a one-time launch code.
+
+    Returns:
+        - url (str): http://xoot.localhost:<port>/?launch=<code>.
+    """
+    return f"http://xoot.localhost:{port}/?launch={code}"
+
+
 def serve(db_path: Path, sock: socket.socket, open_browser: bool) -> None:
     """
     Print the URL once, optionally open it, and serve until interrupted.
@@ -79,21 +97,21 @@ def serve(db_path: Path, sock: socket.socket, open_browser: bool) -> None:
     """
     port = sock.getsockname()[1]
     token = secrets.token_urlsafe(32)
-    url = dashboard_url(port, token)
-    print(url, file=sys.stdout, flush=True)
+    codes = LaunchCodes()
+    print(dashboard_url(port, token), file=sys.stdout, flush=True)
     print(
         f"serving on {HOST}:{port}, read-only; Ctrl+C stops",
         file=sys.stderr,
         flush=True,
     )
-    if open_browser and not open_url(url):
+    if open_browser and not open_url(launch_url(port, codes.issue())):
         print(
             "warning: could not open a browser; open the URL above",
             file=sys.stderr,
             flush=True,
         )
     config = uvicorn.Config(
-        create_app(db_path, token, port),
+        create_app(db_path, token, port, launch_codes=codes),
         log_level="warning",
         access_log=False,
         lifespan="off",

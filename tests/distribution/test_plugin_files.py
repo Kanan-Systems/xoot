@@ -8,7 +8,7 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[2]
 PLUGIN = REPO / "plugin"
-SKILL = PLUGIN / "skills" / "xoot-session" / "SKILL.md"
+SKILL = PLUGIN / "skills" / "xoot-workflow" / "SKILL.md"
 
 
 def _json(path: Path) -> Any:

@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 from xoot.models.decision.decision_changes_input import DecisionChangesInput
 from xoot.models.fields import Id
-from xoot.services.paste.models.fields import KeyOrRef
+from xoot.services.paste.models.fields import DecisionKeyOrRef
 
 
 class DecisionUpdateOp(BaseModel):
@@ -18,6 +18,6 @@ class DecisionUpdateOp(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
     op: Literal["decision_update"]
-    key: KeyOrRef
+    key: DecisionKeyOrRef
     expected_version: Id | None = None
     changes: DecisionChangesInput

@@ -6,10 +6,9 @@ from xoot.models.item.item import Item
 
 
 class TreeNode(BaseModel):
-    """An item, its depth below the query roots, and whether it is unfiled."""
+    """An item and its depth below the query roots."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     item: Item
     depth: int = Field(ge=0)
-    unfiled: bool

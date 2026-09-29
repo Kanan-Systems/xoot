@@ -1,7 +1,7 @@
 """
-User-only redaction of item and decision titles and bodies,
-session titles and summaries and project names, in the row and in every
-event of the entity. On-disk bytes are covered in test_redaction_disk.
+User-only redaction of item and decision titles and bodies and project
+names, in the row and in every event of the entity. On-disk bytes are
+covered in test_redaction_disk.
 """
 
 from collections.abc import Callable
@@ -15,6 +15,7 @@ from xoot.models.decision.decision_create import DecisionCreate
 from xoot.models.decision.decision_update import DecisionUpdate
 from xoot.models.event.actor import Actor
 from xoot.models.event.actor_kind import ActorKind
+from xoot.models.event.client import Client
 from xoot.models.event.entity_type import EntityType
 from xoot.models.event.event import Event
 from xoot.models.event.event_action import EventAction
@@ -24,9 +25,6 @@ from xoot.models.item.item_create import ItemCreate
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.project.project import Project
-from xoot.models.session.client import Client
-from xoot.models.session.session_close import SessionClose
-from xoot.models.session.session_start import SessionStart
 from xoot.repositories.event import event_db
 from xoot.services import redaction_service
 from xoot.services.decision_service import (
@@ -37,8 +35,6 @@ from xoot.services.decision_service import (
 from xoot.services.item_service import create_item, get_item, update_item
 from xoot.services.project_service import get_project
 from xoot.services.redaction_service import REDACTED, redact_field
-from xoot.services.session_close_service import close_session
-from xoot.services.session_service import get_session, start_session
 from xoot.store.store import Store
 
 TARGETS = [
@@ -46,8 +42,6 @@ TARGETS = [
     ("item", "body"),
     ("decision", "title"),
     ("decision", "body"),
-    ("session", "title"),
-    ("session", "summary"),
     ("project", "name"),
 ]
 
@@ -59,24 +53,23 @@ def _events(store: Store, entity_type: EntityType, entity_id: int) -> list[Event
 
 def _rows(store: Store, project: Project, ctx: WriteContext) -> dict[str, int]:
     """One row of every redactable entity, each with every field filled."""
-    item = ItemCreate(kind=ItemKind.GOAL, title="t", body="b")
-    session = start_session(store, project.id, SessionStart(title="s"), ctx.actor)
-    close_session(store, session.session.id, SessionClose(summary="sum"), ctx.actor)
-    return {
-        "item": create_item(store, project.id, item, ctx).id,
-        "decision": create_decision(
-            store, project.id, DecisionCreate(title="d", body="b"), ctx
-        ).id,
-        "session": session.session.id,
-        "project": project.id,
-    }
+    item, _ = create_item(
+        store, project.id, ItemCreate(kind=ItemKind.GOAL, title="t", body="b"), ctx
+    )
+    decision = create_decision(
+        store,
+        project.id,
+        DecisionCreate(owner_item_id=item.id, title="d", body="b"),
+        ctx,
+    )
+    return {"item": item.id, "decision": decision.id, "project": project.id}
 
 
 def test_item_body_is_redacted_in_row_and_history(
     store: Store, project: Project, user: Actor, ctx: WriteContext
 ) -> None:
     """Row, create digest and body-update values are scrubbed; others untouched."""
-    item = create_item(
+    item, _ = create_item(
         store, project.id, ItemCreate(kind=ItemKind.GOAL, title="t", body="one"), ctx
     )
     update_item(store, item.id, 1, ItemUpdate(body="two"), ctx)
@@ -112,8 +105,14 @@ def test_decision_title_is_redacted(
     store: Store, project: Project, user: Actor, ctx: WriteContext
 ) -> None:
     """Decisions work the same; a title redaction keeps the body digest."""
+    goal, _ = create_item(
+        store, project.id, ItemCreate(kind=ItemKind.GOAL, title="g"), ctx
+    )
     decision = create_decision(
-        store, project.id, DecisionCreate(title="leak", body="b"), ctx
+        store,
+        project.id,
+        DecisionCreate(owner_item_id=goal.id, title="leak", body="b"),
+        ctx,
     )
     update_decision(store, decision.id, 1, DecisionUpdate(title="leak2"), ctx)
     redact_field(store, "decision", decision.id, "title", user)
@@ -126,23 +125,6 @@ def test_decision_title_is_redacted(
         {"title": REDACTED, "version": 1},
         {"title": REDACTED, "version": 2},
     )
-
-
-def test_session_summary_is_redacted(
-    store: Store, project: Project, user: Actor
-) -> None:
-    """The close event's summary is scrubbed; the create's NULL stays NULL."""
-    started = start_session(store, project.id, SessionStart(title="s"), user)
-    session_id = started.session.id
-    close_session(store, session_id, SessionClose(summary="private"), user)
-    result = redact_field(store, "session", session_id, "summary", user)
-    assert get_session(store, session_id).summary == REDACTED
-    created, closed, redact = _events(store, EntityType.SESSION, session_id)
-    assert created.after is not None and created.after["summary"] is None
-    assert closed.after is not None and closed.after["summary"] == REDACTED
-    assert (redact.before, redact.after) == (None, {"field": "summary"})
-    assert result.version is None
-    assert result.redacted_event_ids == (closed.id,)
 
 
 def test_project_name_is_redacted(store: Store, project: Project, user: Actor) -> None:
@@ -158,7 +140,7 @@ def test_stale_write_after_redaction_names_the_redaction(
 ) -> None:
     """The conflict's changed field and actor come from the redact event."""
     ctx = WriteContext(actor=claude)
-    item = create_item(
+    item, _ = create_item(
         store, project.id, ItemCreate(kind=ItemKind.GOAL, title="t", body="b"), ctx
     )
     redact_field(store, EntityType.ITEM, item.id, "body", user)
@@ -221,9 +203,7 @@ def test_unsupported_target_is_refused(
         redact_field(store, entity, project.id, field, user)
 
 
-@pytest.mark.parametrize(
-    "target", ["open-session-summary", "item-body", "decision-body"]
-)
+@pytest.mark.parametrize("target", ["item-body", "decision-body"])
 def test_null_or_empty_field_is_refused(
     store: Store,
     project: Project,
@@ -231,17 +211,14 @@ def test_null_or_empty_field_is_refused(
     row_counts: Callable[[], dict[str, int]],
     target: str,
 ) -> None:
-    """A NULL summary or an empty body has nothing to redact; nothing is written."""
-    if target == "open-session-summary":
-        request = SessionStart(title="s")
-        entity_id = start_session(store, project.id, request, ctx.actor).session.id
-        entity, field = "session", "summary"
-    elif target == "item-body":
-        request = ItemCreate(kind=ItemKind.GOAL, title="t")
-        entity_id = create_item(store, project.id, request, ctx).id
-        entity, field = "item", "body"
+    """An empty body has nothing to redact; nothing is written."""
+    goal, _ = create_item(
+        store, project.id, ItemCreate(kind=ItemKind.GOAL, title="t"), ctx
+    )
+    if target == "item-body":
+        entity_id, entity, field = goal.id, "item", "body"
     else:
-        request = DecisionCreate(title="d")
+        request = DecisionCreate(owner_item_id=goal.id, title="d")
         entity_id = create_decision(store, project.id, request, ctx).id
         entity, field = "decision", "body"
     before = row_counts()
@@ -268,7 +245,7 @@ def test_failure_rolls_back_everything(
     ctx: WriteContext,
 ) -> None:
     """Row, events and the redact event commit together or not at all."""
-    item = create_item(
+    item, _ = create_item(
         store, project.id, ItemCreate(kind=ItemKind.GOAL, title="t", body="b"), ctx
     )
     before = _events(store, EntityType.ITEM, item.id)

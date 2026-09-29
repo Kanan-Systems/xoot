@@ -19,7 +19,7 @@ from xoot.services.paste.models.paste_encoding_warning import PasteEncodingWarni
 from xoot.services.paste.parser import parse_paste
 from xoot.store.store import Store
 
-START = {"op": "session_start", "title": "s"}
+START = {"op": "item_create", "kind": "goal", "title": "s"}
 
 type Fenced = Callable[..., str]
 
@@ -41,16 +41,16 @@ def test_other_question_marks_do_not_warn(text: str) -> None:
 def test_every_title_and_body_is_scanned(fenced: Fenced) -> None:
     """Creates, captures, updates and decisions: each field is named once."""
     ops: list[dict[str, Any]] = [
-        {"op": "session_start", "title": "Paste LV ?a?b"},
+        {"op": "item_create", "kind": "goal", "title": "Paste LV ?a?b"},
         {"op": "item_create", "ref": "g", "kind": "goal", "title": "verificaci?n"},
-        {"op": "capture", "title": "fine", "body": "codificaci?n"},
-        {"op": "capture", "title": "a?b"},
+        {"op": "capture", "found_on": "$g", "title": "fine", "body": "codificaci?n"},
+        {"op": "capture", "found_on": "$g", "title": "a?b"},
         {"op": "item_update", "key": "$g", "changes": {"title": "x?y", "body": "y?z"}},
-        {"op": "item_update", "key": "xoot-9", "expected_version": 1,
+        {"op": "item_update", "key": "goal-9", "expected_version": 1,
          "changes": {"state": "active"}},
-        {"op": "decision_record", "ref": "d", "title": "Why?", "body": "a?b",
-         "status": "locked"},
-        {"op": "decision_update", "key": "xoot-D4", "expected_version": 2,
+        {"op": "decision_record", "ref": "d", "owner": "$g", "title": "Why?",
+         "body": "a?b", "status": "locked"},
+        {"op": "decision_update", "key": "goal-1/decision-4", "expected_version": 2,
          "changes": {"title": "ñ?ú"}},
     ]  # fmt: skip
     warnings = encoding_warnings(parse_paste(fenced(ops)))
@@ -62,13 +62,16 @@ def test_every_title_and_body_is_scanned(fenced: Fenced) -> None:
         (5, "$g", "title"),
         (5, "$g", "body"),
         (7, "$d", "body"),
-        (8, "xoot-D4", "title"),
+        (8, "goal-1/decision-4", "title"),
     ]
 
 
 def test_clean_block_has_no_warnings(fenced: Fenced) -> None:
     """Accents that survived, and ordinary question marks, raise nothing."""
-    ops = [START, {"op": "capture", "title": "Revisar codificación?"}]
+    ops = [
+        START,
+        {"op": "capture", "found_on": "goal-1", "title": "Revisar codificación?"},
+    ]
     assert not encoding_warnings(parse_paste(fenced(ops)))
 
 

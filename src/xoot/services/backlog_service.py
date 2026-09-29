@@ -1,111 +1,253 @@
 """
-Backlog reads: the three backlog scopes and the backlogs of open sessions.
+Capturing backlog items and covering them with subtasks.
 
-Every function takes a connection inside the caller's read transaction, so
-a view built from several of them sees one snapshot. Nothing here imports
-the MCP server; the MCP tools, the CLI and the dashboard share these.
+A backlog item is open work found along the way. capture puts it next to
+where it was found: on the batch of a subtask or batch, on a goal, or on the
+project beside a project-level item. backlog_cover turns one into a subtask
+and closes it: in its own batch, in a named batch of its goal, or, for a
+project-level item, in a named batch of any goal. An item can also be
+resolved without a subtask, by moving it to its done state with
+item_update. All of these settle through the completion engine: a capture
+reopens a done batch or goal, closing an item may let one complete.
 """
 
 import sqlite3
 
-from xoot.models.item.backlog_scope import BacklogScope
+from xoot.exceptions.backlog_error import BacklogError
+from xoot.models.event.write_context import WriteContext
+from xoot.models.item.completion_report import CompletionReport
 from xoot.models.item.item import Item
-from xoot.models.session.session_backlog import SessionBacklog
-from xoot.models.workflow.category import TERMINAL_CATEGORIES, Category
-from xoot.models.workflow.workflow_definition import WorkflowDefinition
-from xoot.repositories.item import item_db
-from xoot.repositories.session import session_db
-from xoot.services.id_checks import check_id
-from xoot.services.lookups import active_workflow, require_project
+from xoot.models.item.item_create import ItemCreate
+from xoot.models.item.item_draft import ItemDraft
+from xoot.models.item.item_kind import ItemKind
+from xoot.models.workflow.category import Category
+from xoot.services.id_checks import check_id, check_optional_id
+from xoot.services.item_rules import is_closed
+from xoot.services.item_service import insert_checked
+from xoot.services.item_writer import write_item
+from xoot.services.lookups import active_workflow, require_item, require_project
+from xoot.services.write_scope import WriteScope
+from xoot.store.store import Store
 
-# Open sessions are few; the cap only bounds a pathological project.
-OPEN_SESSIONS_MAX = 1000
 
-
-def backlog_items(
-    conn: sqlite3.Connection, project_id: int, scope: BacklogScope
-) -> list[Item]:
+def capture(
+    store: Store, project_id: int, found_on_id: int, draft: ItemDraft, ctx: WriteContext
+) -> tuple[Item, CompletionReport]:
     """
-    List every item of one backlog scope, by number.
-
-    A captured item sits in both the session and the unfiled scope: it is
-    backlogged in a session and has no batch.
+    Capture a backlog item next to the item it was found on.
 
     Args:
-        - conn (sqlite3.Connection): a connection inside a read transaction.
-        - project_id (int): the project id.
-        - scope (BacklogScope): session, project or unfiled.
+        - store (Store): the database.
+        - project_id (int): the project.
+        - found_on_id (int): the item it was found on (any kind).
+        - draft (ItemDraft): the title, and the body saying why.
+        - ctx (WriteContext): the actor.
 
     Returns:
-        - items (list[Item]): the matching items, uncapped.
+        - captured (tuple[Item, CompletionReport]): the new backlog item and
+          what the completion engine did.
 
     Raises:
-        - InvalidIdError: project_id is not an int id.
-        - NotFoundError: the project or its workflow is missing.
-    """
-    definition = _definition(conn, project_id)
-    return [
-        item
-        for item in item_db.list_for_project(conn, project_id)
-        if _in_scope(scope, item, _category(definition, item))
-    ]
-
-
-def open_session_backlog(conn: sqlite3.Connection, project_id: int) -> list[Item]:
-    """
-    List the items held in the backlogs of the project's open sessions.
-
-    Args:
-        - conn (sqlite3.Connection): a connection inside a read transaction.
-        - project_id (int): the project id.
-
-    Returns:
-        - items (list[Item]): by session number, then item number.
-
-    Raises:
-        - InvalidIdError: project_id is not an int id.
+        - InvalidIdError: an id is not an int id.
+        - NotFoundError: the project or the item does not exist.
+        - CrossProjectError: the item is in another project.
     """
     check_id("project_id", project_id)
-    return item_db.list_open_session_backlogged(conn, project_id)
+    check_id("found_on_id", found_on_id)
+    with store.write() as conn:
+        scope = WriteScope(conn, ctx)
+        item = capture_in(scope, project_id, found_on_id, draft)
+        return item, scope.report()
 
 
-def session_backlogs(conn: sqlite3.Connection, project_id: int) -> list[SessionBacklog]:
+def capture_in(
+    scope: WriteScope, project_id: int, found_on_id: int, draft: ItemDraft
+) -> Item:
     """
-    Group the open-session backlog items by session, one entry per open
-    session, empty backlogs included.
+    Capture a backlog item; the caller owns the transaction.
 
     Args:
-        - conn (sqlite3.Connection): a connection inside a read transaction.
-        - project_id (int): the project id.
+        - scope (WriteScope): the open write scope.
+        - project_id (int): the project.
+        - found_on_id (int): the item it was found on.
+        - draft (ItemDraft): the title and the why.
 
     Returns:
-        - backlogs (list[SessionBacklog]): open sessions, oldest first.
+        - item (Item): the new backlog item, in its kind's open state.
 
     Raises:
-        - InvalidIdError: project_id is not an int id.
+        - NotFoundError: the project or the item does not exist.
+        - CrossProjectError: the item is in another project.
     """
-    held: dict[int, list[Item]] = {}
-    for item in open_session_backlog(conn, project_id):
-        if item.backlog_session_id is not None:
-            held.setdefault(item.backlog_session_id, []).append(item)
-    return [
-        SessionBacklog(session=session, items=tuple(held.get(session.id, [])))
-        for session in session_db.list_open(conn, project_id, OPEN_SESSIONS_MAX)
-    ]
+    found_on = require_item(scope.conn, found_on_id, project_id)
+    request = ItemCreate(
+        kind=ItemKind.BACKLOG,
+        title=draft.title,
+        body=draft.body,
+        parent_id=backlog_home(found_on),
+        found_on_item_id=found_on.id,
+    )
+    return insert_checked(scope, project_id, request)
 
 
-def _definition(conn: sqlite3.Connection, project_id: int) -> WorkflowDefinition:
-    check_id("project_id", project_id)
-    return active_workflow(conn, require_project(conn, project_id)).definition
+def backlog_home(found_on: Item) -> int | None:
+    """
+    Choose where a backlog item found on an item sits.
+
+    Args:
+        - found_on (Item): the item it was found on.
+
+    Returns:
+        - parent_id (int | None): the batch of a subtask, the batch or goal
+          itself, or, for a backlog item, that item's own level (None for
+          the project).
+    """
+    if found_on.kind in (ItemKind.SUBTASK, ItemKind.BACKLOG):
+        return found_on.parent_id
+    return found_on.id
 
 
-def _category(definition: WorkflowDefinition, item: Item) -> Category | None:
-    return definition.for_kind(item.kind).category_of(item.state)
+def cover(
+    store: Store, backlog_id: int, batch_id: int | None, ctx: WriteContext
+) -> tuple[Item, Item, CompletionReport]:
+    """
+    Turn an open backlog item into a subtask and close it.
+
+    Args:
+        - store (Store): the database.
+        - backlog_id (int): the backlog item.
+        - batch_id (int | None): the batch to cover it in; required when the
+          item sits on a goal or on the project, else defaults to its own
+          batch.
+        - ctx (WriteContext): the actor.
+
+    Returns:
+        - covered (tuple[Item, Item, CompletionReport]): the new subtask, the
+          closed backlog item and what the completion engine did.
+
+    Raises:
+        - BacklogError: the item is not open backlog, or the batch is
+          missing, not a batch, or in another goal.
+        - InvalidIdError: an id is not an int id.
+        - NotFoundError: an item does not exist.
+    """
+    check_id("backlog_id", backlog_id)
+    check_optional_id("batch_id", batch_id)
+    with store.write() as conn:
+        scope = WriteScope(conn, ctx)
+        subtask, backlog = cover_in(scope, backlog_id, batch_id)
+        return subtask, backlog, scope.report()
 
 
-def _in_scope(scope: BacklogScope, item: Item, category: Category | None) -> bool:
-    if scope == "unfiled":
-        return item.unfiled and category not in TERMINAL_CATEGORIES
-    if category is not Category.BACKLOGGED:
-        return False
-    return (item.backlog_session_id is not None) == (scope == "session")
+def cover_in(
+    scope: WriteScope, backlog_id: int, batch_id: int | None
+) -> tuple[Item, Item]:
+    """
+    Cover a backlog item; the caller owns the transaction.
+
+    The subtask takes the item's title and body and records it as its
+    origin; the item records the subtask and moves to its default done
+    state.
+
+    Args:
+        - scope (WriteScope): the open write scope.
+        - backlog_id (int): the backlog item.
+        - batch_id (int | None): the batch to cover it in.
+
+    Returns:
+        - covered (tuple[Item, Item]): the new subtask and the closed item.
+
+    Raises:
+        - BacklogError: the item is not open backlog, or the batch is
+          missing, not a batch, or in another goal.
+        - NotFoundError: an item does not exist.
+    """
+    conn = scope.conn
+    backlog = open_backlog_item(scope, backlog_id)
+    batch = _cover_batch(scope, backlog, batch_id)
+    subtask = insert_checked(
+        scope,
+        backlog.project_id,
+        ItemCreate(
+            kind=ItemKind.SUBTASK,
+            title=backlog.title,
+            body=backlog.body,
+            parent_id=batch.id,
+            origin_item_id=backlog.id,
+        ),
+    )
+    definition = active_workflow(conn, require_project(conn, backlog.project_id))
+    done = definition.definition.for_kind(ItemKind.BACKLOG).default_state(Category.DONE)
+    current = require_item(conn, backlog.id)
+    closed = write_item(
+        scope, current, {"state": done, "covered_by_item_id": subtask.id}
+    )
+    return subtask, closed
+
+
+def open_backlog_item(scope: WriteScope, item_id: int) -> Item:
+    """
+    Fetch an item that must be an open backlog item.
+
+    Args:
+        - scope (WriteScope): the open write scope.
+        - item_id (int): the item.
+
+    Returns:
+        - item (Item): the backlog item.
+
+    Raises:
+        - BacklogError: the item is not a backlog item, or is done or dropped.
+        - NotFoundError: the item does not exist.
+    """
+    item = require_item(scope.conn, item_id)
+    check_open_backlog(scope.conn, item)
+    return item
+
+
+def check_open_backlog(conn: sqlite3.Connection, item: Item) -> None:
+    """
+    Refuse anything but an open backlog item.
+
+    Args:
+        - conn (sqlite3.Connection): a connection inside a transaction.
+        - item (Item): the item.
+
+    Raises:
+        - BacklogError: the item is not a backlog item, or is done or dropped.
+    """
+    if item.kind is not ItemKind.BACKLOG:
+        raise BacklogError(f"{item.key} is not a backlog item")
+    definition = active_workflow(conn, require_project(conn, item.project_id))
+    if is_closed(definition.definition, item):
+        raise BacklogError(f"{item.key} is already done or dropped")
+
+
+def _cover_batch(scope: WriteScope, backlog: Item, batch_id: int | None) -> Item:
+    """
+    The batch a cover lands in: the item's own batch unless one is named.
+
+    A goal-level item needs a named batch of that goal; a project-level
+    item needs a named batch of any goal of the project.
+    """
+    conn = scope.conn
+    parent = (
+        None if backlog.parent_id is None else require_item(conn, backlog.parent_id)
+    )
+    if batch_id is None:
+        if parent is None or parent.kind is ItemKind.GOAL:
+            where = "the project" if parent is None else f"goal {parent.key}"
+            raise BacklogError(
+                f"{backlog.key} sits on {where}; name the batch to cover it in"
+            )
+        return parent
+    batch = require_item(conn, batch_id, backlog.project_id)
+    if batch.kind is not ItemKind.BATCH:
+        raise BacklogError(f"{batch.key} is not a batch")
+    if parent is None:
+        return batch
+    goal_id = parent.id if parent.kind is ItemKind.GOAL else parent.parent_id
+    if batch.parent_id != goal_id:
+        goal = require_item(conn, goal_id or 0)
+        raise BacklogError(f"batch {batch.key} is not in goal {goal.key}")
+    return batch

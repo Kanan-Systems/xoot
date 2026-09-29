@@ -28,7 +28,6 @@ from xoot.services.project_names import (
     require_free_path,
     require_free_prefix,
 )
-from xoot.services.session_links import open_session_for
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
 
@@ -47,8 +46,7 @@ def register_project(
         - store (Store): the database.
         - registration (ProjectRegistration): validated project details; its
           paths exclude "/".
-        - actor (Actor): who registers it. No session: sessions belong to
-          projects, so none can exist yet.
+        - actor (Actor): who registers it.
 
     Returns:
         - project (Project): the new project, with its workflow active.
@@ -91,12 +89,12 @@ def add_alias(store: Store, project_id: int, alias: str, ctx: WriteContext) -> N
         - project_id (int): project id.
         - alias (str): the alias; validated as a slug that does not look
           like a record key. It may equal this project's own prefix.
-        - ctx (WriteContext): actor and optional session.
+        - ctx (WriteContext): the actor.
 
     Raises:
         - InvalidIdError: project_id is not an int id.
         - pydantic.ValidationError: the alias is not a valid slug, or looks
-          like an item, decision or session key.
+          like an item or decision key.
         - DuplicateError: the alias is taken or is another project's prefix.
         - NotFoundError: no such project.
     """
@@ -104,7 +102,6 @@ def add_alias(store: Store, project_id: int, alias: str, ctx: WriteContext) -> N
     alias = _ALIAS.validate_python(alias)
     with store.write() as conn:
         project = require_project(conn, project_id)
-        open_session_for(conn, project_id, ctx.session_id)
         require_free_alias(conn, alias, project_id)
         project_alias_db.insert(conn, alias, project_id)
         WriteScope(conn, ctx).noted(project, EventAction.ADD_ALIAS, {"alias": alias})
@@ -118,7 +115,7 @@ def remove_alias(store: Store, project_id: int, alias: str, ctx: WriteContext) -
         - store (Store): the database.
         - project_id (int): project id.
         - alias (str): the alias; validated as a slug.
-        - ctx (WriteContext): actor and optional session.
+        - ctx (WriteContext): the actor.
 
     Raises:
         - InvalidIdError: project_id is not an int id.
@@ -129,7 +126,6 @@ def remove_alias(store: Store, project_id: int, alias: str, ctx: WriteContext) -
     alias = _SLUG.validate_python(alias)
     with store.write() as conn:
         project = require_project(conn, project_id)
-        open_session_for(conn, project_id, ctx.session_id)
         if not project_alias_db.delete(conn, alias, project_id):
             raise NotFoundError("alias", alias)
         WriteScope(conn, ctx).noted(
@@ -145,7 +141,7 @@ def add_path(store: Store, project_id: int, path: str, ctx: WriteContext) -> str
         - store (Store): the database.
         - project_id (int): project id.
         - path (str): an absolute path; normalized before storing.
-        - ctx (WriteContext): actor and optional session.
+        - ctx (WriteContext): the actor.
 
     Returns:
         - path (str): the normalized path that was stored.
@@ -161,7 +157,6 @@ def add_path(store: Store, project_id: int, path: str, ctx: WriteContext) -> str
     path = _DIR.validate_python(path)
     with store.write() as conn:
         project = require_project(conn, project_id)
-        open_session_for(conn, project_id, ctx.session_id)
         require_free_path(conn, path)
         project_path_db.insert(conn, path, project_id)
         WriteScope(conn, ctx).noted(project, EventAction.ADD_PATH, {"path": path})
@@ -176,7 +171,7 @@ def remove_path(store: Store, project_id: int, path: str, ctx: WriteContext) -> 
         - store (Store): the database.
         - project_id (int): project id.
         - path (str): an absolute path; normalized before matching.
-        - ctx (WriteContext): actor and optional session.
+        - ctx (WriteContext): the actor.
 
     Returns:
         - path (str): the normalized path that was removed.
@@ -190,7 +185,6 @@ def remove_path(store: Store, project_id: int, path: str, ctx: WriteContext) -> 
     path = _DIR.validate_python(path)
     with store.write() as conn:
         project = require_project(conn, project_id)
-        open_session_for(conn, project_id, ctx.session_id)
         if not project_path_db.delete(conn, path, project_id):
             raise NotFoundError("path", path)
         WriteScope(conn, ctx).noted(

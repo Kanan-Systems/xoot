@@ -5,7 +5,8 @@ import { Graph, layout as runLayout } from '@dagrejs/dagre';
 import type { GraphEdge, GraphNode } from './tree.ts';
 
 export const NODE_WIDTH = 260;
-export const NODE_HEIGHT = 88;
+// Room for a blocked line and its hint under the title and meta.
+export const NODE_HEIGHT = 128;
 
 interface Box {
   width: number;

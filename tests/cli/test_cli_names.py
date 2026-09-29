@@ -21,11 +21,11 @@ def test_bad_prefix_error_is_in_words(xoot: Any, row_counts: Any, prefix: str) -
 def test_key_shaped_alias_error_is_in_words(xoot: Any, row_counts: Any) -> None:
     """An alias that reads as a record key is refused with the reason."""
     before = row_counts()
-    run = xoot("init", "/work/new", "--prefix", "ab", "--alias", "ab-s1")
+    run = xoot("init", "/work/new", "--prefix", "ab", "--alias", "backlog-1")
     assert (run.code, run.out) == (1, "")
     assert run.err.startswith(
         "error: ValidationError: alias: an alias must not look like an "
-        "item, decision or session key"
+        "item or decision key"
     )
     assert row_counts() == before
 

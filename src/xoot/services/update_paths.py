@@ -15,6 +15,7 @@ from typing import Any, Literal
 from xoot.exceptions.update_path_error import UpdatePathError
 from xoot.models.item.item import Item
 from xoot.models.item.item_changes_input import ItemChangesInput
+from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.workflow.category import Category
 from xoot.repositories.item import item_db
@@ -26,6 +27,7 @@ ALONE = (
     "{} must be the only field in changes; send the other changes in a "
     "separate item_update call"
 )
+BACKLOG_PARENT = "backlog items move with backlog_push or backlog_cover"
 
 
 def has_children(conn: sqlite3.Connection, item: Item) -> bool:
@@ -83,11 +85,14 @@ def choose_path(
 
     Raises:
         - UpdatePathError: a parent change, or a drop of an item with
-          children, was combined with other fields.
+          children, was combined with other fields, or a backlog item was
+          given a parent.
         - NotFoundError: the project or its workflow is missing.
     """
     children = has_children(conn, item)
     if "parent" in provided:
+        if item.kind is ItemKind.BACKLOG:
+            raise UpdatePathError(BACKLOG_PARENT)
         if provided != {"parent"}:
             raise UpdatePathError(ALONE.format("parent"))
         return "reparent", children
@@ -99,19 +104,16 @@ def choose_path(
 
 
 def item_update_from(
-    changes: ItemChangesInput,
-    session_id: Callable[[str], int],
-    decision_id: Callable[[str], int],
+    changes: ItemChangesInput, decision_id: Callable[[str], int]
 ) -> ItemUpdate:
     """
     Translate key-based changes into the service's id-based update.
 
     Each caller resolves keys its own way (the tool raises a ToolError, paste
-    also accepts refs), so the lookups are passed in.
+    also accepts refs), so the lookup is passed in.
 
     Args:
         - changes (ItemChangesInput): the changes, on the direct update path.
-        - session_id (Callable[[str], int]): session key to id.
         - decision_id (Callable[[str], int]): decision key to id.
 
     Returns:
@@ -123,9 +125,7 @@ def item_update_from(
     fields: dict[str, Any] = {}
     for name in changes.model_fields_set:
         value = getattr(changes, name)
-        if name == "backlog_session":
-            fields["backlog_session_id"] = None if value is None else session_id(value)
-        elif name == "awaiting_decision":
+        if name == "awaiting_decision":
             fields["awaiting_decision_id"] = (
                 None if value is None else decision_id(value)
             )

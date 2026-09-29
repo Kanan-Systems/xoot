@@ -2,23 +2,25 @@
 // change detected by polling invalidates all of it at once.
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 
+import { keyPath } from '../lib/keys.ts';
 import { queryKeys, POLL_MS } from '../lib/polling.ts';
 import { getJson, segment } from './client.ts';
 import type {
-  BacklogsView,
-  BriefView,
+  BacklogView,
   ChangesView,
   DecisionsView,
   DecisionView,
   ItemView,
   ProjectsOutput,
-  SessionsView,
-  SessionView,
   TreeView,
 } from './types.gen.ts';
 
 // The whole tree: the dashboard collapses done items itself.
 export const TREE_QUERY = '?depth=8&include_done=true&limit=1000';
+
+function projectPath(prefix: string): string {
+  return `/projects/${segment(prefix)}`;
+}
 
 export function useProjects(): UseQueryResult<ProjectsOutput> {
   return useQuery({
@@ -27,50 +29,19 @@ export function useProjects(): UseQueryResult<ProjectsOutput> {
   });
 }
 
-export function useBrief(prefix: string): UseQueryResult<BriefView> {
-  return useQuery({
-    queryKey: queryKeys.brief(prefix),
-    queryFn: ({ signal }) =>
-      getJson<BriefView>(`/projects/${segment(prefix)}/brief`, signal),
-  });
-}
-
 export function useTree(prefix: string): UseQueryResult<TreeView> {
   return useQuery({
     queryKey: queryKeys.tree(prefix),
     queryFn: ({ signal }) =>
-      getJson<TreeView>(`/projects/${segment(prefix)}/tree${TREE_QUERY}`, signal),
+      getJson<TreeView>(`${projectPath(prefix)}/tree${TREE_QUERY}`, signal),
   });
 }
 
-export function useSessions(prefix: string): UseQueryResult<SessionsView> {
+export function useBacklog(prefix: string): UseQueryResult<BacklogView> {
   return useQuery({
-    queryKey: queryKeys.sessions(prefix),
+    queryKey: queryKeys.backlog(prefix),
     queryFn: ({ signal }) =>
-      getJson<SessionsView>(`/projects/${segment(prefix)}/sessions`, signal),
-  });
-}
-
-export function useSession(
-  prefix: string,
-  key: string | null,
-): UseQueryResult<SessionView> {
-  return useQuery({
-    queryKey: queryKeys.session(prefix, key ?? ''),
-    queryFn: ({ signal }) =>
-      getJson<SessionView>(
-        `/projects/${segment(prefix)}/sessions/${segment(key ?? '')}`,
-        signal,
-      ),
-    enabled: key !== null,
-  });
-}
-
-export function useBacklogs(prefix: string): UseQueryResult<BacklogsView> {
-  return useQuery({
-    queryKey: queryKeys.backlogs(prefix),
-    queryFn: ({ signal }) =>
-      getJson<BacklogsView>(`/projects/${segment(prefix)}/backlogs`, signal),
+      getJson<BacklogView>(`${projectPath(prefix)}/backlog`, signal),
   });
 }
 
@@ -78,26 +49,28 @@ export function useDecisions(prefix: string): UseQueryResult<DecisionsView> {
   return useQuery({
     queryKey: queryKeys.decisions(prefix),
     queryFn: ({ signal }) =>
-      getJson<DecisionsView>(`/projects/${segment(prefix)}/decisions`, signal),
+      getJson<DecisionsView>(`${projectPath(prefix)}/decisions`, signal),
   });
 }
 
-export function useItem(key: string | null): UseQueryResult<ItemView> {
+export function useItem(prefix: string, key: string | null): UseQueryResult<ItemView> {
   return useQuery({
-    queryKey: queryKeys.item(key ?? ''),
-    queryFn: ({ signal }) => getJson<ItemView>(`/items/${segment(key ?? '')}`, signal),
+    queryKey: queryKeys.item(prefix, key ?? ''),
+    queryFn: ({ signal }) =>
+      getJson<ItemView>(`${projectPath(prefix)}/items/${keyPath(key ?? '')}`, signal),
     enabled: key !== null,
   });
 }
 
 export function useDecision(
+  prefix: string,
   key: string,
   enabled: boolean,
 ): UseQueryResult<DecisionView> {
   return useQuery({
-    queryKey: queryKeys.decision(key),
+    queryKey: queryKeys.decision(prefix, key),
     queryFn: ({ signal }) =>
-      getJson<DecisionView>(`/decisions/${segment(key)}`, signal),
+      getJson<DecisionView>(`${projectPath(prefix)}/decisions/${keyPath(key)}`, signal),
     enabled,
   });
 }
@@ -106,7 +79,7 @@ export function useChanges(prefix: string): UseQueryResult<ChangesView> {
   return useQuery({
     queryKey: queryKeys.changes(prefix),
     queryFn: ({ signal }) =>
-      getJson<ChangesView>(`/projects/${segment(prefix)}/changes`, signal),
+      getJson<ChangesView>(`${projectPath(prefix)}/changes`, signal),
     refetchInterval: POLL_MS,
     // A hidden tab keeps polling (browsers may throttle it); returning to
     // the window checks at once instead of waiting for the next tick.

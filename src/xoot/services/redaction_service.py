@@ -1,6 +1,6 @@
 """
-User-only redaction of free text: item and decision titles and bodies,
-session titles and summaries, and project names.
+User-only redaction of free text: item and decision titles and bodies, and
+project names.
 
 Redaction is the one sanctioned rewrite of history. In one transaction the
 row's field becomes "[redacted]" (items and decisions also get a version
@@ -25,32 +25,23 @@ from xoot.models.event.redaction_result import RedactionResult
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
 from xoot.models.project.project import Project
-from xoot.models.session.session import Session
 from xoot.repositories.confirm import confirm_token_db
 from xoot.repositories.decision import decision_db
 from xoot.repositories.event import event_db
 from xoot.repositories.item import item_db
 from xoot.repositories.project import project_db
-from xoot.repositories.session import session_db
 from xoot.services.id_checks import check_id
-from xoot.services.lookups import (
-    require_decision,
-    require_item,
-    require_project,
-    require_session,
-)
+from xoot.services.lookups import require_decision, require_item, require_project
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
-from xoot.utils.utils import session_key
 
-type Redactable = Item | Decision | Session | Project
+type Redactable = Item | Decision | Project
 
 REDACTED = "[redacted]"
 _TEXT = frozenset({RedactableField.TITLE, RedactableField.BODY})
 _FIELDS: dict[EntityType, frozenset[RedactableField]] = {
     EntityType.ITEM: _TEXT,
     EntityType.DECISION: _TEXT,
-    EntityType.SESSION: frozenset({RedactableField.TITLE, RedactableField.SUMMARY}),
     EntityType.PROJECT: frozenset({RedactableField.NAME}),
 }
 # A digest of a short secret can be brute-forced, so it goes with the body.
@@ -74,7 +65,7 @@ def redact_field(
 
     Args:
         - store (Store): the database.
-        - entity (EntityType | str): item, decision, session or project.
+        - entity (EntityType | str): item, decision or project.
         - entity_id (int): the row's id.
         - field (RedactableField | str): a field that entity allows.
         - actor (Actor): who redacts; must be the user.
@@ -97,7 +88,7 @@ def redact_field(
         scope = WriteScope(conn, WriteContext(actor=actor))
         row = _load(scope, entity_type, entity_id)
         if not getattr(row, target.value):
-            raise RedactionError(f"{_public_key(scope, row)} has no {target} to redact")
+            raise RedactionError(f"{_public_key(row)} has no {target} to redact")
         redacted = _store_redacted(scope, row, target)
         event_ids = _redact_events(scope, entity_type, entity_id, target)
         before, after = _redact_record(row, target)
@@ -121,7 +112,7 @@ def redaction_target(
     Check that an entity type allows a field to be redacted, before any SQL.
 
     Args:
-        - entity (EntityType | str): item, decision, session or project.
+        - entity (EntityType | str): item, decision or project.
         - field (RedactableField | str): the field to redact.
 
     Returns:
@@ -145,18 +136,13 @@ def _load(scope: WriteScope, entity_type: EntityType, entity_id: int) -> Redacta
         return require_item(scope.conn, entity_id)
     if entity_type is EntityType.DECISION:
         return require_decision(scope.conn, entity_id)
-    if entity_type is EntityType.SESSION:
-        return require_session(scope.conn, entity_id)
     return require_project(scope.conn, entity_id)
 
 
-def _public_key(scope: WriteScope, row: Redactable) -> str:
+def _public_key(row: Redactable) -> str:
     """The key a user knows the row by; the row id is internal."""
     if isinstance(row, Project):
         return row.key_prefix
-    if isinstance(row, Session):
-        prefix = require_project(scope.conn, row.project_id).key_prefix
-        return session_key(prefix, row.number)
     return row.key
 
 
@@ -166,10 +152,6 @@ def _store_redacted(
     """Overwrite the field on the row itself; versioned rows get a bump."""
     if isinstance(row, Project):
         return project_db.set_name(scope.conn, row.id, REDACTED)
-    if isinstance(row, Session):
-        session = row.model_copy(update={field.value: REDACTED})
-        session_db.update(scope.conn, session)
-        return session
     update = {
         field.value: REDACTED,
         "version": row.version + 1,

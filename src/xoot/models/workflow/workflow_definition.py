@@ -6,8 +6,10 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.workflow.category import Category
-from xoot.models.workflow.kind_workflow import KindWorkflow
+from xoot.models.workflow.kind_workflow import REQUIRED_DEFAULTS, KindWorkflow
 from xoot.models.workflow.state_spec import StateSpec
+
+BACKLOG_CATEGORIES = (Category.OPEN, Category.DONE, Category.DROPPED)
 
 
 class WorkflowDefinition(BaseModel):
@@ -30,20 +32,20 @@ class WorkflowDefinition(BaseModel):
     @classmethod
     def default(cls) -> Self:
         """
-        Build the shipped default: per kind, one state per category, named
-        after the category, with no transition restrictions.
+        Build the shipped default, with no transition restrictions: goals,
+        batches and subtasks get one state per category, backlog items open,
+        done and dropped; every state is named after its category.
 
         Returns:
             - definition (WorkflowDefinition): the default definition.
         """
-        kind_workflow = KindWorkflow(
-            states=tuple(StateSpec(name=c.value, category=c) for c in Category),
-            defaults={
-                c: c.value
-                for c in (Category.OPEN, Category.BACKLOGGED, Category.DROPPED)
-            },
+        work = _one_state_per(tuple(Category))
+        backlog = _one_state_per(BACKLOG_CATEGORIES)
+        return cls(
+            kinds={
+                kind: backlog if kind is ItemKind.BACKLOG else work for kind in ItemKind
+            }
         )
-        return cls(kinds={kind: kind_workflow for kind in ItemKind})
 
     def for_kind(self, kind: ItemKind) -> KindWorkflow:
         """
@@ -56,3 +58,11 @@ class WorkflowDefinition(BaseModel):
             - workflow (KindWorkflow): that kind's states and rules.
         """
         return self.kinds[kind]
+
+
+def _one_state_per(categories: tuple[Category, ...]) -> KindWorkflow:
+    """A kind workflow with one state per category, named after it."""
+    return KindWorkflow(
+        states=tuple(StateSpec(name=c.value, category=c) for c in categories),
+        defaults={c: c.value for c in REQUIRED_DEFAULTS},
+    )

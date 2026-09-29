@@ -16,8 +16,8 @@ from xoot.models.fields import (
 
 class ItemUpdate(BaseModel):
     """
-    Only fields the caller sets are changed. The nullable references can be
-    cleared by setting them to None; title, body and state cannot. Parent
+    Only fields the caller sets are changed. awaiting_decision_id can be
+    cleared by setting it to None; title, body and state cannot. Parent
     changes go through the subtree reparent preview/apply instead.
     """
 
@@ -26,7 +26,6 @@ class ItemUpdate(BaseModel):
     title: Title | None = None
     body: Body | None = None
     state: StateName | None = None
-    backlog_session_id: Id | None = None
     awaiting_decision_id: Id | None = None
 
     @model_validator(mode="after")

@@ -1,143 +1,145 @@
 import { describe, expect, it } from 'vitest';
 
-import { sampleTree } from '../test/fixtures.ts';
+import type { TreeEntry } from '../api/types.gen.ts';
 import {
+  B1,
+  B1_BACKLOG,
+  B2,
+  entry,
+  G1,
+  G1_BACKLOG,
+  G2,
+  item,
+  P_BACKLOG,
+  sampleTree,
+} from '../test/fixtures.ts';
+import {
+  blockedHint,
+  blockedLine,
   buildGraph,
   collapseDone,
-  countByScope,
-  focusSubtree,
-  overlay,
-  ROOT_ID,
-  UNFILED_ID,
+  countByOwner,
+  PROJECT_ID,
+  subtree,
   type GraphOptions,
 } from './tree.ts';
 
 const OPTIONS: GraphOptions = {
   showDone: false,
-  focusKey: null,
+  rootKey: null,
+  project: { name: 'Xproj', prefix: 'x' },
   decisionCounts: new Map(),
-  highlight: null,
-  unfiledOpen: true,
+  blocked: new Map([[B1, 1]]),
 };
 
-function keys(entries: readonly { item: { key: string } }[]): string[] {
-  return entries.map((entry) => entry.item.key);
+function ids(entries: readonly { id: string }[]): string[] {
+  return entries.map((node) => node.id);
 }
 
-describe('collapseDone', () => {
-  it('hides done and dropped branches and counts them per parent', () => {
-    const { visible, hiddenDone } = collapseDone(sampleTree(), false);
-    expect(keys(visible)).toEqual(['x-1', 'x-2', 'x-3', 'x-7']);
-    expect(hiddenDone.get('x-2')).toBe(1);
-    expect(hiddenDone.get(ROOT_ID)).toBe(1);
-    expect(hiddenDone.get(UNFILED_ID)).toBe(1);
-    // x-6 is hidden with its done parent and is not counted again.
-    expect(hiddenDone.get('x-5')).toBeUndefined();
-  });
-
-  it('shows everything when asked', () => {
-    const { visible, hiddenDone } = collapseDone(sampleTree(), true);
-    expect(visible).toHaveLength(8);
-    expect(hiddenDone.size).toBe(0);
-  });
-
-  it('keeps the named entry even when it is done', () => {
-    const { visible } = collapseDone(focusSubtree(sampleTree(), 'x-5'), false, 'x-5');
-    expect(keys(visible)).toEqual(['x-5', 'x-6']);
-  });
-});
-
-describe('focusSubtree', () => {
-  it('returns the root and its descendants only', () => {
-    expect(keys(focusSubtree(sampleTree(), 'x-2'))).toEqual(['x-2', 'x-3', 'x-4']);
-  });
-
-  it('is empty for an unknown key', () => {
-    expect(focusSubtree(sampleTree(), 'x-99')).toEqual([]);
-  });
-});
-
-describe('buildGraph', () => {
-  it('adds an Unfiled group node with edges to the unfiled subtasks', () => {
+describe('buildGraph: the project-root tree', () => {
+  it('hangs goals and open project backlog off the project node', () => {
     const graph = buildGraph(sampleTree(), OPTIONS);
-    const group = graph.nodes.find((node) => node.id === UNFILED_ID);
-    expect(group?.type).toBe('unfiled');
-    expect(group?.data).toMatchObject({ count: 1, hiddenDone: 1 });
-    expect(graph.edges.map((edge) => edge.id)).toEqual([
-      'x-1->x-2',
-      'x-2->x-3',
-      'unfiled->x-7',
-    ]);
-    expect(graph.hiddenTopLevel).toBe(1);
+    expect(graph.nodes[0]).toMatchObject({ id: PROJECT_ID, type: 'project' });
+    const fromProject = graph.edges.filter((edge) => edge.source === PROJECT_ID);
+    expect(fromProject.map((edge) => edge.target)).toEqual([G1, P_BACKLOG]);
   });
 
-  it('keeps the Unfiled group collapsed when closed: a count, no subtask nodes', () => {
-    const graph = buildGraph(sampleTree(), { ...OPTIONS, unfiledOpen: false });
-    const group = graph.nodes.find((node) => node.id === UNFILED_ID);
-    expect(group?.data).toMatchObject({ count: 1, hiddenDone: 1, open: false });
-    expect(graph.nodes.map((node) => node.id)).not.toContain('x-7');
-    expect(graph.edges.map((edge) => edge.id)).toEqual(['x-1->x-2', 'x-2->x-3']);
-  });
-
-  it('a goal as the root shows only that goal, without the Unfiled group', () => {
-    const graph = buildGraph(sampleTree(), { ...OPTIONS, focusKey: 'x-1' });
-    expect(graph.nodes.map((node) => node.id)).toEqual(['x-1', 'x-2', 'x-3']);
-  });
-
-  it('carries the hidden-done and decision counts on item nodes', () => {
-    const graph = buildGraph(sampleTree(), {
-      ...OPTIONS,
-      decisionCounts: new Map([['x-1', 2]]),
-    });
-    const goal = graph.nodes.find((node) => node.id === 'x-1');
-    const batch = graph.nodes.find((node) => node.id === 'x-2');
-    expect(goal?.data).toMatchObject({ decisions: 2 });
-    expect(batch?.data).toMatchObject({ hiddenDone: 1, decisions: 0 });
-  });
-
-  it('in focus mode shows only the subtree, rooted at the focus', () => {
-    const graph = buildGraph(sampleTree(), { ...OPTIONS, focusKey: 'x-2' });
-    expect(graph.nodes.map((node) => node.id)).toEqual(['x-2', 'x-3']);
-    expect(graph.edges.map((edge) => edge.id)).toEqual(['x-2->x-3']);
-    expect(graph.focusMissing).toBe(false);
-  });
-
-  it('flags a focus key that is not in the tree', () => {
-    const graph = buildGraph(sampleTree(), { ...OPTIONS, focusKey: 'x-99' });
-    expect(graph.nodes).toEqual([]);
-    expect(graph.focusMissing).toBe(true);
-  });
-});
-
-describe('overlay', () => {
-  it('does nothing without a selected session', () => {
-    expect(overlay('x-1', null)).toEqual({ highlighted: false, dimmed: false });
-  });
-
-  it('highlights linked items and dims the rest', () => {
-    const linked = new Set(['x-3']);
-    expect(overlay('x-3', linked)).toEqual({ highlighted: true, dimmed: false });
-    expect(overlay('x-1', linked)).toEqual({ highlighted: false, dimmed: true });
-  });
-
-  it('applies to every graph node, the Unfiled group dimmed too', () => {
-    const graph = buildGraph(sampleTree(), { ...OPTIONS, highlight: new Set(['x-3']) });
-    const state = Object.fromEntries(
-      graph.nodes.map((node) => [node.id, node.data.dimmed] as const),
+  it('keeps backlog items under the batch or goal they sit on', () => {
+    const graph = buildGraph(sampleTree(), OPTIONS);
+    expect(graph.edges).toContainEqual(
+      expect.objectContaining({ source: B1, target: B1_BACKLOG }),
     );
-    expect(state).toEqual({
-      'x-1': true,
-      'x-2': true,
-      'x-3': false,
-      'x-7': true,
-      unfiled: true,
+    expect(graph.edges).toContainEqual(
+      expect.objectContaining({ source: G1, target: G1_BACKLOG }),
+    );
+  });
+
+  it('counts hidden closed children per category, never as one "done"', () => {
+    const graph = buildGraph(sampleTree(), OPTIONS);
+    const batch = graph.nodes.find((node) => node.id === B1);
+    expect(batch?.data.hidden).toEqual({ done: 1, dropped: 1 });
+    const project = graph.nodes.find((node) => node.id === PROJECT_ID);
+    expect(project?.data.hidden).toEqual({ done: 2 });
+    expect(ids(graph.nodes)).not.toContain(G2);
+  });
+
+  it('shows closed items, and what sits under them, with showDone', () => {
+    const graph = buildGraph(sampleTree(), { ...OPTIONS, showDone: true });
+    expect(ids(graph.nodes)).toEqual([
+      PROJECT_ID,
+      ...sampleTree().map((e) => e.item.key),
+    ]);
+  });
+
+  it('marks what open backlog blocks, with the backlog keys', () => {
+    const graph = buildGraph(sampleTree(), OPTIONS);
+    const batch = graph.nodes.find((node) => node.id === B1);
+    expect(batch?.type === 'item' && batch.data.blocked).toEqual({
+      count: 1,
+      children: 'subtasks',
+      backlog: [B1_BACKLOG],
     });
+    const other = graph.nodes.find((node) => node.id === B2);
+    expect(other?.type === 'item' && other.data.blocked).toBeNull();
   });
 });
 
-describe('countByScope', () => {
-  it('counts decisions per scope item and skips unscoped ones', () => {
-    const counts = countByScope([{ scope: 'x-1' }, { scope: 'x-1' }, { scope: null }]);
-    expect([...counts]).toEqual([['x-1', 2]]);
+describe('buildGraph: one goal or a focus root', () => {
+  it('narrows to the goal, with no project node', () => {
+    const graph = buildGraph(sampleTree(), { ...OPTIONS, rootKey: G1 });
+    expect(ids(graph.nodes)).not.toContain(PROJECT_ID);
+    expect(ids(graph.nodes)).not.toContain(P_BACKLOG);
+    expect(ids(graph.nodes)[0]).toBe(G1);
+    expect(graph.edges.some((edge) => edge.target === G1)).toBe(false);
+  });
+
+  it('keeps a closed root visible and says when the root is gone', () => {
+    const done = buildGraph(sampleTree(), { ...OPTIONS, rootKey: G2 });
+    expect(ids(done.nodes)).toEqual([G2]);
+    expect(done.rootMissing).toBe(false);
+    const gone = buildGraph(sampleTree(), { ...OPTIONS, rootKey: 'goal-9' });
+    expect(gone.nodes).toEqual([]);
+    expect(gone.rootMissing).toBe(true);
+  });
+});
+
+describe('helpers', () => {
+  it('subtree keeps the root and its descendants', () => {
+    expect(subtree(sampleTree(), B2).map((e) => e.item.key)).toEqual([
+      B2,
+      'goal-1/batch-2/subtask-1',
+    ]);
+  });
+
+  it('collapseDone hides what sits under a hidden parent without counting it', () => {
+    const entries: TreeEntry[] = [
+      entry(item(G2, 'goal', null, 'done'), 0),
+      entry(item('goal-2/batch-1', 'batch', G2, 'dropped'), 1),
+    ];
+    const { visible, hidden } = collapseDone(entries, false);
+    expect(visible).toEqual([]);
+    expect(hidden.get(PROJECT_ID)).toEqual({ done: 1 });
+    expect(hidden.has(G2)).toBe(false);
+  });
+
+  it('words the blocked line by kind and names the backlog in the hint', () => {
+    const blocked = {
+      count: 2,
+      children: 'batches' as const,
+      backlog: ['goal-1/backlog-1'],
+    };
+    expect(blockedLine(blocked)).toBe('all batches done · 2 backlog open');
+    expect(blockedHint(G1, blocked)).toBe(
+      'Ask Claude to cover or push goal-1/backlog-1',
+    );
+    expect(blockedHint(G1, { ...blocked, backlog: [] })).toBe(
+      'Ask Claude to cover or push goal-1',
+    );
+  });
+
+  it('countByOwner counts decisions per owner key', () => {
+    expect(countByOwner([{ owner: B1 }, { owner: B1 }, { owner: null }])).toEqual(
+      new Map([[B1, 2]]),
+    );
   });
 });

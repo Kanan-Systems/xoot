@@ -13,6 +13,7 @@ from xoot.server.key_book import KeyBook
 from xoot.server.render import tree_entries
 from xoot.server.schemas.tree_output import TreeOutput
 from xoot.services.key_resolver import item_by_key
+from xoot.services.project_scope import unqualified
 from xoot.services.tree_service import tree
 from xoot.store.store import Store
 
@@ -44,7 +45,8 @@ def run_tree(args: argparse.Namespace, store: Store, console: Console) -> int:
     Print the item tree of the resolved project.
 
     Args:
-        - args (argparse.Namespace): --project, --root, --depth and --all.
+        - args (argparse.Namespace): --project, --root (qualified or not),
+          --depth and --all.
         - store (Store): the database.
         - console (Console): output; a truncated tree adds a warning.
 
@@ -54,11 +56,15 @@ def run_tree(args: argparse.Namespace, store: Store, console: Console) -> int:
     Raises:
         - ProjectResolutionError: no project matched.
         - NotFoundError: --root names no item.
-        - CrossProjectError: --root is in another project.
+        - QualifierError: --root names another project than --project.
     """
-    project, resolved_by = project_of(args, store)
+    project, resolved_by = project_of(args, store, [args.root])
     with store.read() as conn:
-        root_id = None if args.root is None else item_by_key(conn, args.root).id
+        root_id = (
+            None
+            if args.root is None
+            else item_by_key(conn, project.id, unqualified(args.root)).id
+        )
     query = TreeQuery(root_id=root_id, depth=args.depth, include_terminal=args.all)
     result = tree(store, project.id, query)
     with store.read() as conn:

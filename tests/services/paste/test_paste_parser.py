@@ -22,15 +22,14 @@ from xoot.services.paste.parser import (
     extract_block,
     parse_paste,
 )
-from xoot.services.paste.rules import BOTH_SESSIONS, NO_SESSION
 
 MARKER = "paste-secret-51c2"
-START = {"op": "session_start", "title": "s"}
-CAPTURE = {"op": "capture", "title": "c"}
+START = {"op": "item_create", "kind": "goal", "title": "g"}
+CAPTURE = {"op": "capture", "found_on": "goal-1", "title": "c", "body": "why"}
 
 
 def _json(ops: list[dict[str, Any]], **top: Any) -> str:
-    return json.dumps({"xoot": 1, "project": "xoot", **top, "ops": ops})
+    return json.dumps({"xoot": 2, "project": "xoot", **top, "ops": ops})
 
 
 def _fence(body: str, info: str = "xoot") -> str:
@@ -57,13 +56,13 @@ def test_block_inside_prose_is_found() -> None:
         f"{_fence(_json([START, CAPTURE]))}\n\nLet me know."
     )
     block = parse_paste(text)
-    assert [op.op for op in block.ops] == ["session_start", "capture"]
+    assert [op.op for op in block.ops] == ["item_create", "capture"]
 
 
 def test_crlf_line_endings_are_accepted() -> None:
     """A Windows clipboard ends lines with CRLF."""
     text = _fence(_json([START])).replace("\n", "\r\n")
-    assert parse_paste(text).ops[0].op == "session_start"
+    assert parse_paste(text).ops[0].op == "item_create"
 
 
 def test_receipt_block_alone_is_not_a_block() -> None:
@@ -75,7 +74,7 @@ def test_receipt_block_alone_is_not_a_block() -> None:
 def test_receipt_next_to_a_block_is_ignored() -> None:
     """Only the xoot block counts; a pasted-back receipt beside it does not."""
     text = f"{_fence('{}', info='xoot-receipt')}\n{_fence(_json([START]))}"
-    assert parse_paste(text).ops[0].op == "session_start"
+    assert parse_paste(text).ops[0].op == "item_create"
 
 
 def test_example_nested_in_a_longer_fence_is_content() -> None:
@@ -120,8 +119,8 @@ def test_nesting_beyond_the_depth_limit_is_refused() -> None:
     """The JSON parser's recursion limit refuses deep nesting before validation."""
     deep = "[" * 1000 + "]" * 1000
     text = _fence(
-        '{"xoot": 1, "project": "xoot", "session": "xoot-S1", "ops": '
-        f'[{{"op": "capture", "title": "t", "body": {deep}}}]}}'
+        '{"xoot": 2, "project": "xoot", "ops": '
+        f'[{{"op": "capture", "found_on": "goal-1", "title": "t", "body": {deep}}}]}}'
     )
     with pytest.raises(PasteError, match="not valid JSON \\(json_invalid\\)"):
         parse_paste(text)
@@ -156,9 +155,9 @@ def test_extra_top_level_field_is_refused() -> None:
         parse_paste(_fence(_json([START], actor="user")))
 
 
-@pytest.mark.parametrize("version", [2, 0, True, 1.0, "1"])
-def test_protocol_version_must_be_the_integer_1(version: Any) -> None:
-    """Strict: not 2, not true, not 1.0, not "1"."""
+@pytest.mark.parametrize("version", [1, 3, True, 2.0, "2"])
+def test_protocol_version_must_be_the_integer_2(version: Any) -> None:
+    """Strict: not the 0.2 protocol 1, not true, not 2.0, not "2"."""
     body = json.dumps({"xoot": version, "project": "xoot", "ops": [START]})
     with pytest.raises(PasteError, match="invalid xoot block: block: xoot"):
         parse_paste(_fence(body))
@@ -167,7 +166,7 @@ def test_protocol_version_must_be_the_integer_1(version: Any) -> None:
 @pytest.mark.parametrize("version", ["3", 3.0, True])
 def test_expected_version_is_strict(version: Any) -> None:
     """A version must be a real integer, as in the MCP tools."""
-    op = {"op": "item_update", "key": "xoot-1", "expected_version": version}
+    op = {"op": "item_update", "key": "goal-1", "expected_version": version}
     op["changes"] = {"state": "active"}
     with pytest.raises(PasteError, match=r"op 2 \(item_update\): expected_version"):
         parse_paste(_fence(_json([START, op])))
@@ -176,54 +175,82 @@ def test_expected_version_is_strict(version: Any) -> None:
 def test_title_errors_do_not_echo_the_title() -> None:
     """A too-long title is named by field and type, never quoted."""
     with pytest.raises(PasteError) as caught:
-        parse_paste(_fence(_json([START, {"op": "capture", "title": MARKER * 20}])))
+        parse_paste(_fence(_json([START, {**CAPTURE, "title": MARKER * 20}])))
     assert "op 2 (capture): title (string_too_long)" in str(caught.value)
     assert MARKER not in str(caught.value)
 
 
 def test_item_update_uses_the_mcp_changes_model() -> None:
     """changes is the item_update tool's own model, extra="forbid" included."""
-    op = {"op": "item_update", "key": "xoot-1", "expected_version": 1}
+    op = {"op": "item_update", "key": "goal-1", "expected_version": 1}
     block = parse_paste(_fence(_json([START, {**op, "changes": {"state": "done"}}])))
     assert isinstance(block.ops[1], ItemUpdateOp)
     with pytest.raises(PasteError, match=r"changes\.\* \(extra_forbidden\)"):
         parse_paste(_fence(_json([START, {**op, "changes": {MARKER: "x"}}])))
 
 
-def test_both_session_and_session_start_are_refused() -> None:
-    """A block names its session one way only."""
-    with pytest.raises(PasteError, match=f"^{BOTH_SESSIONS}$"):
-        parse_paste(_fence(_json([START], session="xoot-S1")))
+def test_a_session_field_is_refused() -> None:
+    """Blocks carry no session: the field is unknown now."""
+    with pytest.raises(PasteError, match=r"block: \* \(extra_forbidden\)"):
+        parse_paste(_fence(_json([START], session="anything")))
 
 
-def test_neither_session_nor_session_start_is_refused() -> None:
-    """Every write needs a session."""
-    with pytest.raises(PasteError, match=f"^{NO_SESSION}$"):
-        parse_paste(_fence(_json([CAPTURE])))
+@pytest.mark.parametrize(
+    ("op", "field"),
+    [
+        ({"op": "item_update", "key": MARKER, "expected_version": 1}, "key"),
+        ({"op": "capture", "found_on": "xoot-1", "title": "t"}, "found_on"),
+        ({"op": "backlog_push", "key": "goal-1/decision-1"}, "key"),
+        ({"op": "backlog_cover", "key": "backlog-1", "batch": "goal-1/"}, "batch"),
+        (
+            {"op": "decision_update", "key": "goal-1", "expected_version": 1},
+            "key",
+        ),
+    ],
+)
+def test_keys_off_the_grammar_are_refused_without_echo(
+    op: dict[str, Any], field: str
+) -> None:
+    """Every key field is checked against the grammar when the block is parsed."""
+    body = {**op, "changes": {}} if "expected_version" in op else op
+    with pytest.raises(PasteError) as caught:
+        parse_paste(_fence(_json([body])))
+    message = str(caught.value)
+    assert f"{field} (" in message
+    assert MARKER not in message and "xoot-1" not in message
 
 
-def test_session_start_not_first_is_refused() -> None:
-    """session_start may only open the block."""
-    with pytest.raises(PasteOpError, match=r"^op 2 \(session_start\): .*first op$"):
-        parse_paste(_fence(_json([CAPTURE, START], session="xoot-S1")))
+def test_keys_inside_changes_are_checked_too() -> None:
+    """The parent and awaited decision of an item_update fit the grammar."""
+    op = {
+        "op": "item_update",
+        "key": "goal-1/batch-1",
+        "expected_version": 1,
+        "changes": {"parent": MARKER},
+    }
+    with pytest.raises(PasteOpError, match=r"^op 1 \(item_update\): not an item key"):
+        parse_paste(_fence(_json([op])))
 
 
-def test_session_start_twice_is_refused() -> None:
-    """At most once, as the first op."""
-    with pytest.raises(PasteOpError, match=r"^op 3 \(session_start\)"):
-        parse_paste(_fence(_json([START, CAPTURE, START])))
-
-
-def test_session_close_not_last_is_refused() -> None:
-    """session_close may only end the block."""
-    close = {"op": "session_close", "dispositions": {}}
-    with pytest.raises(PasteOpError, match=r"^op 2 \(session_close\): .*last op$"):
-        parse_paste(_fence(_json([START, close, CAPTURE])))
+def test_qualified_keys_and_refs_are_accepted() -> None:
+    """<prefix>:<key> and $refs both parse."""
+    ops = [
+        {**START, "ref": "g"},
+        {"op": "capture", "found_on": "$g", "title": "t"},
+        {"op": "backlog_push", "key": "xoot:goal-1/backlog-1"},
+    ]
+    assert len(parse_paste(_fence(_json(ops))).ops) == 3
 
 
 def test_decision_record_cannot_start_superseded() -> None:
     """Only locked or deferred, as in the decision_record tool."""
-    op = {"op": "decision_record", "title": "d", "body": "", "status": "superseded"}
+    op = {
+        "op": "decision_record",
+        "owner": "goal-1",
+        "title": "d",
+        "body": "",
+        "status": "superseded",
+    }
     with pytest.raises(
         PasteError, match=r"op 2 \(decision_record\): status \(literal_error\)"
     ):

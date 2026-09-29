@@ -1,9 +1,10 @@
-// The LTR item tree. Nodes are not draggable or selectable; onNodeClick is
-// what gives React Flow's node wrappers pointer events (without a click
-// handler it renders them with pointer-events: none, and clicks fall through
-// to the pane). The wrappers are focusable groups (a button role would hide
-// the focus and done buttons inside them): Enter or Space on one does what a
+// The LTR tree. Nodes are not draggable or selectable; onNodeClick is what
+// gives React Flow's node wrappers pointer events (without a click handler
+// it renders them with pointer-events: none, and clicks fall through to the
+// pane). Item wrappers are focusable groups (a button role would hide the
+// focus and badge buttons inside them): Enter or Space on one does what a
 // click does. Double-click focuses a goal or batch, so it does not zoom.
+// The project node only draws and is not focusable.
 import {
   Background,
   Controls,
@@ -17,52 +18,45 @@ import { useCallback, useMemo, type KeyboardEvent } from 'react';
 import type { TreeEntry } from '../api/types.gen.ts';
 import { KIND } from '../lib/display.ts';
 import { layout } from '../lib/layout.ts';
-import { buildGraph, type Graph } from '../lib/tree.ts';
+import { blockedLine, buildGraph, type Graph } from '../lib/tree.ts';
 import { ItemNode, type ItemFlowNode } from './ItemNode.tsx';
-import { UnfiledNode, type UnfiledFlowNode } from './UnfiledNode.tsx';
+import { ProjectNode, type ProjectFlowNode } from './ProjectNode.tsx';
 import { NodeActionsContext } from './nodeActions.ts';
 
-type FlowNode = ItemFlowNode | UnfiledFlowNode;
+type FlowNode = ItemFlowNode | ProjectFlowNode;
 
-const nodeTypes: NodeTypes = { item: ItemNode, unfiled: UnfiledNode };
+const nodeTypes: NodeTypes = { item: ItemNode, project: ProjectNode };
+
+// React Flow's controls take the dashboard's theme tokens (tree.css).
+export const CONTROLS_CLASS = 'flow-controls';
 
 export interface TreeCanvasProps {
   entries: readonly TreeEntry[];
   rootKey: string | null;
+  project: { name: string; prefix: string };
   decisionCounts: ReadonlyMap<string, number>;
-  highlight: ReadonlySet<string> | null;
+  blocked: ReadonlyMap<string, number>;
   showDone: boolean;
-  unfiledOpen: boolean;
   onOpen: (key: string) => void;
   onFocus: (key: string) => void;
   onShowDone: () => void;
-  onToggleUnfiled: () => void;
 }
 
 export function TreeCanvas(props: TreeCanvasProps) {
-  const { entries, rootKey, decisionCounts, highlight, showDone, unfiledOpen } = props;
-  const { onOpen, onFocus, onShowDone, onToggleUnfiled } = props;
+  const { entries, rootKey, project, decisionCounts, blocked, showDone } = props;
+  const { onOpen, onFocus, onShowDone } = props;
   const graph = useMemo(
-    () =>
-      buildGraph(entries, {
-        showDone,
-        focusKey: rootKey,
-        decisionCounts,
-        highlight,
-        unfiledOpen,
-      }),
-    [entries, showDone, rootKey, decisionCounts, highlight, unfiledOpen],
+    () => buildGraph(entries, { showDone, rootKey, project, decisionCounts, blocked }),
+    [entries, showDone, rootKey, project, decisionCounts, blocked],
   );
   const flow = useMemo(() => toFlow(graph), [graph]);
   const activate = useCallback(
     (node: FlowNode) => {
-      if (node.type === 'unfiled') {
-        onToggleUnfiled();
-      } else {
+      if (node.type === 'item') {
         onOpen(node.id);
       }
     },
-    [onOpen, onToggleUnfiled],
+    [onOpen],
   );
   const onNodeClick: NodeMouseHandler<FlowNode> = useCallback(
     (_event, node) => {
@@ -72,7 +66,7 @@ export function TreeCanvas(props: TreeCanvasProps) {
   );
   const onNodeDoubleClick: NodeMouseHandler<FlowNode> = useCallback(
     (_event, node) => {
-      if (node.type === 'item' && node.data.item.kind !== 'subtask') {
+      if (node.type === 'item' && ['goal', 'batch'].includes(node.data.item.kind)) {
         onFocus(node.id);
       }
     },
@@ -105,7 +99,7 @@ export function TreeCanvas(props: TreeCanvasProps) {
 
   return (
     <NodeActionsContext.Provider value={actions}>
-      {graph.focusMissing && (
+      {graph.rootMissing && (
         <p className="warning" role="alert">
           The focused item is gone.
         </p>
@@ -128,7 +122,7 @@ export function TreeCanvas(props: TreeCanvasProps) {
         minZoom={0.1}
       >
         <Background />
-        <Controls showInteractive={false} />
+        <Controls className={CONTROLS_CLASS} showInteractive={false} />
       </ReactFlow>
     </NodeActionsContext.Provider>
   );
@@ -137,23 +131,20 @@ export function TreeCanvas(props: TreeCanvasProps) {
 function toFlow(graph: Graph): { nodes: FlowNode[]; edges: Edge[] } {
   const nodes = layout(graph.nodes, graph.edges).map(({ node, x, y }): FlowNode => {
     const position = { x, y };
-    if (node.type === 'unfiled') {
+    if (node.type === 'project') {
       return {
         ...node,
         position,
-        ariaLabel: `Unfiled: ${String(node.data.count)} subtasks, ${
-          node.data.open
-            ? 'shown. Press Enter to collapse'
-            : 'collapsed. Press Enter to expand'
-        }`,
-        domAttributes: { 'aria-expanded': node.data.open },
+        focusable: false,
+        ariaLabel: `Project ${node.data.name}`,
       };
     }
-    const { item } = node.data;
+    const { item, blocked } = node.data;
+    const held = blocked === null ? '' : `, ${blockedLine(blocked)}`;
     return {
       ...node,
       position,
-      ariaLabel: `${KIND[item.kind].label}: ${item.title} (${item.key}), ${item.state}. Press Enter for details`,
+      ariaLabel: `${KIND[item.kind].label}: ${item.title} (${item.key}), ${item.state}${held}. Press Enter for details`,
     };
   });
   const edges = graph.edges.map((edge) => ({ ...edge, selectable: false }));

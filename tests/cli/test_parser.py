@@ -47,7 +47,7 @@ def test_help(xoot: Any, db_path: Path, command: list[str]) -> None:
         ["tree", "--depth", "9"],
         ["tree", "--depth", "x"],
         ["workflow", "import", "f.toml", "--map", "goal-open"],
-        ["redact", "xoot-1", "state"],
+        ["redact", "xoot:goal-1", "state"],
         ["brief", "--bogus"],
     ],
     ids=lambda a: " ".join(a) or "no command",

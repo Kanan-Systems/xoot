@@ -16,17 +16,14 @@ from xoot.models.item.item_draft import ItemDraft
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.project.project import Project
-from xoot.models.session.disposition import Disposition
-from xoot.models.session.session_close import SessionClose
-from xoot.models.session.session_start import SessionStart
 from xoot.models.workflow.workflow_change import WorkflowChange
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.event import event_db
+from xoot.services.backlog_push_service import apply_push
+from xoot.services.backlog_service import capture, cover
 from xoot.services.decision_service import create_decision, update_decision
-from xoot.services.item_service import capture, create_item, update_item
+from xoot.services.item_service import create_item, update_item
 from xoot.services.project_service import add_alias, add_path
-from xoot.services.session_close_service import close_session
-from xoot.services.session_service import start_session
 from xoot.services.subtree_service import apply_drop, apply_reparent
 from xoot.services.workflow_service import set_workflow
 from xoot.services.write_scope import changed_fields
@@ -67,88 +64,83 @@ def test_project_workflow_and_item_mutations(
     add_alias(store, project.id, "xoot-alt", ctx)
     add_path(store, project.id, "/srv/xoot", ctx)
     assert fresh(project) == [("project", "add_alias"), ("project", "add_path")]
-    goal = create_item(
+    goal, _ = create_item(
         store, project.id, ItemCreate(kind=ItemKind.GOAL, title="g"), ctx
     )
     update_item(store, goal.id, 1, ItemUpdate(title="renamed"), ctx)
     assert fresh(project) == [("item", "create"), ("item", "update")]
-    task = create_item(
-        store, project.id, ItemCreate(kind=ItemKind.SUBTASK, title="t"), ctx
+    batch, _ = create_item(
+        store,
+        project.id,
+        ItemCreate(kind=ItemKind.BATCH, title="b", parent_id=goal.id),
+        ctx,
     )
-    apply_reparent(store, task.id, None, 1, ctx)
-    apply_drop(store, task.id, 1, ctx)
-    assert fresh(project) == [("item", "create"), ("item", "update")]
+    other, _ = create_item(
+        store, project.id, ItemCreate(kind=ItemKind.GOAL, title="g2"), ctx
+    )
+    apply_reparent(store, batch.id, other.id, 1, ctx)
+    apply_drop(store, batch.id, 2, ctx)
+    # The move, the drop, and the system dropping goal-2, now all dropped.
+    assert fresh(project) == [
+        ("item", "create"),
+        ("item", "create"),
+        ("item", "update"),
+        ("item", "update"),
+        ("item", "update"),
+    ]
     change = WorkflowChange(definition=extended_definition)
     set_workflow(store, project.id, change, ctx)
     assert fresh(project) == [("workflow", "create"), ("project", "update")]
 
 
-def test_session_mutations(
+def test_backlog_mutations(
     store: Store,
     project: Project,
-    user: Actor,
-    make_item: Callable[..., Item],
+    ctx: WriteContext,
+    work_tree: tuple[Item, Item, Item, Item],
     fresh: Callable[[Project], Kinds],
 ) -> None:
-    """Start, links from writes in the session, capture, and close."""
-    goal = make_item(project, ItemKind.GOAL)
+    """Capture, push (one update, the alias rides along) and cover."""
+    goal, _, first, _ = work_tree
     fresh(project)
-    focus = SessionStart(title="s", focus_item_ids=(goal.id,))
-    session = start_session(store, project.id, focus, user).session
-    assert fresh(project) == [("session", "create"), ("session", "link")]
-    batch = create_item(
-        store,
-        project.id,
-        ItemCreate(kind=ItemKind.BATCH, title="b", parent_id=goal.id),
-        WriteContext(actor=user, session_id=session.id),
-    )
-    note = capture(store, session.id, ItemDraft(title="note"), user)
-    assert fresh(project) == [("item", "create"), ("session", "link")] * 2
-    dispositions = {
-        goal.id: Disposition.CARRY_OVER,
-        batch.id: Disposition.SESSION_BACKLOG,
-        note.id: Disposition.PROJECT_BACKLOG,
-    }
-    close_session(store, session.id, SessionClose(dispositions=dispositions), user)
-    assert fresh(project) == [
-        ("session", "dispose"),
-        ("session", "dispose"),
-        ("session", "dispose"),
-        ("item", "update"),
-        ("item", "update"),
-        ("session", "close"),
-    ]
+    note, _ = capture(store, project.id, first.id, ItemDraft(title="note"), ctx)
+    assert fresh(project) == [("item", "create")]
+    apply_push(store, note.id, ctx, None)
+    assert fresh(project) == [("item", "update")]
+    cover(store, note.id, work_tree[1].id, ctx)
+    assert fresh(project) == [("item", "create"), ("item", "update")]
+    del goal
 
 
 def test_decision_mutations(
     store: Store, project: Project, ctx: WriteContext, fresh: Callable[[Project], Kinds]
 ) -> None:
     """Create, supersede (two rows) and update."""
+    goal, _ = create_item(
+        store, project.id, ItemCreate(kind=ItemKind.GOAL, title="g"), ctx
+    )
     fresh(project)
-    old = create_decision(store, project.id, DecisionCreate(title="d1"), ctx)
+    old = create_decision(
+        store, project.id, DecisionCreate(owner_item_id=goal.id, title="d1"), ctx
+    )
     assert fresh(project) == [("decision", "create")]
-    request = DecisionCreate(title="d2", supersedes_id=old.id)
+    request = DecisionCreate(owner_item_id=goal.id, title="d2", supersedes_id=old.id)
     create_decision(store, project.id, request, ctx)
     assert fresh(project) == [("decision", "create"), ("decision", "update")]
     update_decision(store, old.id, 2, DecisionUpdate(body="why"), ctx)
     assert fresh(project) == [("decision", "update")]
 
 
-def test_events_carry_actor_session_and_diff(
+def test_events_carry_actor_and_diff(
     store: Store, project: Project, make_item: Callable[..., Item], claude: Actor
 ) -> None:
-    """An update event records who, in which session, and only what changed."""
+    """An update event records who, through which client, and only what changed."""
     goal = make_item(project, ItemKind.GOAL)
-    session = start_session(store, project.id, SessionStart(title="s"), claude).session
-    ctx = WriteContext(actor=claude, session_id=session.id)
+    ctx = WriteContext(actor=claude)
     update_item(store, goal.id, 1, ItemUpdate(state="active"), ctx)
     with store.read() as conn:
         event = event_db.list_for_entity(conn, EntityType.ITEM, goal.id)[-1]
-    assert (event.actor_kind, event.client, event.session_id) == (
-        claude.kind,
-        claude.client,
-        session.id,
-    )
+    assert (event.actor_kind, event.client) == (claude.kind, claude.client)
     assert event.before == {"state": "open", "version": 1}
     assert event.after == {"state": "active", "version": 2}
 

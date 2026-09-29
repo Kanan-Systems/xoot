@@ -30,7 +30,7 @@ def test_signal_stops_the_server_cleanly(
     raw_initialize: bytes,
     signum: signal.Signals,
 ) -> None:
-    """A signal mid-session ends the process promptly, exit 0, no traceback."""
+    """A signal mid-call ends the process promptly, exit 0, no traceback."""
     with raw_server() as server:
         assert server.stdin and server.stdout and server.stderr
         # An initialize reply means the server is serving, so its signal

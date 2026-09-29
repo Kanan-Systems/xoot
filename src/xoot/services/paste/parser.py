@@ -18,14 +18,14 @@ from pydantic import BaseModel, ValidationError
 from xoot.exceptions.paste_error import PasteError
 from xoot.models.decision.decision_changes_input import DecisionChangesInput
 from xoot.models.item.item_changes_input import ItemChangesInput
+from xoot.services.paste.models.backlog_cover_op import BacklogCoverOp
+from xoot.services.paste.models.backlog_push_op import BacklogPushOp
 from xoot.services.paste.models.capture_op import CaptureOp
 from xoot.services.paste.models.decision_record_op import DecisionRecordOp
 from xoot.services.paste.models.decision_update_op import DecisionUpdateOp
 from xoot.services.paste.models.item_create_op import ItemCreateOp
 from xoot.services.paste.models.item_update_op import ItemUpdateOp
 from xoot.services.paste.models.paste_block import OP_NAMES, PasteBlock
-from xoot.services.paste.models.session_close_op import SessionCloseOp
-from xoot.services.paste.models.session_start_op import SessionStartOp
 from xoot.services.paste.rules import check_block
 
 MAX_BYTES = 256 * 1024
@@ -39,8 +39,8 @@ _UTF8_BOM = "﻿"
 # Up to three spaces of indent, then a run of backticks or tildes (CommonMark).
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 _MODELS: tuple[type[BaseModel], ...] = (
-    PasteBlock, SessionStartOp, CaptureOp, ItemCreateOp, ItemUpdateOp,
-    DecisionRecordOp, DecisionUpdateOp, SessionCloseOp, ItemChangesInput,
+    PasteBlock, ItemCreateOp, ItemUpdateOp, CaptureOp, BacklogCoverOp,
+    BacklogPushOp, DecisionRecordOp, DecisionUpdateOp, ItemChangesInput,
     DecisionChangesInput,
 )  # fmt: skip
 _FIELD_NAMES = frozenset(name for model in _MODELS for name in model.model_fields)
@@ -83,7 +83,8 @@ def parse_paste(text: str) -> PasteBlock:
 
     Raises:
         - PasteError: no block, more than one, an unclosed one, invalid JSON
-          or fields, or a broken session, ref or version rule.
+          or fields (a key off the grammar included), or a broken ref or
+          version rule.
     """
     body = extract_block(text)
     try:

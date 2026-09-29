@@ -2,40 +2,49 @@
 
 import argparse
 import os
+from collections.abc import Iterable
 
 from pydantic import validate_call
 
 from xoot.models.event.actor import Actor
 from xoot.models.event.actor_kind import ActorKind
+from xoot.models.event.client import Client
 from xoot.models.event.write_context import WriteContext
 from xoot.models.fields import Alias, ProjectDir
 from xoot.models.project.project import Project
-from xoot.models.session.client import Client
 from xoot.server.schemas.literals import ResolvedBy
 from xoot.services.project_resolver import resolve_project
+from xoot.services.project_scope import key_qualifier
 from xoot.store.store import Store
 
 USER = Actor(kind=ActorKind.USER, client=Client.CLI)
-# Every CLI write is the user's, through the cli client, outside any session.
+# Every CLI write is the user's, through the cli client.
 WRITE = WriteContext(actor=USER)
 
 
-def project_of(args: argparse.Namespace, store: Store) -> tuple[Project, ResolvedBy]:
+def project_of(
+    args: argparse.Namespace, store: Store, keys: Iterable[str | None] = ()
+) -> tuple[Project, ResolvedBy]:
     """
-    Resolve the command's project: --project, else the working directory.
+    Resolve the command's project: --project, else the keys' "<prefix>:"
+    qualifier, else the working directory.
 
     Args:
         - args (argparse.Namespace): parsed arguments with a project field.
         - store (Store): the database.
+        - keys (Iterable[str | None]): the command's key arguments.
 
     Returns:
         - resolved (tuple[Project, ResolvedBy]): the project, and "prefix",
-          "alias" or "cwd" for how it was found.
+          "alias", "qualified" or "cwd" for how it was found.
 
     Raises:
         - ProjectResolutionError: nothing matched.
+        - QualifierError: the keys name different projects, or another
+          project than --project.
     """
-    return resolve_project(store, args.project, working_directory())
+    qualifier = key_qualifier(keys)
+    return resolve_project(store, args.project, working_directory(), qualifier)
 
 
 def working_directory() -> str:

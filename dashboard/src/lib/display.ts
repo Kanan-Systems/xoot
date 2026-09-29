@@ -1,6 +1,7 @@
-// How kinds and categories look. Every category has an icon and a text label
-// as well as a colour class, so colour is never the only signal.
+// How kinds and categories look. Every kind and category has an icon and a
+// text label as well as a colour class, so colour is never the only signal.
 import type { Category, DecisionStatus, ItemKind } from '../api/types.gen.ts';
+import type { OwnerLevel } from './keys.ts';
 
 export interface Glyph {
   icon: string;
@@ -11,7 +12,10 @@ export const KIND: Record<ItemKind, Glyph> = {
   goal: { icon: '◎', label: 'Goal' },
   batch: { icon: '▤', label: 'Batch' },
   subtask: { icon: '•', label: 'Subtask' },
+  backlog: { icon: '⚑', label: 'Backlog' },
 };
+
+export const KINDS: readonly ItemKind[] = ['goal', 'batch', 'subtask', 'backlog'];
 
 export const CATEGORY: Record<Category, Glyph> = {
   open: { icon: '○', label: 'Open' },
@@ -20,13 +24,20 @@ export const CATEGORY: Record<Category, Glyph> = {
   awaiting_input: { icon: '?', label: 'Awaiting input' },
   done: { icon: '✓', label: 'Done' },
   dropped: { icon: '✕', label: 'Dropped' },
-  backlogged: { icon: '⏸', label: 'Backlogged' },
 };
+
+export const CATEGORIES = Object.keys(CATEGORY) as Category[];
 
 export const DECISION_STATUS: Record<DecisionStatus, Glyph> = {
   locked: { icon: '■', label: 'Locked' },
   deferred: { icon: '◇', label: 'Deferred' },
   superseded: { icon: '↷', label: 'Superseded' },
+};
+
+export const OWNER_LEVEL: Record<OwnerLevel, string> = {
+  goal: 'Goal',
+  batch: 'Batch',
+  subtask: 'Subtask',
 };
 
 const UNKNOWN: Glyph = { icon: '·', label: 'Unknown state' };
@@ -53,6 +64,11 @@ export function truncate(text: string, max: number = TITLE_MAX): Shortened {
     return { text, truncated: false };
   }
   return { text: `${chars.slice(0, max - 1).join('')}…`, truncated: true };
+}
+
+// A stored timestamp as "YYYY-MM-DD HH:MM" (UTC, as stored).
+export function when(value: string): string {
+  return value.slice(0, 16).replace('T', ' ');
 }
 
 // How long ago, in whole seconds, as the live indicator shows it.

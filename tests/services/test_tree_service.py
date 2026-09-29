@@ -4,26 +4,38 @@ from collections.abc import Callable
 
 import pytest
 
+from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.tree_query import TreeQuery
 from xoot.models.project.project import Project
+from xoot.services.backlog_push_service import apply_push
 from xoot.services.tree_service import tree
 from xoot.store.store import Store
 
 
 @pytest.fixture(name="items")
-def fixture_items(project: Project, make_item: Callable[..., Item]) -> dict[str, Item]:
+# Each fixture is one argument: the tree is built from all of them.
+def fixture_items(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    store: Store,
+    project: Project,
+    ctx: WriteContext,
+    make_item: Callable[..., Item],
+    capture_on: Callable[..., Item],
+    set_state: Callable[..., Item],
+) -> dict[str, Item]:
     """
-    g1 > b1 > (s1 open, s2 done);  g2 (dropped) > b2;  u1 unfiled.
+    g1 > b1 > (s1 open, s2 done);  g2 (dropped) > b2;  u1 on the project.
     """
     g1 = make_item(project, ItemKind.GOAL)
     b1 = make_item(project, ItemKind.BATCH, parent_id=g1.id)
     s1 = make_item(project, ItemKind.SUBTASK, parent_id=b1.id)
     s2 = make_item(project, ItemKind.SUBTASK, parent_id=b1.id, state="done")
-    g2 = make_item(project, ItemKind.GOAL, state="dropped")
+    g2 = make_item(project, ItemKind.GOAL)
     b2 = make_item(project, ItemKind.BATCH, parent_id=g2.id)
-    u1 = make_item(project, ItemKind.SUBTASK)
+    g2 = set_state(g2, "dropped")
+    u1 = capture_on(g1)
+    apply_push(store, u1.id, ctx, None)
     return {"g1": g1, "b1": b1, "s1": s1, "s2": s2, "g2": g2, "b2": b2, "u1": u1}
 
 
@@ -83,9 +95,10 @@ def test_root_bound(store: Store, project: Project, items: dict[str, Item]) -> N
     ]
 
 
-def test_unfiled_is_derived(
+def test_project_backlog_follows_the_goals(
     store: Store, project: Project, items: dict[str, Item]
 ) -> None:
-    """Only the parentless subtask is flagged unfiled."""
-    result = tree(store, project.id, TreeQuery())
-    assert [n.item.id for n in result.nodes if n.unfiled] == [items["u1"].id]
+    """Project-level backlog items are roots, listed after every goal."""
+    result = tree(store, project.id, TreeQuery(depth=0))
+    assert [n.item.key for n in result.nodes] == ["goal-1", "backlog-1"]
+    assert result.nodes[-1].item.id == items["u1"].id

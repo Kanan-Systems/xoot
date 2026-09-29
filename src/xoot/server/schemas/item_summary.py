@@ -8,8 +8,9 @@ from xoot.models.workflow.category import Category
 
 class ItemSummary(BaseModel):
     """
-    Enough to recognize, pick and update an item. category is the fixed
-    meaning of the project-defined state; version is what item_update needs.
+    Enough to recognize, pick and update an item. key is its nested path
+    within the project; category is the fixed meaning of the
+    project-defined state; version is what item_update needs.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -20,5 +21,4 @@ class ItemSummary(BaseModel):
     state: str
     category: Category | None
     parent: str | None
-    backlog_session: str | None
     version: int

@@ -7,17 +7,14 @@ import pytest
 
 from xoot.exceptions.state_error import StateError
 from xoot.exceptions.workflow_mapping_error import WorkflowMappingError
-from xoot.models.event.actor import Actor
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
-from xoot.models.item.item_draft import ItemDraft
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.project.project import Project
-from xoot.models.session.session import Session
 from xoot.models.workflow.workflow_change import WorkflowChange
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
-from xoot.services.item_service import capture, get_item, update_item
+from xoot.services.item_service import get_item, update_item
 from xoot.services.project_service import get_project
 from xoot.services.workflow_service import get_active_workflow, set_workflow
 from xoot.store.store import Store
@@ -37,15 +34,17 @@ def _without(kind: ItemKind, removed: str) -> WorkflowDefinition:
     return _definition(kind, states=[s for s in states if s["name"] != removed])
 
 
-def test_removing_an_in_use_state_needs_a_mapping(
+# Each fixture the test needs is one argument.
+def test_removing_an_in_use_state_needs_a_mapping(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     store: Store,
     project: Project,
-    make_item: Callable[..., Item],
+    work_tree: tuple[Item, Item, Item, Item],
+    set_state: Callable[..., Item],
     ctx: WriteContext,
     row_counts: Callable[[], dict[str, int]],
 ) -> None:
     """Without a mapping the change is refused and nothing is written."""
-    make_item(project, ItemKind.SUBTASK, state="blocked")
+    set_state(work_tree[2], "blocked")
     before = row_counts()
     change = WorkflowChange(definition=_without(ItemKind.SUBTASK, "blocked"))
     with pytest.raises(WorkflowMappingError, match="subtask:blocked"):
@@ -53,15 +52,18 @@ def test_removing_an_in_use_state_needs_a_mapping(
     assert row_counts() == before
 
 
-def test_mapping_remaps_items(
+# Each fixture the test needs is one argument.
+def test_mapping_remaps_items(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     store: Store,
     project: Project,
+    work_tree: tuple[Item, Item, Item, Item],
     make_item: Callable[..., Item],
+    set_state: Callable[..., Item],
     ctx: WriteContext,
     event_kinds: Callable[[Project], list[tuple[str, str]]],
 ) -> None:
     """Items in a removed state move to the mapped state, with events."""
-    blocked = make_item(project, ItemKind.SUBTASK, state="blocked")
+    blocked = set_state(work_tree[2], "blocked")
     goal = make_item(project, ItemKind.GOAL, state="blocked")
     seen = len(event_kinds(project))
     change = WorkflowChange(
@@ -74,7 +76,7 @@ def test_mapping_remaps_items(
     assert get_active_workflow(store, project.id) == workflow
     assert (get_item(store, blocked.id).state, get_item(store, blocked.id).version) == (
         "active",
-        2,
+        3,
     )
     assert get_item(store, goal.id) == goal
     assert event_kinds(project)[seen:] == [
@@ -97,30 +99,29 @@ def test_mapping_may_only_name_removed_states(
         set_workflow(store, project.id, change, ctx)
 
 
-def test_leaving_backlogged_category_clears_session_backlog(
+def test_backlog_kind_remaps_like_any_other(
     store: Store,
     project: Project,
-    make_session: Callable[..., Session],
-    user: Actor,
+    work_tree: tuple[Item, Item, Item, Item],
+    capture_on: Callable[..., Item],
     ctx: WriteContext,
 ) -> None:
-    """A remap out of the backlogged category clears the session backlog too."""
-    item = capture(store, make_session(project).id, ItemDraft(title="idea"), user)
-    default = WorkflowDefinition.default().for_kind(ItemKind.SUBTASK)
-    states = [
-        s.model_dump(mode="json") for s in default.states if s.name != "backlogged"
-    ]
+    """Renaming the backlog kind's open state remaps open backlog items."""
+    item = capture_on(work_tree[2])
     definition = _definition(
-        ItemKind.SUBTASK,
-        states=[*states, {"name": "icebox", "category": "backlogged"}],
-        defaults={"open": "open", "backlogged": "icebox", "dropped": "dropped"},
+        ItemKind.BACKLOG,
+        states=[
+            {"name": "todo", "category": "open"},
+            {"name": "done", "category": "done"},
+            {"name": "dropped", "category": "dropped"},
+        ],
+        defaults={"open": "todo", "done": "done", "dropped": "dropped"},
     )
     change = WorkflowChange(
-        definition=definition, mapping={ItemKind.SUBTASK: {"backlogged": "open"}}
+        definition=definition, mapping={ItemKind.BACKLOG: {"open": "todo"}}
     )
     set_workflow(store, project.id, change, ctx)
-    moved = get_item(store, item.id)
-    assert (moved.state, moved.backlog_session_id) == ("open", None)
+    assert get_item(store, item.id).state == "todo"
 
 
 def test_transitions_apply_to_user_moves(
@@ -132,10 +133,8 @@ def test_transitions_apply_to_user_moves(
     set_workflow(store, project.id, WorkflowChange(definition=definition), ctx)
     with pytest.raises(StateError, match="not allowed"):
         update_item(store, goal.id, 1, ItemUpdate(state="done"), ctx)
-    assert (
-        update_item(store, goal.id, 1, ItemUpdate(state="active"), ctx).state
-        == "active"
-    )
+    moved, _ = update_item(store, goal.id, 1, ItemUpdate(state="active"), ctx)
+    assert moved.state == "active"
 
 
 def test_identical_definition_is_a_no_op(

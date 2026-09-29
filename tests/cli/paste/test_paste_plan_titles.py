@@ -1,7 +1,7 @@
 """
-The plan names every created, updated, disposed and auto-backlogged item by
-kind and title, and every decision by title: cut at 60 characters and
-escaped, so what the user confirms is readable and cannot drive the terminal.
+The plan names every created, updated and completed item by kind and title,
+and every decision by title: cut at 60 characters and escaped, so what the
+user confirms is readable and cannot drive the terminal.
 """
 
 from collections.abc import Callable
@@ -21,42 +21,29 @@ def test_plan_names_records_by_kind_and_escaped_title(
     paste_cli: Callable[..., Any],
     reply: Callable[..., bytes],
 ) -> None:
-    """Created, updated, disposed, side-effect items and decisions all carry titles."""
-    existing = make_item(project, ItemKind.GOAL, title=f"old {ESCAPED}")
-    park = [
-        {"op": "session_start", "title": "first"},
-        {
-            "op": "item_create",
-            "ref": "p",
-            "kind": "subtask",
-            "title": f"parked {ESCAPED}",
-        },
-        {"op": "session_close", "dispositions": {"$p": "session_backlog"}},
-    ]
-    assert paste_cli("paste", "apply", "-", "--yes", stdin=reply(park)).code == 0
+    """Created, updated, completed items and decisions all carry titles."""
+    goal = make_item(project, ItemKind.GOAL, title=f"old {ESCAPED}")
+    batch = make_item(project, ItemKind.BATCH, parent_id=goal.id, title="b")
+    task = make_item(project, ItemKind.SUBTASK, parent_id=batch.id, title="t")
     ops = [
-        {"op": "session_start", "title": "second"},
         {"op": "item_create", "ref": "g", "kind": "goal", "title": LONG},
-        {"op": "item_update", "key": existing.key, "expected_version": 1,
-         "changes": {"state": "active"}},
-        {"op": "decision_record", "title": f"decide {ESCAPED}", "body": "b",
-         "status": "locked"},
-        {"op": "session_close", "dispositions": {"$g": "carry_over",
-                                                 existing.key: "dropped"}},
+        {"op": "item_update", "key": task.key, "expected_version": 1,
+         "changes": {"state": "done"}},
+        {"op": "decision_record", "owner": goal.key, "title": f"decide {ESCAPED}",
+         "body": "b", "status": "locked"},
     ]  # fmt: skip
     run = paste_cli("paste", "apply", "-", "--yes", stdin=reply(ops))
     assert run.code == 0, run.err
     shown = "\\u001b[31mred\\u202eevil"
     lines = run.err.splitlines()
-    assert f'  op 2 item_create: xoot-3 (new, $g) goal "{"L" * 60}"' in lines
-    assert f'  op 3 item_update: xoot-1 goal "old {shown}"' in lines
-    assert f'  op 4 decision_record: xoot-D1 (new) decision "decide {shown}"' in lines
-    assert f'      dispose xoot-3 goal "{"L" * 60}": carry_over' in lines
-    assert f'      dispose xoot-1 goal "old {shown}": dropped' in lines
+    assert f'  op 1 item_create: goal-2 (new, $g) goal "{"L" * 60}"' in lines
+    assert '  op 2 item_update: goal-1/batch-1/subtask-1 subtask "t"' in lines
     assert (
-        f'  xoot-2 subtask "parked {shown}": moves from the backlog of xoot-S1 '
-        "to the project backlog"
-    ) in lines
+        f'  op 3 decision_record: goal-1/decision-1 (new) decision "decide {shown}"'
+        in lines
+    )
+    assert '  completes goal-1/batch-1 batch "b"' in lines
+    assert f'  completes goal-1 goal "old {shown}"' in lines
     assert "L" * 61 not in run.err
     assert "\x1b" not in run.err and "\u202e" not in run.err
     assert "L" * 60 not in run.out and "old" not in run.out

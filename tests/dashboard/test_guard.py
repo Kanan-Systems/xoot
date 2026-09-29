@@ -7,7 +7,7 @@ import anyio
 import pytest
 from starlette.testclient import TestClient
 
-from xoot.dashboard.guard import COOKIE, guard
+from xoot.dashboard.guard import cookie_name, guard
 from xoot.dashboard.headers import CSP
 
 API = "/api/v1/projects"
@@ -43,27 +43,27 @@ def test_api_refuses_a_wrong_cookie(
         "truncated": launch.token[:-1],
         "empty": "",
     }[case]
-    anonymous.headers["cookie"] = f"{COOKIE}={cookie}"
+    anonymous.headers["cookie"] = f"{cookie_name(launch.port)}={cookie}"
     assert anonymous.get(API).status_code == 401
 
 
 def test_page_and_assets_need_no_token(anonymous: TestClient) -> None:
     """index.html and the static assets hold no data."""
     assert anonymous.get("/").status_code == 200
-    assert anonymous.get("/xoot/item/xoot-1").status_code == 200
+    assert anonymous.get("/xoot/item/goal-1").status_code == 200
     assert anonymous.get("/assets/app.js").status_code == 200
 
 
-@pytest.mark.parametrize("path", ["/", "/xoot/focus/xoot-3", API])
+@pytest.mark.parametrize("path", ["/", "/xoot/item/goal-3", API])
 def test_token_exchange_sets_the_cookie_and_drops_the_query(
     launch: Any, anonymous: TestClient, path: str
 ) -> None:
-    """A valid ?token sets xoot_token with every flag and redirects without it."""
+    """A valid ?token sets xoot_token_<port> with every flag and redirects without it."""
     response = anonymous.get(f"{path}?token={launch.token}&other=1")
     assert response.status_code == 303
     assert response.headers["location"] == path
     assert response.headers["cache-control"] == "no-store"
-    cookie = SimpleCookie(response.headers["set-cookie"])[COOKIE]
+    cookie = SimpleCookie(response.headers["set-cookie"])[cookie_name(launch.port)]
     assert cookie.value == launch.token
     assert cookie["httponly"] is True
     assert cookie["samesite"].lower() == "strict"
@@ -162,7 +162,7 @@ def _responses(launch: Any, anonymous: TestClient) -> dict[str, object]:
         "bad_token": anonymous.get("/?token=x"),
     }
     kinds["api"] = anonymous.get(API)
-    kinds["api_404"] = anonymous.get("/api/v1/items/xoot-99")
+    kinds["api_404"] = anonymous.get("/api/v1/projects/xoot/items/goal-99")
     kinds["api_400"] = anonymous.get("/api/v1/projects?x=1")
     kinds["api_403"] = anonymous.get(API, headers={"origin": "http://evil.example"})
     anonymous.cookies.clear()
@@ -210,7 +210,7 @@ def test_non_ascii_cookie_bytes_are_refused(launch: Any) -> None:
         "query_string": b"",
         "headers": [
             (b"host", f"xoot.localhost:{launch.port}".encode()),
-            (b"cookie", f"{COOKIE}=t\xf6k".encode("latin-1")),
+            (b"cookie", f"{cookie_name(launch.port)}=t\xf6k".encode("latin-1")),
         ],
     }
     anyio.run(app, scope, receive, send)

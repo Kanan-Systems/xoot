@@ -3,7 +3,7 @@ The subtree side of item_update: a resolved drop or reparent, and its output.
 
 A SubtreeChange is chosen by the tool from a read snapshot; it previews or
 applies itself, and plan_output renders the plan it returns, with every
-changed or carried item read back after an apply.
+changed item read back after an apply.
 """
 
 import sqlite3
@@ -13,10 +13,11 @@ from pydantic import BaseModel, ConfigDict
 from xoot.models.confirm.confirmation import Confirmation
 from xoot.models.event.write_context import WriteContext
 from xoot.models.fields import Id, StateName
+from xoot.models.item.completion_report import CompletionReport
 from xoot.models.item.subtree_plan import SubtreePlan
 from xoot.repositories.item import item_db
 from xoot.server.key_book import KeyBook
-from xoot.server.render import change_entry
+from xoot.server.render import change_entry, completion
 from xoot.server.schemas.affected_item_entry import AffectedItemEntry
 from xoot.server.schemas.item_update_output import ItemUpdateOutput
 from xoot.server.schemas.literals import Phase, UpdateMode
@@ -37,6 +38,7 @@ class SubtreeChange(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     mode: UpdateMode
+    project: str
     item_id: Id
     key: str
     new_parent_id: Id | None
@@ -59,7 +61,9 @@ class SubtreeChange(BaseModel):
             return preview_drop(store, self.item_id, self.state)
         return preview_reparent(store, self.item_id, self.new_parent_id)
 
-    def apply(self, store: Store, claim: Confirmation | None = None) -> SubtreePlan:
+    def apply(
+        self, store: Store, claim: Confirmation | None = None
+    ) -> tuple[SubtreePlan, CompletionReport]:
         """
         Write the change in its own transaction, consuming the token when one
         is given.
@@ -69,10 +73,13 @@ class SubtreeChange(BaseModel):
             - claim (Confirmation | None): the preview's token claim.
 
         Returns:
-            - plan (SubtreePlan): the changes written.
+            - applied (tuple[SubtreePlan, CompletionReport]): the changes
+              written and what the completion engine did.
         """
         with store.write() as conn:
-            return self.apply_in(WriteScope(conn, self.write), claim)
+            scope = WriteScope(conn, self.write)
+            plan = self.apply_in(scope, claim)
+            return plan, scope.report()
 
     def apply_in(
         self, scope: WriteScope, claim: Confirmation | None = None
@@ -100,12 +107,14 @@ class SubtreeChange(BaseModel):
         )
 
 
-def plan_output(
+# Six arguments: the change, its phase, token, plan and report, and the store.
+def plan_output(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     store: Store,
     request: SubtreeChange,
     phase: Phase,
     token: str | None,
     plan: SubtreePlan,
+    report: CompletionReport | None = None,
 ) -> ItemUpdateOutput:
     """
     Render a subtree plan as the item_update output.
@@ -116,6 +125,8 @@ def plan_output(
         - phase (Phase): preview or applied.
         - token (str | None): the confirm token of a preview.
         - plan (SubtreePlan): the planned or written changes.
+        - report (CompletionReport | None): the completion outcome of an
+          apply; None for a preview.
 
     Returns:
         - output (ItemUpdateOutput): the plan, plus the affected items once
@@ -123,29 +134,28 @@ def plan_output(
     """
     with store.read() as conn:
         book = KeyBook(conn)
-        keys = (book.item_key(item_id) for item_id in plan.carried_item_ids)
         output = SubtreeOutput(
             root=request.key,
             changes=[change_entry(book, change) for change in plan.changes],
-            carried=[key for key in keys if key is not None],
         )
         items = None if phase == "preview" else _affected(conn, book, plan)
     return ItemUpdateOutput(
+        project=request.project,
         mode=request.mode,
         phase=phase,
         confirm_token=token,
         item=None,
         items=items,
         plan=output,
+        **({} if report is None else completion(report)),
     )
 
 
 def _affected(
     conn: sqlite3.Connection, book: KeyBook, plan: SubtreePlan
 ) -> list[AffectedItemEntry]:
-    """Every changed or carried item, read back after the write."""
+    """Every changed item, read back after the write."""
     item_ids = [change.item_id for change in plan.changes]
-    item_ids.extend(plan.carried_item_ids)
     rows = (item_db.get(conn, item_id) for item_id in item_ids)
     return [
         AffectedItemEntry(

@@ -1,5 +1,6 @@
 """
-Finding the project for a working directory, an alias or a key prefix.
+Finding the project for a working directory, an alias, a key prefix or the
+prefix a call's keys are qualified with.
 
 Prefixes and aliases share one namespace, so a name resolves to at most one
 project; a name match also says whether the prefix or an alias matched. Path
@@ -14,10 +15,12 @@ from typing import Literal
 from pydantic import TypeAdapter, ValidationError
 
 from xoot.exceptions.project_resolution_error import ProjectResolutionError
+from xoot.exceptions.qualifier_error import QualifierError
 from xoot.models.fields import AbsolutePath, Slug
 from xoot.models.project.project import Project
 from xoot.repositories.project import project_alias_db, project_db, project_path_db
 from xoot.services.lookups import require_project
+from xoot.services.project_scope import CONFLICT
 from xoot.store.store import Store
 
 _SLUG = TypeAdapter(Slug)
@@ -67,30 +70,32 @@ def resolve_by_alias(store: Store, alias: str) -> Project | None:
 
 
 def resolve_project(
-    store: Store, name: str | None, cwd: str
-) -> tuple[Project, NameMatch | Literal["cwd"]]:
+    store: Store, name: str | None, cwd: str, qualifier: str | None = None
+) -> tuple[Project, NameMatch | Literal["qualified", "cwd"]]:
     """
-    Find a project by name, or else by the directory a command runs in.
+    Find a project by name, by key qualifier, or by the working directory.
 
     Args:
         - store (Store): the database.
-        - name (str | None): an alias or prefix; the directory is not
-          consulted when it is given.
+        - name (str | None): an alias or prefix; nothing else is consulted
+          when it is given.
         - cwd (str): an absolute directory.
+        - qualifier (str | None): the prefix the call's keys are qualified
+          with (see project_scope); it must agree with name.
 
     Returns:
-        - resolved (tuple[Project, str]): the project, and "prefix", "alias"
-          or "cwd" for how it was found.
+        - resolved (tuple[Project, str]): the project, and "prefix", "alias",
+          "qualified" or "cwd" for how it was found.
 
     Raises:
         - ProjectResolutionError: nothing matched; lists every known name.
+        - QualifierError: the qualifier names another project than name.
     """
     with store.read() as conn:
-        if name is not None:
-            found = by_name(conn, name)
-            if found is not None:
-                return found
-        else:
+        named = by_named_or_qualified(conn, name, qualifier)
+        if named is not None:
+            return named
+        if name is None and qualifier is None:
             try:
                 project = by_paths(conn, ancestors(_PATH.validate_python(cwd)))
             except ValidationError:
@@ -98,6 +103,35 @@ def resolve_project(
             if project is not None:
                 return project, "cwd"
         raise ProjectResolutionError(tuple(known_names(conn)))
+
+
+def by_named_or_qualified(
+    conn: sqlite3.Connection, name: str | None, qualifier: str | None
+) -> tuple[Project, NameMatch | Literal["qualified"]] | None:
+    """
+    Resolve the explicit name first, then the key qualifier.
+
+    Args:
+        - conn (sqlite3.Connection): a connection inside a transaction.
+        - name (str | None): the explicit alias or prefix.
+        - qualifier (str | None): the keys' prefix.
+
+    Returns:
+        - found (tuple[Project, str] | None): the project and "prefix",
+          "alias" or "qualified"; None when neither was given or matched.
+
+    Raises:
+        - QualifierError: the qualifier names another project than name.
+    """
+    if name is not None:
+        found = by_name(conn, name)
+        if found is not None and qualifier not in (None, found[0].key_prefix):
+            raise QualifierError(CONFLICT)
+        return found
+    if qualifier is None:
+        return None
+    project = project_db.get_by_prefix(conn, qualifier)
+    return None if project is None else (project, "qualified")
 
 
 def by_name(conn: sqlite3.Connection, name: str) -> tuple[Project, NameMatch] | None:

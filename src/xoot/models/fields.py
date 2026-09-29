@@ -25,9 +25,9 @@ TITLE_MAX = 200
 BODY_MAX = 32768
 PATH_MAX = 4096
 SQLITE_INT_MAX = 2**63 - 1
-# A prefix, a dash, an optional d or s and a number: an item, decision or
-# session key once lowercased. The schema's project_alias CHECK matches it.
-_KEY_SHAPED = re.compile(r"^[a-z][a-z0-9]*-[ds]?[0-9]+$")
+# A key segment: an item or decision kind, a dash and a number. The
+# schema's project_alias CHECK refuses the same shapes.
+_KEY_SHAPED = re.compile(r"^(goal|batch|subtask|backlog|decision)-[0-9]")
 _KEY_PREFIX = re.compile(r"^[a-z][a-z0-9]{1,31}$")
 
 
@@ -76,7 +76,7 @@ def check_key_prefix(value: str) -> str:
 
 def reject_key_shaped(value: str) -> str:
     """
-    Reject an alias that looks like an item, decision or session key.
+    Reject an alias that looks like an item or decision key.
 
     A key-shaped alias would read as a record key to anyone scanning a list
     of names, even though resolution never confuses the two.
@@ -88,13 +88,13 @@ def reject_key_shaped(value: str) -> str:
         - value (str): the same slug, unchanged.
 
     Raises:
-        - PydanticCustomError: the slug is key-shaped, e.g. "xoot-12".
+        - PydanticCustomError: the slug is key-shaped, e.g. "goal-12".
     """
-    if _KEY_SHAPED.fullmatch(value):
+    if _KEY_SHAPED.match(value):
         raise PydanticCustomError(
             "key_shaped_alias",
-            "an alias must not look like an item, decision or session key "
-            "(a prefix, a dash, then a number, such as xoot-12, xoot-d3 or ab-s1)",
+            "an alias must not look like an item or decision key (a kind, a "
+            "dash, then a number, such as goal-12, backlog-3 or decision-1)",
         )
     return value
 
@@ -208,8 +208,8 @@ Slug = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]{1,31}$")]
 # A new alias. Stored aliases stay Slug, so a row written before this rule
 # still reads back and can be removed.
 Alias = Annotated[Slug, AfterValidator(reject_key_shaped)]
-# No dash, unlike an alias: every key splits on its first dash into the
-# prefix and the rest, so "ab-12" can only ever be item 12 of project ab.
+# No dash, unlike an alias: a prefix qualifies keys as "<prefix>:<key>"
+# and stays one plain word.
 KeyPrefix = Annotated[str, AfterValidator(check_key_prefix)]
 StateName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_-]{0,31}$")]
 Sha256Hex = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]

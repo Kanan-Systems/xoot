@@ -44,7 +44,6 @@ def test_repository_exposes_no_general_update_or_delete() -> None:
         "list_after_version",
         "list_for_project",
         "latest_id",
-        "created_in_session_backlog",
     }
 
 
@@ -83,7 +82,6 @@ def test_update_without_redaction_stamp_is_refused(raw: sqlite3.Connection) -> N
         "action = 'update'",
         "actor_kind = 'system'",
         "client = 'chat'",
-        "session_id = 1",
         "created_at = '2000-01-01T00:00:00.000000Z'",
     ],
 )

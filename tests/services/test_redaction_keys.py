@@ -1,6 +1,6 @@
 """
-A refused redaction names the record by its public key (xoot-3, xoot-D1,
-xoot-S1), never by its internal row id.
+A refused redaction names the record by its public key (goal-3,
+goal-1/decision-1, the project prefix), never by its internal row id.
 """
 
 from collections.abc import Callable
@@ -13,39 +13,53 @@ from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project import Project
-from xoot.models.session.session_start import SessionStart
 from xoot.services.decision_service import create_decision
 from xoot.services.redaction_service import redact_field
-from xoot.services.session_service import start_session
 from xoot.store.store import Store
 
 
 def test_item_is_named_by_key(
-    project: Project, store: Store, ctx: WriteContext, make_item: Callable[..., Item]
+    project: Project,
+    other_project: Project,
+    store: Store,
+    ctx: WriteContext,
+    make_item: Callable[..., Item],
 ) -> None:
-    """Item 3's empty body is refused as xoot-3, not as item id 3."""
-    for _ in range(2):
-        make_item(project, ItemKind.GOAL)
+    """goal-2's empty body is refused as goal-2, not as its row id 3."""
+    make_item(project, ItemKind.GOAL)
+    make_item(other_project, ItemKind.GOAL)
     item = make_item(project, ItemKind.GOAL)
-    with pytest.raises(RedactionError, match="^xoot-3 has no body to redact$"):
+    assert item.id == 3
+    with pytest.raises(RedactionError, match="^goal-2 has no body to redact$"):
         redact_field(store, "item", item.id, "body", ctx.actor)
 
 
 def test_decision_is_named_by_key(
-    project: Project, store: Store, ctx: WriteContext
+    project: Project, store: Store, ctx: WriteContext, make_item: Callable[..., Item]
 ) -> None:
-    """An empty decision body is refused as xoot-D1."""
-    decision = create_decision(store, project.id, DecisionCreate(title="d"), ctx)
-    with pytest.raises(RedactionError, match="^xoot-D1 has no body to redact$"):
+    """An empty decision body is refused as goal-1/decision-1."""
+    goal = make_item(project, ItemKind.GOAL)
+    request = DecisionCreate(owner_item_id=goal.id, title="d")
+    decision = create_decision(store, project.id, request, ctx)
+    with pytest.raises(
+        RedactionError, match="^goal-1/decision-1 has no body to redact$"
+    ):
         redact_field(store, "decision", decision.id, "body", ctx.actor)
 
 
-def test_session_is_named_by_key(
-    project: Project, other_project: Project, store: Store, ctx: WriteContext
+@pytest.mark.parametrize(
+    ("entity", "field"), [("session", "title"), ("item", "summary"), ("item", "name")]
+)
+# Each fixture the test needs is one argument.
+def test_sessions_and_summaries_are_gone(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    project: Project,
+    store: Store,
+    ctx: WriteContext,
+    make_item: Callable[..., Item],
+    entity: str,
+    field: str,
 ) -> None:
-    """Session 1 of project xoot is xoot-S1 even when its row id is 2."""
-    start_session(store, other_project.id, SessionStart(title="s"), ctx.actor)
-    started = start_session(store, project.id, SessionStart(title="s"), ctx.actor)
-    assert started.session.id == 2
-    with pytest.raises(RedactionError, match="^xoot-S1 has no summary to redact$"):
-        redact_field(store, "session", started.session.id, "summary", ctx.actor)
+    """Only items, decisions and projects, and their text fields, redact."""
+    item = make_item(project, ItemKind.GOAL)
+    with pytest.raises(RedactionError, match="cannot redact"):
+        redact_field(store, entity, item.id, field, ctx.actor)

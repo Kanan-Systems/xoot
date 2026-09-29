@@ -11,18 +11,40 @@ from pydantic import Field
 
 from xoot.models.confirm.confirmation import TOKEN_MAX
 from xoot.models.fields import Id
+from xoot.utils.keys import KEY_MAX
 
-SessionKey = Annotated[
-    str, Field(description="Key of an open session, <prefix>-S<n>, from session_start.")
+ItemKey = Annotated[
+    str,
+    Field(
+        max_length=KEY_MAX,
+        description=(
+            "Item key: goal-<n>, goal-<n>/batch-<m>, goal-<n>/batch-<m>/subtask-<k>, "
+            "or a backlog key (backlog-<k>, goal-<n>/backlog-<k>, "
+            "goal-<n>/batch-<m>/backlog-<k>). May be qualified as <prefix>:<key>."
+        ),
+    ),
 ]
-ItemKey = Annotated[str, Field(description="Item key, <prefix>-<n>.")]
-DecisionKey = Annotated[str, Field(description="Decision key, <prefix>-D<n>.")]
+OptionalItemKey = Annotated[
+    str | None,
+    Field(max_length=KEY_MAX, description="Item key, optionally <prefix>:<key>."),
+]
+DecisionKey = Annotated[
+    str,
+    Field(
+        max_length=KEY_MAX,
+        description=(
+            "Decision key: <goal, batch or subtask key>/decision-<n>. May be "
+            "qualified as <prefix>:<key>."
+        ),
+    ),
+]
 ProjectAlias = Annotated[
     str | None,
     Field(
         description=(
-            "Project alias or key prefix. Leave it out to resolve the project "
-            "from the client's roots, then from the server's working directory."
+            "Project alias or key prefix. Leave it out to take the project from "
+            "a <prefix>:<key> key, then the client's roots, then the server's "
+            "working directory. Chat clients pass it."
         )
     ),
 ]

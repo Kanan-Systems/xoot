@@ -7,7 +7,7 @@ from xoot.models.fields import format_timestamp
 from xoot.models.project.project import Project
 
 _COLUMNS = (
-    "id, key_prefix, name, next_item_number, next_decision_number, next_seq, "
+    "id, key_prefix, name, next_goal_number, next_backlog_number, "
     "active_workflow_id, created_at"
 )
 
@@ -125,9 +125,9 @@ def set_name(conn: sqlite3.Connection, project_id: int, name: str) -> Project:
     return Project.model_validate(dict(row))
 
 
-def allocate_item_number(conn: sqlite3.Connection, project_id: int) -> int:
+def allocate_goal_number(conn: sqlite3.Connection, project_id: int) -> int:
     """
-    Take the next item number from the project counter.
+    Take the next goal number from the project counter.
 
     Must run inside the write transaction that uses the number, so the
     counter and the item commit or roll back together.
@@ -141,15 +141,15 @@ def allocate_item_number(conn: sqlite3.Connection, project_id: int) -> int:
     """
     return _allocate(
         conn,
-        "UPDATE project SET next_item_number = next_item_number + 1 "
-        "WHERE id = ? RETURNING next_item_number - 1",
+        "UPDATE project SET next_goal_number = next_goal_number + 1 "
+        "WHERE id = ? RETURNING next_goal_number - 1",
         project_id,
     )
 
 
-def allocate_decision_number(conn: sqlite3.Connection, project_id: int) -> int:
+def allocate_backlog_number(conn: sqlite3.Connection, project_id: int) -> int:
     """
-    Take the next decision number from the project counter.
+    Take the next project-backlog number from the project counter.
 
     Args:
         - conn (sqlite3.Connection): connection inside a write transaction.
@@ -160,30 +160,8 @@ def allocate_decision_number(conn: sqlite3.Connection, project_id: int) -> int:
     """
     return _allocate(
         conn,
-        "UPDATE project SET next_decision_number = next_decision_number + 1 "
-        "WHERE id = ? RETURNING next_decision_number - 1",
-        project_id,
-    )
-
-
-def allocate_seq(conn: sqlite3.Connection, project_id: int) -> int:
-    """
-    Take the next value of the project's sequence counter.
-
-    Orders session starts and closes without trusting the clock. Must run
-    inside the write transaction that stores the value.
-
-    Args:
-        - conn (sqlite3.Connection): connection inside a write transaction.
-        - project_id (int): project id.
-
-    Returns:
-        - seq (int): the allocated sequence value.
-    """
-    return _allocate(
-        conn,
-        "UPDATE project SET next_seq = next_seq + 1 "
-        "WHERE id = ? RETURNING next_seq - 1",
+        "UPDATE project SET next_backlog_number = next_backlog_number + 1 "
+        "WHERE id = ? RETURNING next_backlog_number - 1",
         project_id,
     )
 

@@ -1,4 +1,4 @@
-"""History, session and decision reads used by the views."""
+"""History and decision reads used by the views."""
 
 from collections.abc import Callable
 
@@ -6,22 +6,15 @@ import pytest
 
 from xoot.exceptions.not_found_error import NotFoundError
 from xoot.models.decision.decision_create import DecisionCreate
-from xoot.models.event.actor import Actor
 from xoot.models.event.write_context import WriteContext
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.project.project import Project
-from xoot.models.session.disposition import Disposition
-from xoot.models.session.session import Session
-from xoot.models.session.session_close import SessionClose
-from xoot.models.session.session_status import SessionStatus
-from xoot.services.decision_reads import decision_detail, scoped_decisions
+from xoot.services.decision_reads import decision_detail, owned_decisions
 from xoot.services.decision_service import create_decision
 from xoot.services.history_service import latest_event_id, recent_events
 from xoot.services.item_service import update_item
-from xoot.services.session_close_service import close_session
-from xoot.services.session_reads import item_sessions, list_sessions, session_items
 from xoot.store.store import Store
 
 
@@ -64,84 +57,38 @@ def test_latest_event_id_is_zero_without_events(store: Store) -> None:
         assert latest_event_id(conn, 999) == 0
 
 
-def test_list_sessions_puts_open_first_then_newest(
-    store: Store,
-    user: Actor,
-    project: Project,
-    make_session: Callable[..., Session],
-) -> None:
-    """Closed S1, open S2, closed S3: S2 first, then S3, then S1."""
-    first, second, third = (make_session(project) for _ in range(3))
-    for session in (first, third):
-        close_session(store, session.id, SessionClose(dispositions={}), user)
-    with store.read() as conn:
-        listed = list_sessions(conn, project.id)
-        closed = list_sessions(conn, project.id, SessionStatus.CLOSED)
-        capped = list_sessions(conn, project.id, limit=1)
-    assert [s.id for s in listed] == [second.id, third.id, first.id]
-    assert [s.id for s in closed] == [third.id, first.id]
-    assert [s.id for s in capped] == [second.id]
-
-
-def test_session_and_item_links_read_both_ways(
-    store: Store,
-    user: Actor,
-    project: Project,
-    make_item: Callable[..., Item],
-    make_session: Callable[..., Session],
-) -> None:
-    """A session lists its focus items; an item lists every linked session."""
-    goal = make_item(project, ItemKind.GOAL)
-    batch = make_item(project, ItemKind.BATCH, parent_id=goal.id)
-    first = make_session(project, goal.id, batch.id)
-    close_session(
-        store,
-        first.id,
-        SessionClose(
-            dispositions={
-                goal.id: Disposition.CARRY_OVER,
-                batch.id: Disposition.CARRY_OVER,
-            }
-        ),
-        user,
-    )
-    second = make_session(project, goal.id)
-    with store.read() as conn:
-        assert session_items(conn, first.id) == [goal.key, batch.key]
-        assert [s.id for s in item_sessions(conn, goal.id)] == [first.id, second.id]
-        assert [s.id for s in item_sessions(conn, batch.id)] == [first.id]
-
-
 def test_decision_reads(
     store: Store, ctx: WriteContext, project: Project, make_item: Callable[..., Item]
 ) -> None:
-    """The detail carries the body; scoped lists only that item's, newest first."""
+    """The detail carries the body; owned lists only that item's, newest first."""
     goal = make_item(project, ItemKind.GOAL)
     other = make_item(project, ItemKind.GOAL)
     older = create_decision(
         store,
         project.id,
-        DecisionCreate(title="a", body="body a", scope_item_id=goal.id),
+        DecisionCreate(owner_item_id=goal.id, title="a", body="body a"),
         ctx,
     )
     newer = create_decision(
-        store, project.id, DecisionCreate(title="b", scope_item_id=goal.id), ctx
+        store, project.id, DecisionCreate(owner_item_id=goal.id, title="b"), ctx
     )
     create_decision(
-        store, project.id, DecisionCreate(title="c", scope_item_id=other.id), ctx
+        store, project.id, DecisionCreate(owner_item_id=other.id, title="c"), ctx
     )
     with store.read() as conn:
-        assert decision_detail(conn, older.key).body == "body a"
-        assert [d.key for d in scoped_decisions(conn, goal, 10)] == [
+        assert decision_detail(conn, project.id, older.key).body == "body a"
+        assert [d.key for d in owned_decisions(conn, goal, 10)] == [
             newer.key,
             older.key,
         ]
-        assert [d.key for d in scoped_decisions(conn, goal, 1)] == [newer.key]
+        assert [d.key for d in owned_decisions(conn, goal, 1)] == [newer.key]
 
 
-@pytest.mark.parametrize("key", ["xoot-D99", "not a key"])
-def test_decision_detail_refuses_unknown_keys(store: Store, key: str) -> None:
+@pytest.mark.parametrize("key", ["goal-1/decision-99", "not a key"])
+def test_decision_detail_refuses_unknown_keys(
+    store: Store, project: Project, key: str
+) -> None:
     """A missing or malformed key is NotFoundError."""
     with store.read() as conn:
         with pytest.raises(NotFoundError):
-            decision_detail(conn, key)
+            decision_detail(conn, project.id, key)

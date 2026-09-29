@@ -11,47 +11,51 @@ const LONG =
 
 describe('Titled and KeyLabel', () => {
   it('puts the title first and the key after it as a secondary label', () => {
-    const { container } = render(<Titled title="Ship it" itemKey="x-1" />);
+    const { container } = render(<Titled title="Ship it" itemKey="goal-1" />);
     const [title, key] = [...container.children];
     expect(title).toHaveTextContent('Ship it');
-    expect(key).toHaveTextContent('x-1');
+    expect(key).toHaveTextContent('goal-1');
     expect(key).toHaveClass('key');
   });
 
   it('cuts a long title and keeps the full text on hover', () => {
-    render(<Titled title={LONG} itemKey="x-1" />);
+    render(<Titled title={LONG} itemKey="goal-1" />);
     expect(screen.getByTitle(LONG).textContent).toHaveLength(60);
   });
 
   it('shows a key-only reference as "title (key)", or the key when unknown', () => {
-    const titles = new Map([['x-D1', 'old rule']]);
-    const { container, rerender } = render(<KeyLabel itemKey="x-D1" titles={titles} />);
-    expect(container).toHaveTextContent(/^old rule \(x-D1\)$/);
-    expect(container.querySelector('.key')).toHaveTextContent('(x-D1)');
-    rerender(<KeyLabel itemKey="x-D9" titles={titles} />);
-    expect(container).toHaveTextContent(/^x-D9$/);
+    const titles = new Map([['goal-1/decision-1', 'old rule']]);
+    const { container, rerender } = render(
+      <KeyLabel itemKey="goal-1/decision-1" titles={titles} />,
+    );
+    expect(container).toHaveTextContent(/^old rule \(goal-1\/decision-1\)$/);
+    expect(container.querySelector('.key')).toHaveTextContent('(goal-1/decision-1)');
+    rerender(<KeyLabel itemKey="goal-9/decision-1" titles={titles} />);
+    expect(container).toHaveTextContent(/^goal-9\/decision-1$/);
   });
 });
 
-describe('a table row', () => {
+describe('a backlog row', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
     mockApi(projectRoutes());
   });
 
-  it('leads with the title; the key and holder follow as secondary text', async () => {
+  it('leads with the title; key and "found on" follow as secondary text', async () => {
     renderApp('/x/backlog');
-    const table = await screen.findByRole('table', { name: 'Project backlog' });
+    const table = await screen.findByRole('table', {
+      name: 'title of goal-1 › title of goal-1/batch-1',
+    });
     const [, row] = within(table).getAllByRole('row');
-    const link = within(row as HTMLElement).getByRole('link');
-    expect(link.firstElementChild).toHaveTextContent('title of x-10');
-    expect(link.lastElementChild).toHaveTextContent('x-10');
-    expect(link.lastElementChild).toHaveClass('key');
-    const [first] = within(table).getAllByRole('columnheader');
-    expect(first).toHaveTextContent('Title');
-    const session = await screen.findByRole('table', { name: 'open one' });
-    const holder = await within(session).findByText('(x-S2)');
-    expect(holder).toHaveClass('key');
-    expect(holder.parentElement).toHaveTextContent(/^open one \(x-S2\)$/);
+    const cells = within(row as HTMLElement).getAllByRole('cell');
+    const link = within(cells[0] as HTMLElement).getByRole('link');
+    expect(link).toHaveTextContent('title of goal-1/batch-1/backlog-1');
+    expect(cells[1]?.firstElementChild).toHaveClass('key');
+    expect(cells[1]).toHaveTextContent('goal-1/batch-1/backlog-1');
+    const found = within(cells[3] as HTMLElement).getByText('(goal-1/batch-1)');
+    expect(found).toHaveClass('key');
+    expect(cells[3]).toHaveTextContent(
+      /^title of goal-1\/batch-1 \(goal-1\/batch-1\)$/,
+    );
   });
 });

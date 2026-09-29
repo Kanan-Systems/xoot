@@ -2,9 +2,10 @@
 Planning and writing item changes.
 
 Every item mutation, whatever service drives it, goes through write_item so
-it is re-validated, version-bumped and recorded the same way. Every insert
-goes through insert_item, so single and bulk creates number and record items
-identically.
+it is re-validated, version-bumped, recorded and settled the same way.
+Every insert goes through insert_item, so single, bulk and backlog creates
+number, record and settle items identically. Settling is the completion
+engine (completion_service), run after each write in the same transaction.
 """
 
 from collections.abc import Sequence
@@ -13,17 +14,16 @@ from typing import Any
 from xoot.models.item.item import Item
 from xoot.models.item.item_change import ItemChange
 from xoot.models.item.item_create import ItemCreate
-from xoot.models.item.new_item import NewItem
 from xoot.models.project.project import Project
-from xoot.repositories.item import item_db
-from xoot.repositories.project import project_db
+from xoot.services.completion_service import settle
+from xoot.services.item_store import insert_row, merged, store_changes
 from xoot.services.lookups import require_item
 from xoot.services.write_scope import WriteScope, changed_fields
 
 
 def insert_item(scope: WriteScope, project: Project, request: ItemCreate) -> Item:
     """
-    Allocate the next number and store an item with its create event.
+    Store a new item, then complete or reopen what sits above it.
 
     The caller has already validated the request, including its state.
 
@@ -35,24 +35,8 @@ def insert_item(scope: WriteScope, project: Project, request: ItemCreate) -> Ite
     Returns:
         - item (Item): the stored item.
     """
-    number = project_db.allocate_item_number(scope.conn, project.id)
-    item = item_db.insert(
-        scope.conn,
-        NewItem(
-            project_id=project.id,
-            number=number,
-            key=f"{project.key_prefix}-{number}",
-            kind=request.kind,
-            parent_id=request.parent_id,
-            title=request.title,
-            body=request.body,
-            state=request.state,
-            backlog_session_id=request.backlog_session_id,
-            awaiting_decision_id=request.awaiting_decision_id,
-            created_at=scope.now,
-        ),
-    )
-    scope.created(item)
+    item = insert_row(scope, project, request)
+    settle(scope, item)
     return item
 
 
@@ -68,7 +52,7 @@ def plan_change(item: Item, fields: dict[str, Any]) -> ItemChange | None:
         - change (ItemChange | None): the effective change, or None if the
           values are already in place.
     """
-    before, after = changed_fields(item, _merged(item, fields))
+    before, after = changed_fields(item, merged(item, fields))
     if not after:
         return None
     return ItemChange(item_id=item.id, key=item.key, before=before, after=after)
@@ -76,7 +60,7 @@ def plan_change(item: Item, fields: dict[str, Any]) -> ItemChange | None:
 
 def write_item(scope: WriteScope, item: Item, fields: dict[str, Any]) -> Item:
     """
-    Apply field changes to one item: validate, bump version, store, record.
+    Apply field changes to one item, then settle what sits above it.
 
     Args:
         - scope (WriteScope): the current write scope.
@@ -90,20 +74,15 @@ def write_item(scope: WriteScope, item: Item, fields: dict[str, Any]) -> Item:
         - pydantic.ValidationError: a value breaks the item model.
         - StaleWriteError: the row changed inside the transaction.
     """
-    candidate = _merged(item, fields)
-    if candidate == item:
-        return item
-    updated = candidate.model_copy(
-        update={"version": item.version + 1, "updated_at": scope.now}
-    )
-    item_db.update(scope.conn, updated, item.version)
-    scope.updated(item, updated)
+    updated = store_changes(scope, item, fields)
+    if updated is not item:
+        settle(scope, updated, item)
     return updated
 
 
 def apply_changes(scope: WriteScope, changes: Sequence[ItemChange]) -> list[Item]:
     """
-    Write planned changes, re-reading each item first.
+    Write planned changes in order, re-reading each item first.
 
     Args:
         - scope (WriteScope): the current write scope.
@@ -116,7 +95,3 @@ def apply_changes(scope: WriteScope, changes: Sequence[ItemChange]) -> list[Item
         write_item(scope, require_item(scope.conn, change.item_id), change.after)
         for change in changes
     ]
-
-
-def _merged(item: Item, fields: dict[str, Any]) -> Item:
-    return Item.model_validate({**item.model_dump(), **fields})

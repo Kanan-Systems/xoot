@@ -12,12 +12,10 @@ from xoot.exceptions.not_found_error import NotFoundError
 from xoot.models.decision.decision import Decision
 from xoot.models.item.item import Item
 from xoot.models.project.project import Project
-from xoot.models.session.session import Session
 from xoot.models.workflow.workflow import Workflow
 from xoot.repositories.decision import decision_db
 from xoot.repositories.item import item_db
 from xoot.repositories.project import project_db
-from xoot.repositories.session import session_db
 from xoot.repositories.workflow import workflow_db
 
 
@@ -64,31 +62,6 @@ def require_item(
         raise NotFoundError("item", item_id)
     _same_project("item", item.key, item.project_id, project_id)
     return item
-
-
-def require_session(
-    conn: sqlite3.Connection, session_id: int, project_id: int | None = None
-) -> Session:
-    """
-    Fetch a session or raise, optionally requiring a project.
-
-    Args:
-        - conn (sqlite3.Connection): open connection.
-        - session_id (int): session id.
-        - project_id (int | None): the project the session must belong to.
-
-    Returns:
-        - session (Session): the session.
-
-    Raises:
-        - NotFoundError: no such session.
-        - CrossProjectError: the session is in another project.
-    """
-    session = session_db.get(conn, session_id)
-    if session is None:
-        raise NotFoundError("session", session_id)
-    _same_project("session", session_id, session.project_id, project_id)
-    return session
 
 
 def require_decision(

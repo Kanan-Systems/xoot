@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { item } from '../test/fixtures.ts';
+import { B1, B1_BACKLOG, G1, item } from '../test/fixtures.ts';
 import { ItemNode, type ItemFlowNode } from './ItemNode.tsx';
 import { NodeActionsContext } from './nodeActions.ts';
 
@@ -44,12 +44,12 @@ function renderNode(data: ItemFlowNode['data'], focus = vi.fn(), showDone = vi.f
   return { focus, showDone, outer };
 }
 
-const BASE = { hiddenDone: 0, decisions: 0, highlighted: false, dimmed: false };
+const BASE = { hidden: {}, decisions: 0, blocked: null };
 
 describe('ItemNode', () => {
   it('shows the key, kind icon, title and state with its category icon', () => {
-    renderNode({ ...BASE, item: item('x-1', 'goal', null, 'active', 'Ship it') });
-    expect(screen.getByText('x-1')).toBeInTheDocument();
+    renderNode({ ...BASE, item: item(G1, 'goal', null, 'active', 'Ship it') });
+    expect(screen.getByText(G1)).toBeInTheDocument();
     expect(screen.getByTitle('Goal')).toHaveTextContent('◎');
     expect(screen.getByText('Ship it')).not.toHaveAttribute('title');
     const state = screen.getByText('active', { exact: false });
@@ -58,66 +58,90 @@ describe('ItemNode', () => {
   });
 
   it('truncates a long title and keeps the full text on hover', () => {
-    renderNode({ ...BASE, item: item('x-2', 'batch', 'x-1', 'open', LONG) });
+    renderNode({ ...BASE, item: item(B1, 'batch', G1, 'open', LONG) });
     const title = screen.getByTitle(LONG);
     expect(title.textContent).toHaveLength(60);
     expect(title.textContent.endsWith('…')).toBe(true);
   });
 
-  it('shows the decision badge and the hidden-done badge only when non-zero', () => {
-    renderNode({
-      ...BASE,
-      decisions: 3,
-      hiddenDone: 2,
-      item: item('x-1', 'goal', null),
-    });
-    expect(screen.getByTitle('3 decisions')).toHaveTextContent('◆ 3');
-    expect(
-      screen.getByRole('button', { name: 'Show 2 hidden done or dropped items' }),
-    ).toHaveTextContent('2 done');
-  });
-
   it('leads with "kind · title"; the key is secondary, after it', () => {
-    renderNode({ ...BASE, item: item('x-2', 'batch', 'x-1', 'open', 'B4 dashboard') });
+    renderNode({ ...BASE, item: item(B1, 'batch', G1, 'open', 'B4 dashboard') });
     const primary = document.querySelector('.node-title');
-    expect(primary).toHaveTextContent(/^▤ batch · B4 dashboard$/);
-    const key = screen.getByText('x-2');
+    expect(primary).toHaveTextContent(/^▤ Batch · B4 dashboard$/);
+    const key = screen.getByText(B1);
     expect(key).toHaveClass('key');
     expect(primary?.compareDocumentPosition(key)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
   });
 
-  it('shows the kind as a word as well as an icon', () => {
-    renderNode({ ...BASE, item: item('x-2', 'batch', 'x-1') });
-    expect(screen.getByText('batch')).toHaveClass('node-kind-label');
+  it('draws a backlog item distinctly: its own icon, word and class', () => {
+    renderNode({ ...BASE, item: item(B1_BACKLOG, 'backlog', B1) });
+    expect(document.querySelector('.node')).toHaveClass('node-backlog');
+    expect(screen.getByTitle('Backlog')).toHaveTextContent('⚑');
+    expect(screen.getByText('Backlog')).toHaveClass('node-kind-label');
+    expect(screen.queryByRole('button', { name: /Focus on/ })).toBeNull();
+  });
+
+  it('says what blocks a batch and hints what to ask, without a button', () => {
+    renderNode({
+      ...BASE,
+      item: item(B1, 'batch', G1),
+      blocked: { count: 1, children: 'subtasks', backlog: [B1_BACKLOG] },
+    });
+    expect(document.querySelector('.node')).toHaveClass('node-blocked');
+    expect(
+      screen.getByText('all subtasks done · 1 backlog open', { exact: false }),
+    ).toBeInTheDocument();
+    const hint = screen.getByText(`Ask Claude to cover or push ${B1_BACKLOG}`);
+    expect(hint.tagName).not.toBe('BUTTON');
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('badges hidden children by category, each with its own label', () => {
+    renderNode({
+      ...BASE,
+      decisions: 3,
+      hidden: { done: 2, dropped: 1 },
+      item: item(B1, 'batch', G1),
+    });
+    expect(screen.getByTitle('3 decisions')).toHaveTextContent('◆ 3');
+    expect(
+      screen.getByRole('button', { name: 'Show 2 hidden done items' }),
+    ).toHaveTextContent('✓ 2 done');
+    expect(
+      screen.getByRole('button', { name: 'Show 1 hidden dropped items' }),
+    ).toHaveTextContent('✕ 1 dropped');
+  });
+
+  it('never labels dropped items as done', () => {
+    renderNode({ ...BASE, hidden: { dropped: 2 }, item: item(B1, 'batch', G1) });
+    expect(screen.queryByText(/done/)).toBeNull();
+    expect(
+      screen.getByRole('button', { name: /2 hidden dropped/ }),
+    ).toBeInTheDocument();
   });
 
   it('has a focus button on goals and batches only; its click stays inside', () => {
-    const { focus, outer } = renderNode({ ...BASE, item: item('x-1', 'goal', null) });
-    fireEvent.click(screen.getByRole('button', { name: 'Focus on x-1' }));
-    expect(focus).toHaveBeenCalledWith('x-1');
+    const { focus, outer } = renderNode({ ...BASE, item: item(G1, 'goal', null) });
+    fireEvent.click(screen.getByRole('button', { name: `Focus on ${G1}` }));
+    expect(focus).toHaveBeenCalledWith(G1);
     expect(outer).not.toHaveBeenCalled();
   });
 
   it('has no focus button on a subtask', () => {
-    renderNode({ ...BASE, item: item('x-3', 'subtask', 'x-2') });
+    renderNode({ ...BASE, item: item('goal-1/batch-1/subtask-1', 'subtask', B1) });
     expect(screen.queryByRole('button', { name: /Focus on/ })).toBeNull();
   });
 
-  it('the hidden-done badge shows done items without opening the node', () => {
+  it('a hidden badge shows closed items without opening the node', () => {
     const { showDone, outer } = renderNode({
       ...BASE,
-      hiddenDone: 1,
-      item: item('x-1', 'goal', null),
+      hidden: { done: 1 },
+      item: item(G1, 'goal', null),
     });
     fireEvent.click(screen.getByRole('button', { name: /Show 1 hidden/ }));
     expect(showDone).toHaveBeenCalledTimes(1);
     expect(outer).not.toHaveBeenCalled();
-  });
-
-  it('marks overlay state with classes', () => {
-    renderNode({ ...BASE, dimmed: true, item: item('x-1', 'goal', null) });
-    expect(document.querySelector('.node')).toHaveClass('node-dimmed');
   });
 });

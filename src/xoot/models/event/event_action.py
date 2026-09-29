@@ -8,9 +8,6 @@ class EventAction(StrEnum):
 
     CREATE = "create"
     UPDATE = "update"
-    LINK = "link"
-    DISPOSE = "dispose"
-    CLOSE = "close"
     ADD_ALIAS = "add_alias"
     ADD_PATH = "add_path"
     REMOVE_ALIAS = "remove_alias"

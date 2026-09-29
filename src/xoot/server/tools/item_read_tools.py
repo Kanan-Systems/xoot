@@ -11,6 +11,7 @@ from xoot.server.db_call import run_db
 from xoot.server.key_book import KeyBook
 from xoot.server.render import (
     children_summary,
+    decision_summary,
     event_entry,
     item_detail,
     item_summary,
@@ -18,19 +19,21 @@ from xoot.server.render import (
 )
 from xoot.server.resolution import item_by_key, optional_item_id, resolve_project
 from xoot.server.roots import root_paths
-from xoot.server.schemas.arguments import ItemKey, ProjectAlias
+from xoot.server.schemas.arguments import ItemKey, OptionalItemKey, ProjectAlias
+from xoot.server.schemas.backlog_entry import BacklogEntry
 from xoot.server.schemas.backlog_output import BacklogOutput
 from xoot.server.schemas.item_get_output import ItemGetOutput
-from xoot.server.schemas.literals import BacklogScope
 from xoot.server.schemas.tree_output import TreeOutput
 from xoot.server.tool_meta import READ, RESOLUTION, describe
-from xoot.services.backlog_service import backlog_items
+from xoot.services.backlog_reads import backlog_items, backlog_level
+from xoot.services.decision_reads import owned_decisions
 from xoot.services.history_service import recent_events
-from xoot.services.tree_service import tree
+from xoot.services.tree_service import tree_in
 from xoot.store.store import Store
 
 RECENT_EVENTS = 10
 CHILDREN_MAX = 25
+DECISIONS_MAX = 25
 BACKLOG_MAX = 100
 
 
@@ -40,7 +43,8 @@ async def tree_get(  # pylint: disable=too-many-arguments
     project: ProjectAlias = None,
     *,
     root: Annotated[
-        str | None, Field(description="Item key to start from; goals when omitted.")
+        OptionalItemKey,
+        Field(description="Item key to start from; the goals when omitted."),
     ] = None,
     depth: Annotated[int, Field(ge=0, le=MAX_DEPTH)] = 3,
     include_done: Annotated[
@@ -53,7 +57,7 @@ async def tree_get(  # pylint: disable=too-many-arguments
 
     Args:
         - ctx (Context): the request context.
-        - project (str | None): an alias; resolved from roots or cwd if None.
+        - project (str | None): an alias; resolved from keys, roots or cwd.
         - root (str | None): the item key to start from.
         - depth (int): levels below the roots.
         - include_done (bool): include done and dropped items.
@@ -65,49 +69,54 @@ async def tree_get(  # pylint: disable=too-many-arguments
     roots = await root_paths(ctx, project)
 
     def work(store: Store) -> TreeOutput:
-        found, resolved_by = resolve_project(store, project, roots)
+        found, resolved_by = resolve_project(store, project, roots, [root])
         with store.read() as conn:
-            root_id = optional_item_id(conn, root)
-        query = TreeQuery(
-            root_id=root_id,
-            depth=depth,
-            max_items=limit,
-            include_terminal=include_done,
-        )
-        result = tree(store, found.id, query)
-        with store.read() as conn:
-            nodes = tree_entries(KeyBook(conn), result)
-        return TreeOutput(
-            project=found.key_prefix,
-            resolved_by=resolved_by,
-            nodes=nodes,
-            truncated=result.truncated,
-        )
+            query = TreeQuery(
+                root_id=optional_item_id(conn, found, root),
+                depth=depth,
+                max_items=limit,
+                include_terminal=include_done,
+            )
+            result = tree_in(conn, found.id, query)
+            return TreeOutput(
+                project=found.key_prefix,
+                resolved_by=resolved_by,
+                nodes=tree_entries(KeyBook(conn), result),
+                truncated=result.truncated,
+            )
 
     return await run_db(ctx, work)
 
 
-async def item_get(ctx: Context, key: ItemKey) -> ItemGetOutput:
+async def item_get(
+    ctx: Context, key: ItemKey, project: ProjectAlias = None
+) -> ItemGetOutput:
     """
-    Return one item with its children and recent events.
+    Return one item with its children, decisions and recent events.
 
     Args:
         - ctx (Context): the request context.
-        - key (str): the item key.
+        - key (str): the item key; an old key of a moved item works too.
+        - project (str | None): an alias; resolved from the key, roots or cwd.
 
     Returns:
-        - output (ItemGetOutput): the item, children summary and events.
+        - output (ItemGetOutput): the item, children, decisions and events.
     """
+    roots = await root_paths(ctx, project)
 
     def work(store: Store) -> ItemGetOutput:
+        found, _ = resolve_project(store, project, roots, [key])
         with store.read() as conn:
             book = KeyBook(conn)
-            item = item_by_key(conn, key)
+            item = item_by_key(conn, found, key)
             children = item_db.list_children(conn, item.project_id, [item.id])
+            decisions = owned_decisions(conn, item, DECISIONS_MAX)
             events = recent_events(conn, item.id, RECENT_EVENTS)
             return ItemGetOutput(
+                project=found.key_prefix,
                 item=item_detail(book, item),
                 children=children_summary(book, children, CHILDREN_MAX),
+                decisions=[decision_summary(book, d) for d in decisions],
                 events=[event_entry(book, e) for e in events],
             )
 
@@ -116,24 +125,28 @@ async def item_get(ctx: Context, key: ItemKey) -> ItemGetOutput:
 
 async def backlog_list(
     ctx: Context,
-    scope: Annotated[
-        BacklogScope,
+    project: ProjectAlias = None,
+    at: Annotated[
+        OptionalItemKey,
         Field(
             description=(
-                "session: parked in a session's backlog; project: in the "
-                "project backlog; unfiled: open subtasks with no batch."
+                "A goal or batch key: only the backlog sitting on it. Omit for "
+                "the whole project, every level."
             )
         ),
-    ],
-    project: ProjectAlias = None,
+    ] = None,
+    include_closed: Annotated[
+        bool, Field(description="Also list done and dropped backlog items.")
+    ] = False,
 ) -> BacklogOutput:
     """
-    List a project's backlog items of one scope.
+    List backlog items: a whole project's, or those on one goal or batch.
 
     Args:
         - ctx (Context): the request context.
-        - scope (BacklogScope): session, project or unfiled.
-        - project (str | None): an alias; resolved from roots or cwd if None.
+        - project (str | None): an alias; resolved from keys, roots or cwd.
+        - at (str | None): a goal or batch key.
+        - include_closed (bool): include done and dropped items.
 
     Returns:
         - output (BacklogOutput): up to BACKLOG_MAX items and a truncated flag.
@@ -141,15 +154,23 @@ async def backlog_list(
     roots = await root_paths(ctx, project)
 
     def work(store: Store) -> BacklogOutput:
-        found, resolved_by = resolve_project(store, project, roots)
+        found, resolved_by = resolve_project(store, project, roots, [at])
         with store.read() as conn:
             book = KeyBook(conn)
-            items = backlog_items(conn, found.id, scope)
+            target = None if at is None else item_by_key(conn, found, at)
+            items = backlog_items(conn, found.id, target, include_closed)
             return BacklogOutput(
                 project=found.key_prefix,
                 resolved_by=resolved_by,
-                scope=scope,
-                items=[item_summary(book, item) for item in items[:BACKLOG_MAX]],
+                at=None if target is None else target.key,
+                items=[
+                    BacklogEntry(
+                        **item_summary(book, item).model_dump(),
+                        level=backlog_level(item),
+                        found_on=book.item_key(item.found_on_item_id),
+                    )
+                    for item in items[:BACKLOG_MAX]
+                ],
                 truncated=len(items) > BACKLOG_MAX,
             )
 
@@ -167,25 +188,29 @@ def register(server: MCPServer) -> None:
         tree_get,
         description=describe(
             "Item tree of a project in pre-order: goals > batches > subtasks, "
-            "plus unfiled subtasks. Bounded by depth and limit; truncated says "
-            f"whether items were hidden. {RESOLUTION}"
+            "each level's backlog after its work, and the project backlog. "
+            "Bounded by depth and limit; truncated says whether items were "
+            f"hidden. {RESOLUTION}"
         ),
         annotations=READ,
     )
     server.add_tool(
         item_get,
         description=describe(
-            "One item in full, a summary of its children and its 10 most recent "
-            "events. Use its version as expected_version in item_update."
+            "One item in full (body, backlog links, old keys), a summary of its "
+            "children, the decisions made on it and its 10 most recent events. "
+            "An old key of a moved item still resolves. Use its version as "
+            f"expected_version in item_update. {RESOLUTION}"
         ),
         annotations=READ,
     )
     server.add_tool(
         backlog_list,
         description=describe(
-            "Backlog items of a project for one scope, by number, at most 100. "
-            "Captured items appear in both the session scope and the unfiled "
-            f"scope. {RESOLUTION}"
+            "Open backlog items of a project, or of one goal or batch (at), "
+            "project level first, at most 100, with the level each sits on and "
+            "the item it was found on. Check it before capture so you never "
+            f"create a duplicate. {RESOLUTION}"
         ),
         annotations=READ,
     )

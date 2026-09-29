@@ -1,4 +1,4 @@
-"""Project resolution by alias, then client roots, then the server's cwd."""
+"""Project resolution by alias, then key qualifier, then client roots, then cwd."""
 
 from pathlib import Path
 from typing import Any
@@ -7,7 +7,11 @@ import pytest
 from mcp import ClientSession
 
 from xoot.models.event.actor import Actor
+from xoot.models.event.write_context import WriteContext
+from xoot.models.item.item_create import ItemCreate
+from xoot.models.item.item_kind import ItemKind
 from xoot.models.project.project_registration import ProjectRegistration
+from xoot.services.item_service import create_item
 from xoot.services.project_service import register_project
 from xoot.store.store import Store
 
@@ -24,7 +28,7 @@ def fixture_cwd_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture(name="projects", autouse=True)
 def fixture_projects(store: Store, user: Actor, cwd_dir: Path) -> None:
-    """Four projects: one per resolution step, plus a nested path."""
+    """Four projects: one per resolution step, plus a nested path; aliasp has goal-1."""
     for prefix, paths in (
         ("aliasp", ()),
         ("cwdp", (str(cwd_dir),)),
@@ -34,7 +38,14 @@ def fixture_projects(store: Store, user: Actor, cwd_dir: Path) -> None:
         registration = ProjectRegistration(
             key_prefix=prefix, name=prefix, aliases=(prefix,), paths=paths
         )
-        register_project(store, registration, user)
+        created = register_project(store, registration, user)
+        if prefix == "aliasp":
+            create_item(
+                store,
+                created.id,
+                ItemCreate(kind=ItemKind.GOAL, title="g"),
+                WriteContext(actor=user),
+            )
 
 
 def _found(output: dict[str, Any]) -> tuple[str, str]:
@@ -54,13 +65,15 @@ def test_alias_beats_roots_and_roots_beat_cwd(cwd_dir: Path, harness: Any) -> No
             _found(await harness.ok(client, "brief_get", project="aliasp")),
             _found(await harness.ok(client, "brief_get")),
             _found(await harness.ok(client, "tree_get")),
-            _found(await harness.ok(client, "backlog_list", scope="project")),
+            _found(await harness.ok(client, "backlog_list")),
             _found(await harness.ok(client, "decisions_list")),
-            _found(await harness.ok(client, "session_start", title="t")),
+            _found(await harness.ok(client, "tree_get", root="aliasp:goal-1")),
         ]
 
     found = harness.run(scenario, cwd=cwd_dir, roots=["file:///x/proj"])
-    assert found == [("aliasp", "prefix")] + [("rootp", "roots")] * 5
+    assert found == (
+        [("aliasp", "prefix")] + [("rootp", "roots")] * 4 + [("aliasp", "qualified")]
+    )
 
 
 def test_cwd_when_the_client_has_no_roots(cwd_dir: Path, harness: Any) -> None:
@@ -104,7 +117,7 @@ def test_unresolved_lists_the_aliases(tmp_path: Path, harness: Any) -> None:
             await harness.error(client, "brief_get"),
             await harness.error(client, "brief_get", project="zzz-unknown"),
             await harness.error(
-                client, "session_start", title="t", project="NOT A SLUG"
+                client, "item_create", kind="goal", title="t", project="NOT A SLUG"
             ),
         ]
 

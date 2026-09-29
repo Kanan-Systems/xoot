@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { changed, invalidateProject, queryKeys } from './polling.ts';
 
@@ -16,14 +16,14 @@ describe('changed', () => {
 });
 
 describe('invalidateProject', () => {
-  it('invalidates the project, items and decisions but not /changes or others', async () => {
+  it("invalidates the project's views, items and decisions only", async () => {
     const client = new QueryClient();
     const seeded = [
       queryKeys.tree('x'),
-      queryKeys.brief('x'),
-      queryKeys.session('x', 'x-S1'),
-      queryKeys.item('x-1'),
-      queryKeys.decision('x-D1'),
+      queryKeys.backlog('x'),
+      queryKeys.decisions('x'),
+      queryKeys.item('x', 'goal-1/batch-1'),
+      queryKeys.decision('x', 'goal-1/decision-1'),
       queryKeys.changes('x'),
       queryKeys.tree('other'),
       queryKeys.projects(),
@@ -31,18 +31,16 @@ describe('invalidateProject', () => {
     for (const key of seeded) {
       client.setQueryData(key, { ok: true });
     }
-    const spy = vi.spyOn(client, 'invalidateQueries');
     await invalidateProject(client, 'x');
     const stale = seeded.filter(
       (key) => client.getQueryState(key)?.isInvalidated === true,
     );
-    expect(stale.map((key) => key.join('/'))).toEqual([
-      'project/x/tree',
-      'project/x/brief',
-      'project/x/session/x-S1',
-      'item/x-1',
-      'decision/x-D1',
+    expect(stale.map((key) => key.join('|'))).toEqual([
+      'project|x|tree',
+      'project|x|backlog',
+      'project|x|decisions',
+      'project|x|item|goal-1/batch-1',
+      'project|x|decision|goal-1/decision-1',
     ]);
-    expect(spy).toHaveBeenCalledTimes(3);
   });
 });
