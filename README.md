@@ -14,7 +14,7 @@ State lives in one SQLite file on your machine; nothing is sent anywhere.
 
 ## Status
 
-0.1.0, alpha. The MCP server (stdio), the CLI and paste mode work; the
+0.2.0, alpha. The MCP server (stdio), the CLI and paste mode work; the
 dashboard is read-only for now.
 
 ## Install
@@ -25,7 +25,7 @@ check out a release tag and run the installer:
 ```sh
 git clone https://github.com/Kanan-Systems/xoot.git
 cd xoot
-git checkout v0.1.0
+git checkout v0.2.0
 ./install.sh --dry-run     # prints every action, runs none
 ./install.sh               # --yes installs the Claude Code plugin without asking
 ```
