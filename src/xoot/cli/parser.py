@@ -137,7 +137,8 @@ def _project(
     commands: argparse._SubParsersAction, common: argparse.ArgumentParser
 ) -> None:
     group = commands.add_parser(
-        "project", help="list and show projects; add or remove aliases and paths"
+        "project",
+        help="list, show and rename projects; add or remove aliases and paths",
     )
     actions = group.add_subparsers(dest="action", required=True, metavar="ACTION")
     listing = actions.add_parser("list", parents=[common], help="list every project")
@@ -160,6 +161,17 @@ def _project(
         if confirmed:
             _confirm(action)
         action.set_defaults(handler=handler)
+    rename = actions.add_parser(
+        "rename", parents=[common], help="rename a project (never its key prefix)"
+    )
+    rename.add_argument(
+        "project", metavar="PROJECT", help="project alias or key prefix"
+    )
+    group = rename.add_argument_group("rename")
+    group.add_argument("--name", help="the new display name")
+    group.add_argument("--alias", help="an alias to add, e.g. the new name as a slug")
+    _confirm(rename)
+    rename.set_defaults(handler=project.run_rename)
 
 
 def _views(

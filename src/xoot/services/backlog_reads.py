@@ -17,7 +17,7 @@ from xoot.models.workflow.workflow_definition import WorkflowDefinition
 from xoot.repositories.item import item_db
 from xoot.services.item_rules import is_closed
 from xoot.services.lookups import active_workflow, require_project
-from xoot.utils.keys import SEPARATOR
+from xoot.utils.keys import SEPARATOR, Segments, parse_segments
 
 _LEVELS: dict[int, BacklogLevel] = {0: "project", 1: "goal", 2: "batch"}
 _CHILD_KIND = {ItemKind.GOAL: ItemKind.BATCH, ItemKind.BATCH: ItemKind.SUBTASK}
@@ -53,7 +53,8 @@ def backlog_items(
         - include_closed (bool): also list done and dropped items.
 
     Returns:
-        - items (list[Item]): project level first, then by key.
+        - items (list[Item]): project level first, then by key, each
+          segment's number compared as a number.
 
     Raises:
         - NotFoundError: the project or its workflow is missing.
@@ -68,7 +69,7 @@ def backlog_items(
     else:
         rows = item_db.list_children_of_kind(conn, at.id, ItemKind.BACKLOG)
     shown = [i for i in rows if include_closed or not is_closed(definition, i)]
-    return sorted(shown, key=lambda i: (i.key.count(SEPARATOR), i.key))
+    return sorted(shown, key=lambda i: (i.key.count(SEPARATOR), _natural(i.key)))
 
 
 def backlog_counts(
@@ -124,6 +125,12 @@ def blocked_items(conn: sqlite3.Connection, project_id: int) -> list[BlockedItem
         if work and backlog and all(is_closed(definition, c) for c in work):
             blocked.append(BlockedItem(key=item.key, open_backlog=len(backlog)))
     return sorted(blocked, key=lambda b: b.key)
+
+
+def _natural(key: str) -> Segments:
+    # A stored key always parses; as text, backlog-10 would sort before
+    # backlog-2, and callers cap the list after this sort.
+    return parse_segments(key) or ()
 
 
 def _definition(conn: sqlite3.Connection, project_id: int) -> WorkflowDefinition:

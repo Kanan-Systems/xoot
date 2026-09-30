@@ -36,7 +36,7 @@ function renderNode(data: ItemFlowNode['data'], focus = vi.fn(), showDone = vi.f
   });
   render(
     <ReactFlowProvider>
-      <NodeActionsContext.Provider value={{ focus, showDone }}>
+      <NodeActionsContext.Provider value={{ focus, showDone, toggle: vi.fn() }}>
         <ItemNode {...props(data)} />
       </NodeActionsContext.Provider>
     </ReactFlowProvider>,
@@ -44,7 +44,7 @@ function renderNode(data: ItemFlowNode['data'], focus = vi.fn(), showDone = vi.f
   return { focus, showDone, outer };
 }
 
-const BASE = { hidden: {}, decisions: 0, blocked: null };
+const BASE = { hidden: {}, fold: null, decisions: 0, blocked: null };
 
 describe('ItemNode', () => {
   it('shows the key, kind icon, title and state with its category icon', () => {

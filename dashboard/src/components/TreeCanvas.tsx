@@ -37,17 +37,29 @@ export interface TreeCanvasProps {
   decisionCounts: ReadonlyMap<string, number>;
   blocked: ReadonlyMap<string, number>;
   showDone: boolean;
+  collapsed: ReadonlySet<string>;
   onOpen: (key: string) => void;
   onFocus: (key: string) => void;
   onShowDone: () => void;
+  onToggle: (key: string) => void;
 }
 
 export function TreeCanvas(props: TreeCanvasProps) {
-  const { entries, rootKey, project, decisionCounts, blocked, showDone } = props;
-  const { onOpen, onFocus, onShowDone } = props;
+  const { entries, rootKey, project, decisionCounts, blocked, showDone, collapsed } =
+    props;
+  const { onOpen, onFocus, onShowDone, onToggle } = props;
+  // A toggle changes the graph, so the layout below is recomputed.
   const graph = useMemo(
-    () => buildGraph(entries, { showDone, rootKey, project, decisionCounts, blocked }),
-    [entries, showDone, rootKey, project, decisionCounts, blocked],
+    () =>
+      buildGraph(entries, {
+        showDone,
+        rootKey,
+        project,
+        decisionCounts,
+        blocked,
+        collapsed,
+      }),
+    [entries, showDone, rootKey, project, decisionCounts, blocked, collapsed],
   );
   const flow = useMemo(() => toFlow(graph), [graph]);
   const activate = useCallback(
@@ -93,8 +105,8 @@ export function TreeCanvas(props: TreeCanvasProps) {
     [flow.nodes, activate],
   );
   const actions = useMemo(
-    () => ({ focus: onFocus, showDone: onShowDone }),
-    [onFocus, onShowDone],
+    () => ({ focus: onFocus, showDone: onShowDone, toggle: onToggle }),
+    [onFocus, onShowDone, onToggle],
   );
 
   return (
@@ -139,12 +151,14 @@ function toFlow(graph: Graph): { nodes: FlowNode[]; edges: Edge[] } {
         ariaLabel: `Project ${node.data.name}`,
       };
     }
-    const { item, blocked } = node.data;
+    const { item, blocked, fold } = node.data;
     const held = blocked === null ? '' : `, ${blockedLine(blocked)}`;
+    const folded =
+      fold?.collapsed === true ? `, collapsed, ${String(fold.children)} children` : '';
     return {
       ...node,
       position,
-      ariaLabel: `${KIND[item.kind].label}: ${item.title} (${item.key}), ${item.state}${held}. Press Enter for details`,
+      ariaLabel: `${KIND[item.kind].label}: ${item.title} (${item.key}), ${item.state}${held}${folded}. Press Enter for details`,
     };
   });
   const edges = graph.edges.map((edge) => ({ ...edge, selectable: false }));

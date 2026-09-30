@@ -212,3 +212,23 @@ def test_backlog_reads_by_level(  # pylint: disable=too-many-arguments,too-many-
         assert blocked_items(conn, project.id) == [
             BlockedItem(key=batch.key, open_backlog=1)
         ]
+
+
+def test_backlog_sorts_numbers_as_numbers(
+    store: Store,
+    ctx: WriteContext,
+    project: Project,
+    make_item: Callable[..., Item],
+    capture_on: Callable[..., Item],
+) -> None:
+    """backlog-10 comes after backlog-2, and goal-10 after goal-2."""
+    goals = [make_item(project, ItemKind.GOAL) for _ in range(10)]
+    on_goals = [capture_on(goal) for goal in goals]
+    on_project = [
+        _pushed_to_project(store, ctx, capture_on(goals[0])) for _ in range(10)
+    ]
+    with store.read() as conn:
+        keys = [i.key for i in backlog_items(conn, project.id)]
+    assert keys == [i.key for i in on_project + on_goals]
+    assert keys.index("backlog-2") < keys.index("backlog-10")
+    assert keys.index("goal-2/backlog-1") < keys.index("goal-10/backlog-1")

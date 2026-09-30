@@ -6,6 +6,7 @@ import { createContext, useContext } from 'react';
 export interface NodeActions {
   focus: (key: string) => void;
   showDone: () => void;
+  toggle: (key: string) => void;
 }
 
 const noop = (): void => undefined;
@@ -13,6 +14,7 @@ const noop = (): void => undefined;
 export const NodeActionsContext = createContext<NodeActions>({
   focus: noop,
   showDone: noop,
+  toggle: noop,
 });
 
 export function useNodeActions(): NodeActions {

@@ -105,7 +105,11 @@ export function DecisionsPage() {
           const groups = decisionGroups(view.decisions, filter);
           return (
             <>
-              {groups.length === 0 && <p className="muted">No decisions match.</p>}
+              {view.decisions.length === 0 ? (
+                <p className="muted">No decisions recorded yet</p>
+              ) : (
+                groups.length === 0 && <p className="muted">No decisions match.</p>
+              )}
               {groups.map((group) => (
                 <section key={group.goal} aria-labelledby={`goal-${group.goal}`}>
                   <h2 id={`goal-${group.goal}`}>

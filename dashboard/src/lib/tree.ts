@@ -1,5 +1,5 @@
-// Pure tree logic: the project root, done/dropped collapse, the focus root,
-// what open backlog blocks, and graph building.
+// Pure tree logic: the project root, done/dropped collapse, collapsed goals
+// and batches, the focus root, what open backlog blocks, and graph building.
 // Tree entries arrive in pre-order, so a parent is always seen before its
 // children.
 import type { BlockedEntry, ItemSummary, TreeEntry } from '../api/types.gen.ts';
@@ -26,11 +26,19 @@ export interface Collapsed {
   hidden: ReadonlyMap<string, HiddenCounts>;
 }
 
+// Only these kinds fold; a stored key of any other kind is ignored.
+export function isCollapsible(item: ItemSummary): boolean {
+  return item.kind === 'goal' || item.kind === 'batch';
+}
+
 // keep names an entry that stays visible even when closed: the root.
+// folded names the goals and batches whose children are all hidden; their
+// children are not counted as hidden done or dropped.
 export function collapseDone(
   entries: readonly TreeEntry[],
   showDone: boolean,
   keep: string | null = null,
+  folded: ReadonlySet<string> = new Set(),
 ): Collapsed {
   const gone = new Set<string>();
   const hidden = new Map<string, Partial<Record<Closed, number>>>();
@@ -38,7 +46,7 @@ export function collapseDone(
   for (const entry of entries) {
     const parent = parentId(entry);
     const closed = closedCategory(entry.item);
-    if (gone.has(parent)) {
+    if (gone.has(parent) || folded.has(parent)) {
       gone.add(entry.item.key);
     } else if (!showDone && entry.item.key !== keep && closed !== null) {
       gone.add(entry.item.key);
@@ -115,9 +123,17 @@ export function blockedCounts(blocked: readonly BlockedEntry[]): Map<string, num
   return new Map(blocked.map((entry) => [entry.key, entry.open_backlog]));
 }
 
+// Direct children in the tree data, and whether a goal or batch hides them.
+export interface Fold {
+  children: number;
+  collapsed: boolean;
+}
+
 export type ItemNodeData = {
   item: ItemSummary;
   hidden: HiddenCounts;
+  // null for kinds that do not fold.
+  fold: Fold | null;
   decisions: number;
   blocked: Blocked | null;
 };
@@ -151,6 +167,17 @@ export interface GraphOptions {
   project: { name: string; prefix: string };
   decisionCounts: ReadonlyMap<string, number>;
   blocked: ReadonlyMap<string, number>;
+  // Goal and batch keys the viewer collapsed; none when absent.
+  collapsed?: ReadonlySet<string>;
+}
+
+export function childCounts(entries: readonly TreeEntry[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const entry of entries) {
+    const parent = parentId(entry);
+    counts.set(parent, (counts.get(parent) ?? 0) + 1);
+  }
+  return counts;
 }
 
 export function buildGraph(
@@ -159,8 +186,15 @@ export function buildGraph(
 ): Graph {
   const { rootKey } = options;
   const scoped = rootKey === null ? entries : subtree(entries, rootKey);
-  const { visible, hidden } = collapseDone(scoped, options.showDone, rootKey);
+  const collapsed = options.collapsed ?? new Set<string>();
+  const folded = new Set(
+    scoped
+      .filter((entry) => isCollapsible(entry.item) && collapsed.has(entry.item.key))
+      .map((entry) => entry.item.key),
+  );
+  const { visible, hidden } = collapseDone(scoped, options.showDone, rootKey, folded);
   const backlog = openBacklog(scoped);
+  const children = childCounts(scoped);
   const shown = new Set(visible.map((entry) => entry.item.key));
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -180,6 +214,9 @@ export function buildGraph(
       data: {
         item: entry.item,
         hidden: hidden.get(key) ?? {},
+        fold: isCollapsible(entry.item)
+          ? { children: children.get(key) ?? 0, collapsed: folded.has(key) }
+          : null,
         decisions: options.decisionCounts.get(key) ?? 0,
         blocked: blockedOf(entry.item, options.blocked, backlog),
       },

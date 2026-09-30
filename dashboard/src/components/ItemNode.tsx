@@ -3,7 +3,8 @@
 // first, after the kind as icon and word; the key is secondary. The category
 // shows as colour, icon and state name together. A backlog item has its own
 // icon, word and dashed card. A goal or batch held open by backlog says so,
-// with a read-only hint of what to ask for.
+// with a read-only hint of what to ask for. A goal or batch with children
+// folds them away; folded, it says how many it hides.
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { MouseEvent } from 'react';
 
@@ -15,7 +16,7 @@ import { useNodeActions } from './nodeActions.ts';
 export type ItemFlowNode = Node<ItemNodeData, 'item'>;
 
 export function ItemNode({ data }: NodeProps<ItemFlowNode>) {
-  const { item, hidden, decisions, blocked } = data;
+  const { item, hidden, fold, decisions, blocked } = data;
   const actions = useNodeActions();
   const kind = KIND[item.kind];
   const category = categoryGlyph(item.category);
@@ -27,6 +28,10 @@ export function ItemNode({ data }: NodeProps<ItemFlowNode>) {
   const focus = (event: MouseEvent) => {
     event.stopPropagation();
     actions.focus(item.key);
+  };
+  const toggle = (event: MouseEvent) => {
+    event.stopPropagation();
+    actions.toggle(item.key);
   };
   const hint = blocked === null ? null : blockedHint(item.key, blocked);
   return (
@@ -62,6 +67,18 @@ export function ItemNode({ data }: NodeProps<ItemFlowNode>) {
               onClick={focus}
             >
               ⌖
+            </button>
+          )}
+          {fold !== null && fold.children > 0 && (
+            <button
+              type="button"
+              className="node-toggle"
+              title={`${String(fold.children)} children`}
+              aria-expanded={!fold.collapsed}
+              aria-label={`${fold.collapsed ? 'Expand' : 'Collapse'} ${item.key}`}
+              onClick={toggle}
+            >
+              {fold.collapsed ? `▸ ${String(fold.children)}` : '▾'}
             </button>
           )}
         </span>

@@ -108,7 +108,7 @@ def set_active_workflow(
 
 def set_name(conn: sqlite3.Connection, project_id: int, name: str) -> Project:
     """
-    Replace a project's name. Only a redaction renames a project.
+    Replace a project's name: a rename, or a redaction.
 
     Args:
         - conn (sqlite3.Connection): connection inside a write transaction.

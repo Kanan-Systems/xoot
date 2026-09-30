@@ -76,6 +76,7 @@ is recorded as the user, client `cli`, except paste mode's.
 ```sh
 xoot init [PATH] --prefix xoot [--name N] [--alias A]...
 xoot project list | show | add-alias A | remove-alias A | add-path P | remove-path P
+xoot project rename PROJECT [--name N] [--alias A] [--yes]   # never the prefix
 xoot brief | tree [--root KEY] [--depth N] [--all]
 xoot workflow export [-o FILE] | import FILE [--map kind:old=new]... [--yes]
 xoot redact KEY FIELD [--yes]      # KEY: item or decision key, or a prefix

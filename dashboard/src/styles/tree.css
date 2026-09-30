@@ -103,7 +103,8 @@
   align-items: center;
 }
 
-.node-focus {
+.node-focus,
+.node-toggle {
   margin-left: auto;
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -112,7 +113,9 @@
   cursor: pointer;
 }
 
-.badge-decisions + .node-focus {
+.badge-decisions + .node-focus,
+.badge-decisions + .node-toggle,
+.node-focus + .node-toggle {
   margin-left: 0;
 }
 

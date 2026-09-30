@@ -121,4 +121,27 @@ describe('the decisions view', () => {
     expect(body.textContent).toBe(BODY);
     expect(document.querySelector('.decision-list script')).toBeNull();
   });
+
+  it('says so when a filter excludes every decision', async () => {
+    renderApp('/x/decisions?goal=goal-2&level=goal');
+    expect(await screen.findByText('No decisions match.')).toBeInTheDocument();
+    expect(screen.queryByText('No decisions recorded yet')).toBeNull();
+  });
+});
+
+describe('a project without decisions', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    mockApi(
+      projectRoutes({
+        '/projects/x/decisions': { project: 'x', truncated: false, decisions: [] },
+      }),
+    );
+  });
+
+  it('says none are recorded, not that none match', async () => {
+    renderApp('/x/decisions');
+    expect(await screen.findByText('No decisions recorded yet')).toBeInTheDocument();
+    expect(screen.queryByText('No decisions match.')).toBeNull();
+  });
 });

@@ -1,4 +1,4 @@
-"""`xoot project`: list, show, and add or remove aliases and paths."""
+"""`xoot project`: list, show, rename, and add or remove aliases and paths."""
 
 import argparse
 
@@ -7,6 +7,7 @@ from xoot.cli.commands.common import (
     WRITE,
     absolute,
     alias_arg,
+    name_arg,
     project_dir,
     project_of,
 )
@@ -152,6 +153,44 @@ def run_remove_path(args: argparse.Namespace, store: Store, console: Console) ->
         raise NotFoundError("path", path)
     console.confirm([f"remove path {path} from project {project.key_prefix}"], args.yes)
     project_service.remove_path(store, project.id, path, WRITE)
+    return _show(store, project.id, console)
+
+
+def run_rename(args: argparse.Namespace, store: Store, console: Console) -> int:
+    """
+    Rename a project and/or add an alias, after confirmation.
+
+    Only the display name changes; the key prefix, and so every key, stays.
+
+    Args:
+        - args (argparse.Namespace): the project, --name, --alias and --yes.
+        - store (Store): the database.
+        - console (Console): output and the confirmation prompt.
+
+    Returns:
+        - code (int): OK, or USAGE when neither --name nor --alias is given.
+
+    Raises:
+        - ProjectResolutionError: no project matched.
+        - pydantic.ValidationError: the name or the alias is invalid.
+        - DuplicateError: the alias already names a project.
+        - ConfirmationError: the rename was not confirmed.
+    """
+    if args.name is None and args.alias is None:
+        console.error("error: pass --name, --alias or both")
+        return exit_codes.USAGE
+    project, _ = project_of(args, store)
+    name = None if args.name is None else name_arg(name=args.name)
+    alias = None if args.alias is None else alias_arg(alias=args.alias)
+    changes = []
+    if name is not None:
+        changes.append(
+            f"rename project {project.key_prefix}: {project.name!r} -> {name!r}"
+        )
+    if alias is not None:
+        changes.append(f"add alias {alias} to project {project.key_prefix}")
+    console.confirm(changes, args.yes)
+    project_service.rename_project(store, project.id, name, alias, WRITE)
     return _show(store, project.id, console)
 
 

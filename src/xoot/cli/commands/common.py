@@ -10,7 +10,7 @@ from xoot.models.event.actor import Actor
 from xoot.models.event.actor_kind import ActorKind
 from xoot.models.event.client import Client
 from xoot.models.event.write_context import WriteContext
-from xoot.models.fields import Alias, ProjectDir
+from xoot.models.fields import Alias, ProjectDir, Title
 from xoot.models.project.project import Project
 from xoot.server.schemas.literals import ResolvedBy
 from xoot.services.project_resolver import resolve_project
@@ -117,3 +117,22 @@ def alias_arg(alias: Alias) -> str:
           a key.
     """
     return alias
+
+
+@validate_call
+def name_arg(name: Title) -> str:
+    """
+    Validate a command's project name argument.
+
+    Validating here labels a refusal "name", as alias_arg does for "alias".
+
+    Args:
+        - name (Title): the name; pass it by keyword.
+
+    Returns:
+        - name (str): the same name.
+
+    Raises:
+        - pydantic.ValidationError: the name is empty, too long or holds NUL.
+    """
+    return name

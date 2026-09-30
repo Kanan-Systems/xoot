@@ -3,7 +3,8 @@ Project registration and naming: key prefix, aliases, paths and the default
 workflow every new project starts with.
 
 Prefixes and aliases share one namespace (see project_names). Adding or
-removing an alias or path is recorded as an event on the project.
+removing an alias or path, and a rename, are recorded as events on the
+project. The key prefix never changes: stored keys and history rely on it.
 """
 
 import sqlite3
@@ -14,7 +15,7 @@ from xoot.exceptions.not_found_error import NotFoundError
 from xoot.models.event.actor import Actor
 from xoot.models.event.event_action import EventAction
 from xoot.models.event.write_context import WriteContext
-from xoot.models.fields import Alias, ProjectDir, Slug
+from xoot.models.fields import Alias, ProjectDir, Slug, Title
 from xoot.models.project.project import Project
 from xoot.models.project.project_overview import ProjectOverview
 from xoot.models.project.project_registration import ProjectRegistration
@@ -34,6 +35,7 @@ from xoot.store.store import Store
 _ALIAS = TypeAdapter(Alias)
 _SLUG = TypeAdapter(Slug)
 _DIR = TypeAdapter(ProjectDir)
+_TITLE = TypeAdapter(Title)
 
 
 def register_project(
@@ -191,6 +193,48 @@ def remove_path(store: Store, project_id: int, path: str, ctx: WriteContext) -> 
             project, EventAction.REMOVE_PATH, {}, {"path": path}
         )
     return path
+
+
+def rename_project(
+    store: Store,
+    project_id: int,
+    name: str | None,
+    alias: str | None,
+    ctx: WriteContext,
+) -> None:
+    """
+    Give a project a new display name and/or an extra alias, in one write.
+
+    The name change is an update event with the old and new name, so a
+    later redaction of the name scrubs both. The key prefix is untouched.
+
+    Args:
+        - store (Store): the database.
+        - project_id (int): project id.
+        - name (str | None): the new name; None keeps the current one.
+        - alias (str | None): an alias to add; None adds none.
+        - ctx (WriteContext): the actor.
+
+    Raises:
+        - InvalidIdError: project_id is not an int id.
+        - pydantic.ValidationError: the name or the alias is invalid.
+        - DuplicateError: the alias is taken or is another project's prefix.
+        - NotFoundError: no such project.
+    """
+    check_id("project_id", project_id)
+    name = None if name is None else _TITLE.validate_python(name)
+    alias = None if alias is None else _ALIAS.validate_python(alias)
+    with store.write() as conn:
+        project = require_project(conn, project_id)
+        scope = WriteScope(conn, ctx)
+        if name is not None:
+            renamed = project_db.set_name(conn, project_id, name)
+            scope.updated(project, renamed)
+            project = renamed
+        if alias is not None:
+            require_free_alias(conn, alias, project_id)
+            project_alias_db.insert(conn, alias, project_id)
+            scope.noted(project, EventAction.ADD_ALIAS, {"alias": alias})
 
 
 def get_project(store: Store, project_id: int) -> Project:

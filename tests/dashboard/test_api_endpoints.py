@@ -1,13 +1,21 @@
 """Every /api/v1 endpoint on a seeded tmp database, nested keys included."""
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 from starlette.testclient import TestClient
 
 from xoot import __version__
+from xoot.dashboard.views import project_views
 from xoot.dashboard.views.project_views import first_line
+from xoot.models.event.write_context import WriteContext
 from xoot.models.fields import format_timestamp
+from xoot.models.item.item import Item
+from xoot.models.item.item_kind import ItemKind
+from xoot.models.project.project import Project
+from xoot.services.backlog_push_service import apply_push
+from xoot.store.store import Store
 
 BASE = "/api/v1/projects/xoot"
 
@@ -95,6 +103,27 @@ def test_backlog_lists_every_level(client: TestClient, seeded: Any) -> None:
     assert row["created_at"] == format_timestamp(seeded.held.created_at)
     assert row["why"] == "why"
     assert view["truncated"] is False
+
+
+def test_backlog_is_capped_after_the_natural_sort(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    client: TestClient,
+    store: Store,
+    ctx: WriteContext,
+    project: Project,
+    make_item: Callable[..., Item],
+    capture_on: Callable[..., Item],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The cap keeps backlog-1..backlog-9, not backlog-1 and backlog-10."""
+    goal = make_item(project, ItemKind.GOAL)
+    for _ in range(10):
+        apply_push(store, capture_on(goal).id, ctx, None)
+    monkeypatch.setattr(project_views, "BACKLOG_MAX", 9)
+    view = _ok(client, f"{BASE}/backlog")
+    assert [row["key"] for row in view["items"]] == [
+        f"backlog-{n}" for n in range(1, 10)
+    ]
+    assert view["truncated"] is True
 
 
 @pytest.mark.parametrize(

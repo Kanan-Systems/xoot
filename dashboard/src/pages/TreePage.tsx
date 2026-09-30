@@ -1,6 +1,7 @@
 // The tree view, /:project/tree. With no parameter it is the project-root
 // tree; ?goal=<key> narrows it to one goal and ?focus=<key> roots it at any
 // goal or batch. Both keys are nested paths, so they stay query parameters.
+// Collapsed goals and batches are per viewer, kept in browser storage.
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
@@ -9,6 +10,7 @@ import { QueryState } from '../components/QueryState.tsx';
 import { KeyLabel } from '../components/Titled.tsx';
 import { TreeCanvas } from '../components/TreeCanvas.tsx';
 import { TreeToolbar } from '../components/TreeToolbar.tsx';
+import { useCollapsed } from '../hooks/useCollapsed.ts';
 import { useDrawer } from '../hooks/useDrawer.ts';
 import { useTitles } from '../hooks/useTitles.ts';
 import { PARAM, withParam } from '../lib/search.ts';
@@ -24,6 +26,7 @@ export function TreePage() {
   const projects = useProjects();
   const titles = useTitles(project);
   const [showDone, setShowDone] = useState(false);
+  const collapsed = useCollapsed(project);
   const focus = search.get(PARAM.focus);
   const rootKey = focus ?? search.get(PARAM.goal);
   const name =
@@ -69,9 +72,11 @@ export function TreePage() {
             decisionCounts={decisionCounts}
             blocked={blocked}
             showDone={showDone}
+            collapsed={collapsed.keys}
             onOpen={drawer.open}
             onFocus={onFocus}
             onShowDone={onShowDone}
+            onToggle={collapsed.toggle}
           />
         )}
       </QueryState>

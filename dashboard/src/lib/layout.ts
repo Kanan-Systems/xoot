@@ -35,7 +35,10 @@ export function layout(
   for (const edge of edges) {
     graph.setEdge(edge.source, edge.target);
   }
-  runLayout(graph);
+  // The crossing-reduction sweeps reorder siblings (they came out reversed);
+  // a tree has no crossings to reduce, so keep dagre's depth-first initial
+  // order, which follows insertion order: the API's.
+  runLayout(graph, { disableOptimalOrderHeuristic: true });
   return nodes.map((node) => {
     const placed = graph.node(node.id);
     return { node, x: placed.x - NODE_WIDTH / 2, y: placed.y - NODE_HEIGHT / 2 };
