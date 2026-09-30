@@ -19,6 +19,8 @@ interface ItemDetailsProps {
   titles?: Titles;
   // How many open backlog items hold this goal or batch open, if any.
   openBacklog?: number | undefined;
+  // The drawer's write controls, under the heading.
+  children?: ReactNode;
 }
 
 export function ItemDetails({
@@ -26,6 +28,7 @@ export function ItemDetails({
   view,
   titles = NO_TITLES,
   openBacklog,
+  children,
 }: ItemDetailsProps) {
   const { item } = view;
   const navigate = useNavigate();
@@ -54,6 +57,7 @@ export function ItemDetails({
           ⌖ Focus on this {item.kind}
         </button>
       )}
+      {children}
       <dl className="facts">
         <dt>State</dt>
         <dd>

@@ -46,8 +46,13 @@ client model may still read them as instructions. Treat them as untrusted.
 
 ## Dashboard
 
-`xoot dashboard` binds 127.0.0.1 only and is read-only: anything but
-GET and HEAD gets 405. Each launch makes a random token, printed once to
+`xoot dashboard` binds 127.0.0.1 only. GET and HEAD are reads. POST and
+PATCH are writes, accepted only on the registered write routes under
+`/api/v1`; any other method or path gets 405. A write needs the session
+cookie (401), an Origin header that is present and names the served origin
+exactly (403), a `Content-Type` of `application/json` (415), and a body of
+at most 64 KiB (413). A `?token` query or a `?launch` code never
+authenticates a write. Each launch makes a random token, printed once to
 stdout and never logged or written to disk; it becomes an HttpOnly,
 SameSite=Strict cookie named after the port (`xoot_token_<port>`) that every
 API request needs (401 without it). `--open` never puts the token in the

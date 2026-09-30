@@ -17,7 +17,7 @@ describe('tab help', () => {
   it.each([
     ['/x/tree', /goals hold batches, batches hold subtasks; backlog hangs off/i],
     ['/x/backlog', /by level: on a batch, on a goal, then the project backlog/],
-    ['/x/decisions', /grouped by goal; each belongs to the goal, batch or subtask/],
+    ['/x/decisions', /grouped by goal, batch and subtask; each belongs to the item/],
   ])(
     '%s: collapsed, then expands to the text and the concepts link',
     async (path, text) => {

@@ -1,7 +1,9 @@
-// The LTR tree. Nodes are not draggable or selectable; onNodeClick is what
-// gives React Flow's node wrappers pointer events (without a click handler
-// it renders them with pointer-events: none, and clicks fall through to the
-// pane). Item wrappers are focusable groups (a button role would hide the
+// The LTR tree. Nodes are not selectable; only batch and subtask nodes are
+// draggable, each onto a new parent (useTreeDrag); the drawer's "Move to…"
+// is the keyboard path, not React Flow's arrow-key nudging. onNodeClick is
+// what gives React Flow's node wrappers pointer events (without a click
+// handler it renders them with pointer-events: none, and clicks fall through
+// to the pane). Item wrappers are focusable groups (a button role would hide the
 // focus and badge buttons inside them): Enter or Space on one does what a
 // click does. Double-click focuses a goal or batch, so it does not zoom.
 // The project node only draws and is not focusable.
@@ -15,15 +17,15 @@ import {
 } from '@xyflow/react';
 import { useCallback, useMemo, type KeyboardEvent } from 'react';
 
-import type { TreeEntry } from '../api/types.gen.ts';
+import type { ItemSummary, TreeEntry } from '../api/types.gen.ts';
+import { useTreeDrag, withDragged, type FlowNode } from '../hooks/useTreeDrag.ts';
 import { KIND } from '../lib/display.ts';
+import { isMovable } from '../lib/itemRules.ts';
 import { layout } from '../lib/layout.ts';
 import { blockedLine, buildGraph, type Graph } from '../lib/tree.ts';
-import { ItemNode, type ItemFlowNode } from './ItemNode.tsx';
-import { ProjectNode, type ProjectFlowNode } from './ProjectNode.tsx';
+import { ItemNode } from './ItemNode.tsx';
+import { ProjectNode } from './ProjectNode.tsx';
 import { NodeActionsContext } from './nodeActions.ts';
-
-type FlowNode = ItemFlowNode | ProjectFlowNode;
 
 const nodeTypes: NodeTypes = { item: ItemNode, project: ProjectNode };
 
@@ -42,12 +44,17 @@ export interface TreeCanvasProps {
   onFocus: (key: string) => void;
   onShowDone: () => void;
   onToggle: (key: string) => void;
+  // A batch or subtask dropped onto a parent the hierarchy allows.
+  onMove?: (item: ItemSummary, parent: string) => void;
 }
+
+const NO_MOVE = () => undefined;
 
 export function TreeCanvas(props: TreeCanvasProps) {
   const { entries, rootKey, project, decisionCounts, blocked, showDone, collapsed } =
     props;
-  const { onOpen, onFocus, onShowDone, onToggle } = props;
+  const { onOpen, onFocus, onShowDone, onToggle, onMove = NO_MOVE } = props;
+  const drag = useTreeDrag(onMove);
   // A toggle changes the graph, so the layout below is recomputed.
   const graph = useMemo(
     () =>
@@ -116,9 +123,12 @@ export function TreeCanvas(props: TreeCanvasProps) {
           The focused item is gone.
         </p>
       )}
+      <p className="warning drop-message" role="status">
+        {drag.message}
+      </p>
       <ReactFlow<FlowNode>
         key={rootKey ?? 'all'}
-        nodes={flow.nodes}
+        nodes={withDragged(flow.nodes, drag.dragged)}
         edges={flow.edges}
         nodeTypes={nodeTypes}
         nodesDraggable={false}
@@ -126,6 +136,10 @@ export function TreeCanvas(props: TreeCanvasProps) {
         nodesFocusable
         edgesFocusable={false}
         elementsSelectable={false}
+        onInit={drag.onInit}
+        onNodesChange={drag.onNodesChange}
+        onNodeDragStart={drag.onNodeDragStart}
+        onNodeDragStop={drag.onNodeDragStop}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onKeyDown={onKeyDown}
@@ -148,6 +162,7 @@ function toFlow(graph: Graph): { nodes: FlowNode[]; edges: Edge[] } {
         ...node,
         position,
         focusable: false,
+        draggable: false,
         ariaLabel: `Project ${node.data.name}`,
       };
     }
@@ -159,6 +174,7 @@ function toFlow(graph: Graph): { nodes: FlowNode[]; edges: Edge[] } {
     return {
       ...node,
       position,
+      draggable: isMovable(item.kind),
       ariaLabel: `${KIND[item.kind].label}: ${item.title} (${item.key}), ${item.state}${held}${folded}. Press Enter for details`,
     };
   });

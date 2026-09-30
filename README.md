@@ -14,8 +14,8 @@ State lives in one SQLite file on your machine; nothing is sent anywhere.
 
 ## Status
 
-0.2.0, alpha. The MCP server (stdio), the CLI and paste mode work; the
-dashboard is read-only for now.
+0.4.0, alpha. The MCP server (stdio), the CLI, paste mode and the dashboard
+work; the dashboard views and edits the tracker.
 
 ## Install
 
@@ -154,7 +154,7 @@ Also remove `xoot` from Claude Desktop's config. The database is kept: delete
 xoot dashboard [--port N] [--open]
 ```
 
-Serves a read-only web view of the tracker on 127.0.0.1 (port 7373 unless
+Serves a web view and editor of the tracker on 127.0.0.1 (port 7373 unless
 `--port` says otherwise), in the foreground until Ctrl+C. It prints one URL:
 
 ```text
@@ -165,8 +165,12 @@ Open it in a browser on the same machine. The token is new at every launch
 and is swapped for a cookie on first use. `--open` opens it for you
 (`wslview` under WSL, else the default browser); it honours `--db`. Views:
 the item tree (done work collapsed, focus mode), item details, backlogs and
-decisions, refreshed every two seconds.
-Read-only for now; see [SECURITY.md](SECURITY.md#dashboard).
+decisions, refreshed every two seconds. It also writes: edit an item's
+title, body and state; add goals, batches and subtasks; capture backlog;
+cover or push backlog; move a batch or subtask (drag it in the tree, or
+"Move to…" in the details); record and edit decisions; rename the project.
+A move or drop with children and every push show their plan first and
+apply only once confirmed. See [SECURITY.md](SECURITY.md#dashboard).
 
 ## Screenshots
 

@@ -1,6 +1,7 @@
 // The backlog view: one section per level (batch, goal, project), each
 // holding one collapsible table per batch or goal. A group heading is a
-// button that collapses its table; all start expanded.
+// button that collapses its table; all start expanded. What a cover or push
+// did is announced above the tables, since its row leaves the list.
 import { useState } from 'react';
 
 import type { BacklogView } from '../api/types.gen.ts';
@@ -15,17 +16,30 @@ import { BacklogTable } from './BacklogTable.tsx';
 import { KeyTag, TitleText } from './Titled.tsx';
 
 interface BacklogsSectionProps {
+  prefix: string;
   view: BacklogView;
   titles: Titles;
 }
 
-export function BacklogsSection({ view, titles }: BacklogsSectionProps) {
+export function BacklogsSection({ prefix, view, titles }: BacklogsSectionProps) {
+  const [notice, setNotice] = useState('');
   const groups = backlogGroups(view, titles);
+  const status = (
+    <p role="status" className="notice">
+      {notice}
+    </p>
+  );
   if (groups.length === 0) {
-    return <p className="muted">No open backlog.</p>;
+    return (
+      <>
+        {status}
+        <p className="muted">No open backlog.</p>
+      </>
+    );
   }
   return (
     <>
+      {status}
       {LEVEL_ORDER.map((level) => {
         const inLevel = groups.filter((group) => group.level === level);
         if (inLevel.length === 0) {
@@ -35,7 +49,13 @@ export function BacklogsSection({ view, titles }: BacklogsSectionProps) {
           <section key={level} aria-labelledby={`level-${level}`}>
             <h2 id={`level-${level}`}>{LEVEL_HEADING[level]}</h2>
             {inLevel.map((group) => (
-              <GroupSection key={group.id} group={group} titles={titles} />
+              <GroupSection
+                key={group.id}
+                prefix={prefix}
+                group={group}
+                titles={titles}
+                onDone={setNotice}
+              />
             ))}
           </section>
         );
@@ -52,7 +72,14 @@ function heading(group: BacklogGroup): string {
   return group.holders.map((holder) => holder.title ?? holder.key).join(' › ');
 }
 
-function GroupSection({ group, titles }: { group: BacklogGroup; titles: Titles }) {
+interface GroupSectionProps {
+  prefix: string;
+  group: BacklogGroup;
+  titles: Titles;
+  onDone: (message: string) => void;
+}
+
+function GroupSection({ prefix, group, titles, onDone }: GroupSectionProps) {
   const [open, setOpen] = useState(true);
   const headingId = `backlog-${group.id}`;
   const panelId = `${headingId}-rows`;
@@ -85,7 +112,13 @@ function GroupSection({ group, titles }: { group: BacklogGroup; titles: Titles }
       </h3>
       {open && (
         <div id={panelId}>
-          <BacklogTable caption={heading(group)} rows={group.items} titles={titles} />
+          <BacklogTable
+            prefix={prefix}
+            caption={heading(group)}
+            rows={group.items}
+            titles={titles}
+            onDone={onDone}
+          />
         </div>
       )}
     </section>

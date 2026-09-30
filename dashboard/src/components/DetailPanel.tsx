@@ -1,13 +1,23 @@
 // The detail drawer, shared by every view: full height on the right, closed
-// by its button or Escape. It reads the item and the tree (for what open
-// backlog blocks) of the current project.
+// by its button or Escape (except from a form field, so a draft is not lost
+// to a stray key). It reads the item and the tree (for what open backlog
+// blocks) of the current project, and holds the item's write controls.
 import { useEffect, useRef } from 'react';
 
 import { useItem, useTree } from '../api/queries.ts';
 import { useDrawer } from '../hooks/useDrawer.ts';
 import { useTitles } from '../hooks/useTitles.ts';
 import { ItemDetails } from './ItemDetails.tsx';
+import { ItemWrite } from './ItemWrite.tsx';
 import { QueryState } from './QueryState.tsx';
+
+function isField(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  );
+}
 
 export function DetailPanel({ prefix }: { prefix: string }) {
   const { itemKey, close } = useDrawer();
@@ -18,7 +28,7 @@ export function DetailPanel({ prefix }: { prefix: string }) {
     }
     closeButton.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !isField(event.target)) {
         close();
       }
     };
@@ -35,7 +45,7 @@ export function DetailPanel({ prefix }: { prefix: string }) {
       <button ref={closeButton} type="button" className="drawer-close" onClick={close}>
         ✕ Close
       </button>
-      <DrawerItem prefix={prefix} itemKey={itemKey} />
+      <DrawerItem key={itemKey} prefix={prefix} itemKey={itemKey} />
     </aside>
   );
 }
@@ -54,7 +64,9 @@ function DrawerItem({ prefix, itemKey }: { prefix: string; itemKey: string }) {
           openBacklog={
             tree.data?.blocked.find((b) => b.key === view.item.key)?.open_backlog
           }
-        />
+        >
+          <ItemWrite prefix={prefix} view={view} />
+        </ItemDetails>
       )}
     </QueryState>
   );

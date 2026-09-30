@@ -13,6 +13,7 @@ import type {
   ItemView,
   ProjectsOutput,
   TreeView,
+  WorkflowView,
 } from './types.gen.ts';
 
 // The whole tree: the dashboard collapses done items itself.
@@ -72,6 +73,15 @@ export function useDecision(
     queryFn: ({ signal }) =>
       getJson<DecisionView>(`${projectPath(prefix)}/decisions/${keyPath(key)}`, signal),
     enabled,
+  });
+}
+
+// Every state of each kind and, for a kind that restricts them, its moves.
+export function useWorkflow(prefix: string): UseQueryResult<WorkflowView> {
+  return useQuery({
+    queryKey: queryKeys.workflow(prefix),
+    queryFn: ({ signal }) =>
+      getJson<WorkflowView>(`${projectPath(prefix)}/workflow`, signal),
   });
 }
 

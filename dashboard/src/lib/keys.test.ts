@@ -1,12 +1,33 @@
 import { describe, expect, it } from 'vitest';
 
-import { compareKeys, goalOf, keyPath, ownerLevel } from './keys.ts';
+import {
+  batchOf,
+  compareKeys,
+  goalOf,
+  keyPath,
+  ownerLevel,
+  subtaskOf,
+} from './keys.ts';
 
 describe('keys', () => {
   it('finds the goal a key sits under', () => {
     expect(goalOf('goal-3/batch-1/subtask-2')).toBe('goal-3');
     expect(goalOf('goal-3')).toBe('goal-3');
     expect(goalOf('backlog-4')).toBeNull();
+  });
+
+  it('finds the batch and subtask a key sits under', () => {
+    expect(batchOf('goal-3/batch-1/subtask-2/decision-1')).toBe('goal-3/batch-1');
+    expect(batchOf('goal-3/batch-1')).toBe('goal-3/batch-1');
+    expect(batchOf('goal-3')).toBeNull();
+    expect(batchOf('goal-3/backlog-1')).toBeNull();
+    expect(batchOf('backlog-1/batch-2')).toBeNull();
+    expect(subtaskOf('goal-3/batch-1/subtask-2/decision-1')).toBe(
+      'goal-3/batch-1/subtask-2',
+    );
+    expect(subtaskOf('goal-3/batch-1/subtask-2')).toBe('goal-3/batch-1/subtask-2');
+    expect(subtaskOf('goal-3/batch-1')).toBeNull();
+    expect(subtaskOf('goal-3/batch-1/backlog-2')).toBeNull();
   });
 
   it('reads an owner level from the last segment', () => {

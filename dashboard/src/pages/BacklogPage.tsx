@@ -16,7 +16,7 @@ export function BacklogPage() {
       <h1 className="view-title">Backlog</h1>
       <TabHelp tab="backlog" />
       <QueryState query={query} what="backlog">
-        {(view) => <BacklogsSection view={view} titles={titles} />}
+        {(view) => <BacklogsSection prefix={project} view={view} titles={titles} />}
       </QueryState>
     </div>
   );

@@ -1,6 +1,7 @@
 // A fake /api/v1 for component tests: responses keyed by path (without the
-// query string, percent-decoded as the server decodes it), served through
-// a stubbed fetch. Unknown paths are a 404.
+// query string, percent-decoded as the server decodes it), or by method and
+// path for writes, served through a stubbed fetch that records what was
+// sent. Unknown routes are a 404.
 import { vi } from 'vitest';
 
 import type {
@@ -19,6 +20,7 @@ import {
   P_BACKLOG,
   sampleTree,
 } from './fixtures.ts';
+import { workflowView } from './writes.ts';
 
 export type Routes = Record<string, unknown>;
 
@@ -36,21 +38,101 @@ export function urlOf(input: RequestInfo | URL): string {
   return input instanceof URL ? input.href : input.url;
 }
 
-// Installs the fake; a value that is a function is called on each request.
+// A chosen status and body; a plain value is a 200 with that body, and a
+// raw string is sent as a non-JSON body.
+export interface Reply {
+  readonly reply: true;
+  status: number;
+  body: unknown;
+}
+
+export function reply(status: number, body: unknown): Reply {
+  return { reply: true, status, body };
+}
+
+// The write error body the server sends.
+export function writeError(
+  status: number,
+  error: string,
+  message: string,
+  details: Record<string, unknown> = {},
+): Reply {
+  return reply(status, { error, message, details });
+}
+
+export interface Recorded {
+  method: string;
+  path: string;
+  body: unknown;
+  headers: Record<string, string>;
+  credentials: RequestCredentials | undefined;
+}
+
+function isReply(value: unknown): value is Reply {
+  return typeof value === 'object' && value !== null && 'reply' in value;
+}
+
+function respond(value: unknown): Response {
+  if (!isReply(value)) {
+    return json(200, value);
+  }
+  if (typeof value.body === 'string') {
+    return new Response(value.body, { status: value.status });
+  }
+  return json(value.status, value.body);
+}
+
+function record(input: RequestInfo | URL, init?: RequestInit): Recorded {
+  const url = new URL(urlOf(input), 'http://t');
+  const raw = init?.body;
+  return {
+    method: init?.method ?? 'GET',
+    path: decodeURIComponent(url.pathname.replace(/^\/api\/v1/, '')),
+    body: typeof raw === 'string' ? (JSON.parse(raw) as unknown) : undefined,
+    headers: Object.fromEntries(new Headers(init?.headers).entries()),
+    credentials: init?.credentials,
+  };
+}
+
+// Installs the fake. A route keyed by a bare path answers GET; a write is
+// keyed "METHOD /path". A value that is a function is called on each
+// request with what was sent, and may return a Reply.
 export function mockApi(routes: Routes) {
-  const fetchMock = vi.fn((input: RequestInfo | URL) => {
-    const url = new URL(urlOf(input), 'http://t');
-    const path = decodeURIComponent(url.pathname.replace(/^\/api\/v1/, ''));
-    const route = routes[path];
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const sent = record(input, init);
+    const route =
+      sent.method === 'GET' ? routes[sent.path] : routes[`${sent.method} ${sent.path}`];
     if (route === undefined) {
-      return Promise.resolve(json(404, { error: 'NotFoundError', message: path }));
+      return Promise.resolve(
+        json(404, { error: 'NotFoundError', message: sent.path, details: {} }),
+      );
     }
-    const body: unknown =
-      typeof route === 'function' ? (route as () => unknown)() : route;
-    return Promise.resolve(json(200, body));
+    const value: unknown =
+      typeof route === 'function' ? (route as (r: Recorded) => unknown)(sent) : route;
+    return Promise.resolve(respond(value));
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
+}
+
+// Every request the fake saw, optionally only one method's.
+export function requests(
+  fetchMock: ReturnType<typeof mockApi>,
+  method?: string,
+): Recorded[] {
+  return fetchMock.mock.calls
+    .map(([input, init]) => record(input, init))
+    .filter((sent) => method === undefined || sent.method === method);
+}
+
+// Answers each call with the next value; the last one repeats.
+export function sequence(...values: unknown[]): () => unknown {
+  let index = 0;
+  return () => {
+    const value = values[Math.min(index, values.length - 1)];
+    index += 1;
+    return value;
+  };
 }
 
 export function treeView(): TreeView {
@@ -156,6 +238,7 @@ export function projectRoutes(overrides: Routes = {}): Routes {
     '/projects/x/tree': treeView(),
     '/projects/x/decisions': decisionsView(),
     '/projects/x/backlog': backlogView(),
+    '/projects/x/workflow': workflowView(),
     ...items,
     ...overrides,
   };

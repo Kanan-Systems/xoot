@@ -100,7 +100,7 @@ def serve(db_path: Path, sock: socket.socket, open_browser: bool) -> None:
     codes = LaunchCodes()
     print(dashboard_url(port, token), file=sys.stdout, flush=True)
     print(
-        f"serving on {HOST}:{port}, read-only; Ctrl+C stops",
+        f"serving on {HOST}:{port}; Ctrl+C stops",
         file=sys.stderr,
         flush=True,
     )

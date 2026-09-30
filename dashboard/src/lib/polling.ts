@@ -16,6 +16,7 @@ export const queryKeys = {
   item: (prefix: string, key: string) => ['project', prefix, 'item', key] as const,
   decision: (prefix: string, key: string) =>
     ['project', prefix, 'decision', key] as const,
+  workflow: (prefix: string) => ['project', prefix, 'workflow'] as const,
 };
 
 // The first reading is a baseline, not a change.

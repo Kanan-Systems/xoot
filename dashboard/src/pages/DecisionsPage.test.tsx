@@ -1,6 +1,6 @@
-// The decisions tab: grouped by goal, each decision with its owner's level
-// and title, supersede links both ways, goal and level filters, and bodies
-// that expand as plain text.
+// The decisions tab: grouped goal > batch > subtask, each decision with its
+// owner's level and title, supersede links both ways, goal and level
+// filters, and bodies that expand as plain text.
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -49,15 +49,24 @@ describe('the decisions view', () => {
     mockApi(projectRoutes({ [`/projects/x/decisions/${OLD}`]: decisionView() }));
   });
 
-  it('groups by goal, headed by the goal title with its key', async () => {
+  it('groups goal > batch > subtask, headed by title and key', async () => {
     renderApp('/x/decisions');
     await screen.findByRole('button', { name: /new rule/ });
-    const headings = screen.getAllByRole('heading', { level: 2 });
-    expect(headings.map((heading) => heading.textContent)).toEqual([
-      'title of goal-1 goal-1 (2)',
-      'title of goal-2 goal-2 (1)',
+    const text = (level: number) =>
+      screen.getAllByRole('heading', { level }).map((heading) => heading.textContent);
+    expect(text(2)).toEqual([
+      '▾ title of goal-1 goal-1 (2)',
+      '▾ title of goal-2 goal-2 (1)',
     ]);
-    expect(shown()).toEqual([NEW, OLD, LATER]);
+    expect(text(3)).toEqual([
+      '▾ title of goal-1/batch-1 goal-1/batch-1 (1)',
+      '▾ title of goal-2/batch-1 goal-2/batch-1 (1)',
+    ]);
+    expect(text(4)).toEqual([
+      '▾ goal-2/batch-1/subtask-1 goal-2/batch-1/subtask-1 (1)',
+    ]);
+    // A goal's own decisions come before its batches'.
+    expect(shown()).toEqual([OLD, NEW, LATER]);
   });
 
   it("shows each owner's level and title, linked to its drawer", async () => {
@@ -97,7 +106,7 @@ describe('the decisions view', () => {
       target: { value: 'goal-1' },
     });
     await waitFor(() => {
-      expect(shown()).toEqual([NEW, OLD]);
+      expect(shown()).toEqual([OLD, NEW]);
     });
     fireEvent.change(filters.getByRole('combobox', { name: 'Level' }), {
       target: { value: 'goal' },

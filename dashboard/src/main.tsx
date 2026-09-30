@@ -2,6 +2,7 @@ import '@xyflow/react/dist/style.css';
 import './styles/app.css';
 import './styles/tree.css';
 import './styles/views.css';
+import './styles/forms.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

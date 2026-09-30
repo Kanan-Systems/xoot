@@ -110,7 +110,7 @@ describe('the project-root tree', () => {
     expect(backlog.querySelector('.node')).toHaveClass('node-backlog');
     const batch = await flowNode(B1);
     expect(batch).toHaveTextContent('all subtasks done · 1 backlog open');
-    expect(batch).toHaveTextContent(`Ask Claude to cover or push ${B1_BACKLOG}`);
+    expect(batch).toHaveTextContent(`Cover or push ${B1_BACKLOG} in the Backlog tab`);
     expect(batch).toHaveAccessibleName(/all subtasks done · 1 backlog open/);
   });
 

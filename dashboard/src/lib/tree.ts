@@ -113,10 +113,10 @@ export function blockedLine(blocked: Blocked): string {
   return `all ${blocked.children} done · ${String(blocked.count)} backlog open`;
 }
 
-// Read-only: the dashboard never writes, so it says what to ask for.
+// Where to act: open backlog is covered or pushed from the Backlog tab.
 export function blockedHint(key: string, blocked: Blocked): string {
   const target = blocked.backlog.length > 0 ? blocked.backlog.join(', ') : key;
-  return `Ask Claude to cover or push ${target}`;
+  return `Cover or push ${target} in the Backlog tab`;
 }
 
 export function blockedCounts(blocked: readonly BlockedEntry[]): Map<string, number> {

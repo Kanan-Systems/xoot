@@ -62,7 +62,7 @@ def _dashboard(
     command = commands.add_parser(
         "dashboard",
         parents=[common],
-        help="serve the read-only web dashboard on 127.0.0.1",
+        help="serve the web dashboard (view and edit) on 127.0.0.1",
     )
     group = command.add_argument_group("dashboard")
     group.add_argument(

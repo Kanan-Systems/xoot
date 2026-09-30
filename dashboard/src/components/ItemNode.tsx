@@ -3,7 +3,7 @@
 // first, after the kind as icon and word; the key is secondary. The category
 // shows as colour, icon and state name together. A backlog item has its own
 // icon, word and dashed card. A goal or batch held open by backlog says so,
-// with a read-only hint of what to ask for. A goal or batch with children
+// with a hint of where to cover or push it. A goal or batch with children
 // folds them away; folded, it says how many open ones it hides, if any.
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { MouseEvent } from 'react';

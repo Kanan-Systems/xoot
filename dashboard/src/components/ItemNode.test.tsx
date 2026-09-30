@@ -93,7 +93,7 @@ describe('ItemNode', () => {
     expect(
       screen.getByText('all subtasks done · 1 backlog open', { exact: false }),
     ).toBeInTheDocument();
-    const hint = screen.getByText(`Ask Claude to cover or push ${B1_BACKLOG}`);
+    const hint = screen.getByText(`Cover or push ${B1_BACKLOG} in the Backlog tab`);
     expect(hint.tagName).not.toBe('BUTTON');
     expect(screen.getAllByRole('button')).toHaveLength(1);
   });

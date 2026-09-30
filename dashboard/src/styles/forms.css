@@ -1,0 +1,121 @@
+/* Write forms, the plan confirm panel, refusals and row actions. */
+.write-form {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.field {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.field span {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.field input,
+.field select,
+.field textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 0.3rem 0.4rem;
+  max-width: 100%;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Refusals carry role="alert" and a left rule, not only a colour. */
+.write-error {
+  color: var(--blocked);
+  border-left: 3px solid var(--blocked);
+  padding-left: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.write-error p {
+  margin: 0.2rem 0;
+}
+
+.plan-confirm:empty {
+  display: none;
+}
+
+.plan-confirm {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed var(--accent);
+}
+
+.plan-changes li {
+  overflow-wrap: anywhere;
+}
+
+.notice:empty,
+.drop-message:empty {
+  display: none;
+}
+
+.notice {
+  color: var(--done);
+  margin: 0.25rem 0;
+}
+
+.drop-message {
+  margin: 0;
+  padding: 0.3rem 0.75rem;
+}
+
+.disclosure {
+  margin: 0.25rem 0;
+}
+
+.item-write {
+  margin: 0.5rem 0;
+}
+
+/* Above the row link stretched over the row, so the buttons stay usable. */
+.cell-actions {
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+.cell-actions button + button {
+  margin-left: 0.4rem;
+}
+
+.row-panel td {
+  background: var(--bg);
+}
+
+.project-rename {
+  position: relative;
+}
+
+.project-rename .disclosure-panel {
+  position: absolute;
+  top: 2rem;
+  left: 0;
+  z-index: 20;
+  width: 20rem;
+}
+
+.decision-group.depth-3,
+.decision-group.depth-4 {
+  margin-left: 1rem;
+}

@@ -1,6 +1,7 @@
-// One goal's decisions: title (key second), status chip, the owner's level
-// and title (opens the drawer) and supersede links, each shown as "title
-// (key)". A body loads when its row is expanded and is shown as plain text.
+// One heading's decisions: title (key second), status chip, the owner's
+// level and title (opens the drawer) and supersede links, each shown as
+// "title (key)". A body loads when its row is expanded and is shown as plain
+// text. Edit opens the decision's title, body and status in place.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -10,6 +11,7 @@ import { useDrawer } from '../hooks/useDrawer.ts';
 import { DECISION_STATUS, OWNER_LEVEL } from '../lib/display.ts';
 import { ownerLevel } from '../lib/keys.ts';
 import type { Titles } from '../lib/titles.ts';
+import { DecisionEditor } from './DecisionForms.tsx';
 import { QueryState } from './QueryState.tsx';
 import { KeyLabel, KeyTag, TitleText } from './Titled.tsx';
 
@@ -54,6 +56,8 @@ interface DecisionRowProps {
 
 function DecisionRow({ prefix, decision, successor, titles }: DecisionRowProps) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [notice, setNotice] = useState('');
   const { hrefFor } = useDrawer();
   const status = DECISION_STATUS[decision.status];
   const level = decision.owner === null ? null : ownerLevel(decision.owner);
@@ -104,7 +108,34 @@ function DecisionRow({ prefix, decision, successor, titles }: DecisionRowProps) 
             </a>
           </span>
         )}
+        <button
+          type="button"
+          aria-expanded={editing}
+          aria-label={`Edit ${decision.key}`}
+          onClick={() => {
+            setNotice('');
+            setEditing(!editing);
+          }}
+        >
+          Edit
+        </button>
+        <span role="status" className="notice">
+          {notice}
+        </span>
       </div>
+      {editing && (
+        <DecisionEditor
+          prefix={prefix}
+          decisionKey={decision.key}
+          onDone={(message) => {
+            setEditing(false);
+            setNotice(message);
+          }}
+          onCancel={() => {
+            setEditing(false);
+          }}
+        />
+      )}
       {expanded && (
         <div id={bodyId}>
           <DecisionBody prefix={prefix} decisionKey={decision.key} />

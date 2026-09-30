@@ -1,4 +1,4 @@
-"""`xoot dashboard`: serve the read-only web dashboard in the foreground."""
+"""`xoot dashboard`: serve the web dashboard in the foreground."""
 
 import argparse
 

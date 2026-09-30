@@ -1,6 +1,6 @@
 // The backlog tab: tables by level (batch, goal, project), each group
-// collapsible from its heading, with the title, key, state, found on, why
-// and created columns; a row click opens the drawer.
+// collapsible from its heading, with the title, key, state, found on, why,
+// created and actions columns; a row click opens the drawer.
 import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,7 +29,7 @@ describe('backlog groups', () => {
     ]);
   });
 
-  it('have the six columns, with "why" as the first line of the body', async () => {
+  it('have the seven columns, with "why" as the first line of the body', async () => {
     renderApp('/x/backlog');
     const table = await screen.findByRole('table', { name: 'Project backlog' });
     const headers = within(table).getAllByRole('columnheader');
@@ -40,6 +40,7 @@ describe('backlog groups', () => {
       'Found on',
       'Why',
       'Created',
+      'Actions',
     ]);
     const [, row] = within(table).getAllByRole('row');
     const cells = within(row as HTMLElement).getAllByRole('cell');
@@ -50,6 +51,7 @@ describe('backlog groups', () => {
       '—',
       'why backlog-1',
       '2026-09-28 09:30',
+      'Cover',
     ]);
   });
 

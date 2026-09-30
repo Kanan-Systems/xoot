@@ -1,19 +1,18 @@
-// /:project/decisions: full width, grouped by goal, filterable by goal
-// (?goal=), owner level (?level=) and status (?status=).
+// /:project/decisions: full width, grouped goal > batch > subtask,
+// filterable by goal (?goal=), owner level (?level=) and status (?status=).
 import { useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 import { useDecisions } from '../api/queries.ts';
 import type { DecisionStatus } from '../api/types.gen.ts';
-import { DecisionsSection } from '../components/DecisionsSection.tsx';
+import { DecisionHierarchy } from '../components/DecisionHierarchy.tsx';
 import { QueryState } from '../components/QueryState.tsx';
 import { TabHelp } from '../components/TabHelp.tsx';
-import { KeyTag, TitleText } from '../components/Titled.tsx';
+import { useCollapsed } from '../hooks/useCollapsed.ts';
 import { useTitles } from '../hooks/useTitles.ts';
 import {
   decisionGoals,
-  decisionGroups,
-  NO_GOAL,
+  decisionHierarchy,
   supersededBy,
   type DecisionFilter,
 } from '../lib/decisionGroups.ts';
@@ -65,6 +64,7 @@ export function DecisionsPage() {
   const [search, setSearch] = useSearchParams();
   const query = useDecisions(project);
   const titles = useTitles(project);
+  const collapsed = useCollapsed(project, 'decisions');
   const decisions = useMemo(() => query.data?.decisions ?? [], [query.data]);
   const successors = useMemo(() => supersededBy(decisions), [decisions]);
   const goals = useMemo(() => decisionGoals(decisions), [decisions]);
@@ -102,35 +102,23 @@ export function DecisionsPage() {
       </div>
       <QueryState query={query} what="decisions">
         {(view) => {
-          const groups = decisionGroups(view.decisions, filter);
+          const hierarchy = decisionHierarchy(view.decisions, filter);
+          const none = hierarchy.goals.length === 0 && hierarchy.ownerless.length === 0;
           return (
             <>
               {view.decisions.length === 0 ? (
                 <p className="muted">No decisions recorded yet</p>
               ) : (
-                groups.length === 0 && <p className="muted">No decisions match.</p>
+                none && <p className="muted">No decisions match.</p>
               )}
-              {groups.map((group) => (
-                <section key={group.goal} aria-labelledby={`goal-${group.goal}`}>
-                  <h2 id={`goal-${group.goal}`}>
-                    {group.goal === NO_GOAL ? (
-                      'Owner gone'
-                    ) : (
-                      <>
-                        <TitleText title={titles.get(group.goal) ?? group.goal} />{' '}
-                        <KeyTag value={group.goal} />
-                      </>
-                    )}{' '}
-                    <span className="count">({group.decisions.length})</span>
-                  </h2>
-                  <DecisionsSection
-                    prefix={project}
-                    decisions={group.decisions}
-                    successors={successors}
-                    titles={titles}
-                  />
-                </section>
-              ))}
+              <DecisionHierarchy
+                prefix={project}
+                hierarchy={hierarchy}
+                successors={successors}
+                titles={titles}
+                collapsed={collapsed.keys}
+                onToggle={collapsed.toggle}
+              />
               {view.truncated && (
                 <p className="warning">Only the newest 500 are shown.</p>
               )}

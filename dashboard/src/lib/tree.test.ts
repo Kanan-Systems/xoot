@@ -130,10 +130,10 @@ describe('helpers', () => {
     };
     expect(blockedLine(blocked)).toBe('all batches done · 2 backlog open');
     expect(blockedHint(G1, blocked)).toBe(
-      'Ask Claude to cover or push goal-1/backlog-1',
+      'Cover or push goal-1/backlog-1 in the Backlog tab',
     );
     expect(blockedHint(G1, { ...blocked, backlog: [] })).toBe(
-      'Ask Claude to cover or push goal-1',
+      'Cover or push goal-1 in the Backlog tab',
     );
   });
 

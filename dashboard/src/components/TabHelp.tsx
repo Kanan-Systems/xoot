@@ -18,8 +18,8 @@ export const TAB_HELP = {
     'project backlog. Open backlog keeps its batch or goal from completing until ' +
     'it is covered, resolved or pushed up.',
   decisions:
-    'Recorded choices and why they were made, grouped by goal; each belongs to ' +
-    'the goal, batch or subtask it was made on. Superseded ones link to their ' +
+    'Recorded choices and why they were made, grouped by goal, batch and subtask; ' +
+    'each belongs to the item it was made on. Superseded ones link to their ' +
     'replacement.',
 } as const;
 

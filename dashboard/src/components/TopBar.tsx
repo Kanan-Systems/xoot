@@ -1,5 +1,5 @@
-// The top bar: project switcher, goal selector, view tabs, legend and the
-// live indicator.
+// The top bar: project switcher and rename, goal selector, view tabs,
+// legend and the live indicator.
 import { NavLink, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useProjects, useTree } from '../api/queries.ts';
@@ -7,6 +7,7 @@ import { truncate } from '../lib/display.ts';
 import { PARAM } from '../lib/search.ts';
 import { LastUpdated } from './LastUpdated.tsx';
 import { Legend } from './Legend.tsx';
+import { ProjectRename } from './ProjectRename.tsx';
 
 const TABS = [
   { path: 'tree', label: 'Tree' },
@@ -25,6 +26,7 @@ export function TopBar({ prefix, checkedAt, failing }: TopBarProps) {
     <header className="topbar">
       <h1>xoot</h1>
       <ProjectSwitcher prefix={prefix} />
+      <ProjectRename prefix={prefix} />
       <GoalSelector prefix={prefix} />
       <nav aria-label="Views" className="tabs">
         {TABS.map((tab) => (

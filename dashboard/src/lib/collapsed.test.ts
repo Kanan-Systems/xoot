@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { loadCollapsed, saveCollapsed, storageKey } from './collapsed.ts';
+import { loadCollapsed, pruned, saveCollapsed, storageKey } from './collapsed.ts';
 
 describe('collapsed storage', () => {
   beforeEach(() => {
@@ -58,5 +58,21 @@ describe('collapsed storage', () => {
     expect(() => {
       saveCollapsed('x', new Set(['goal-1']));
     }).not.toThrow();
+  });
+
+  it('keeps each view under its own key', () => {
+    saveCollapsed('x', new Set(['goal-1']), 'decisions');
+    expect(localStorage.getItem(storageKey('x', 'decisions'))).toBe('["goal-1"]');
+    expect(loadCollapsed('x')).toEqual(new Set());
+    expect(loadCollapsed('x', 'decisions')).toEqual(new Set(['goal-1']));
+  });
+
+  it('prunes only keys that no longer exist, and says when none go', () => {
+    const existing = new Set(['goal-1', 'goal-1/batch-1']);
+    expect(pruned(new Set(['goal-1', 'goal-9']), existing)).toEqual(
+      new Set(['goal-1']),
+    );
+    expect(pruned(new Set(['goal-1']), existing)).toBeNull();
+    expect(pruned(new Set(), existing)).toBeNull();
   });
 });

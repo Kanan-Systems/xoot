@@ -1,17 +1,27 @@
-// The tree toolbar: the tab help, the show-done toggle and the cut warning.
-// The tree has no heading, so its help leads the toolbar.
+// The tree toolbar: the tab help, the page's own controls (New goal), the
+// show-done toggle and the cut warning. The tree has no heading, so its help
+// leads the toolbar.
+import type { ReactNode } from 'react';
+
 import { TabHelp } from './TabHelp.tsx';
 
 interface TreeToolbarProps {
   showDone: boolean;
   onShowDone: (show: boolean) => void;
   truncated: boolean;
+  children?: ReactNode;
 }
 
-export function TreeToolbar({ showDone, onShowDone, truncated }: TreeToolbarProps) {
+export function TreeToolbar({
+  showDone,
+  onShowDone,
+  truncated,
+  children,
+}: TreeToolbarProps) {
   return (
     <div className="tree-toolbar">
       <TabHelp tab="tree" />
+      {children}
       <label>
         <input
           type="checkbox"

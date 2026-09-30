@@ -1,4 +1,4 @@
-"""The guard: Host allowlist, read-only methods, token cookie, Origin, headers."""
+"""The guard: Host allowlist, methods and write routes, cookie, Origin, headers."""
 
 from http.cookies import SimpleCookie
 from typing import Any

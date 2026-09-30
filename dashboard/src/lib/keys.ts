@@ -16,6 +16,24 @@ export function goalOf(key: string): string | null {
   return first?.startsWith('goal-') === true ? first : null;
 }
 
+// The key's first depth segments when the last of them is of the kind: the
+// batch or subtask a key sits under (or is), else null.
+function prefixOf(key: string, depth: number, kind: OwnerLevel): string | null {
+  const parts = key.split('/');
+  const last = parts[depth - 1];
+  return last?.startsWith(`${kind}-`) === true ? parts.slice(0, depth).join('/') : null;
+}
+
+// The batch a key sits under (the batch itself for a batch), or null.
+export function batchOf(key: string): string | null {
+  return goalOf(key) === null ? null : prefixOf(key, 2, 'batch');
+}
+
+// The subtask a key sits under (the subtask itself for a subtask), or null.
+export function subtaskOf(key: string): string | null {
+  return batchOf(key) === null ? null : prefixOf(key, 3, 'subtask');
+}
+
 // The level of a decision's owner, from the owner's key.
 export function ownerLevel(owner: string): OwnerLevel | null {
   const kind = lastKind(owner);
