@@ -2,7 +2,8 @@
 Issuing and consuming confirm tokens for two-phase writes.
 
 A preview issues a token bound to one project, one tool, one argument
-digest and one plan digest. The apply presents it inside its own write
+digest, one plan digest and the actor (kind and client) that previewed. The
+apply presents it inside its own write
 transaction, which checks and consumes it first, then re-plans and compares
 the plan digest before writing, so the token is spent only if the write
 commits, and only for the plan the preview showed.
@@ -19,6 +20,7 @@ from xoot.models.confirm.confirm_token import ConfirmToken
 from xoot.models.confirm.confirmation import Confirmation
 from xoot.models.confirm.new_confirm_token import NewConfirmToken
 from xoot.models.confirm.plan_entry import PlanEntry
+from xoot.models.event.actor import Actor
 from xoot.repositories.confirm import confirm_token_db
 from xoot.services.id_checks import check_id
 from xoot.services.lookups import require_project
@@ -71,6 +73,7 @@ def issue_token(  # pylint: disable=too-many-arguments
     args_sha256: str,
     plan_sha256: str,
     *,
+    actor: Actor,
     now: datetime | None = None,
 ) -> str:
     """
@@ -85,6 +88,8 @@ def issue_token(  # pylint: disable=too-many-arguments
         - tool (str): the tool the token is valid for.
         - args_sha256 (str): digest of the previewed call's arguments.
         - plan_sha256 (str): plan_digest of the previewed plan.
+        - actor (Actor): who previewed; only the same kind and client may
+          apply.
         - now (datetime | None): issue time; the current UTC time when None.
 
     Returns:
@@ -104,6 +109,8 @@ def issue_token(  # pylint: disable=too-many-arguments
         tool=tool,
         args_sha256=args_sha256,
         plan_sha256=plan_sha256,
+        actor_kind=actor.kind,
+        client=actor.client,
         expires_at=issued_at + TOKEN_TTL,
     )
     with store.write() as conn:
@@ -120,6 +127,7 @@ def consume_token(
     conn: sqlite3.Connection,
     confirmation: Confirmation,
     project_id: int,
+    actor: Actor,
     now: datetime | None = None,
 ) -> ConfirmToken:
     """
@@ -133,6 +141,7 @@ def consume_token(
         - conn (sqlite3.Connection): connection inside that transaction.
         - confirmation (Confirmation): the token, tool and argument digest.
         - project_id (int): the project of the write.
+        - actor (Actor): who is applying; the write's own actor.
         - now (datetime | None): use time; the current UTC time when None.
 
     Returns:
@@ -140,7 +149,7 @@ def consume_token(
 
     Raises:
         - ConfirmTokenError: the token is unknown, bound to another tool,
-          project or arguments, already used, or expired.
+          project, arguments or actor, already used, or expired.
     """
     used_at = datetime.now(UTC) if now is None else now
     row = confirm_token_db.get_by_hash(conn, hash_token(confirmation.token))
@@ -152,6 +161,8 @@ def consume_token(
         raise ConfirmTokenError("the confirm token was issued for another project")
     if row.args_sha256 != confirmation.args_sha256:
         raise ConfirmTokenError("the confirm token does not match these arguments")
+    if row.actor_kind != actor.kind or row.client != actor.client:
+        raise ConfirmTokenError("the confirm token was issued to another client")
     if row.used_at is not None:
         raise ConfirmTokenError("the confirm token has already been used")
     if used_at >= row.expires_at:

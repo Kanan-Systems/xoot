@@ -29,3 +29,4 @@ class DuplicateError(XootError):
         super().__init__(message)
         self.field = field
         self.value = value
+        self.own = own

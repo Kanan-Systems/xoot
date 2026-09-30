@@ -36,6 +36,7 @@ from xoot.services.item_store import allocate_number
 from xoot.services.item_writer import apply_changes, plan_change
 from xoot.services.lookups import active_workflow, require_item, require_project
 from xoot.services.move_planner import plan_move
+from xoot.services.plan_cap import check_plan_size
 from xoot.services.plan_entries import item_entry
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
@@ -62,6 +63,7 @@ def preview_drop(store: Store, item_id: int, state: str | None = None) -> Subtre
 
     Raises:
         - StateError: state is not in the root kind's dropped category.
+        - PlanSizeError: the plan changes more than MAX_PLAN_ITEMS items.
         - InvalidIdError: item_id is not an int id.
         - NotFoundError: no such item.
     """
@@ -101,6 +103,7 @@ def apply_drop(  # pylint: disable=too-many-arguments
         - ConfirmTokenError: the token cannot authorize this call, or the
           plan changed since the preview.
         - StateError: state is not in the root kind's dropped category.
+        - PlanSizeError: the plan changes more than MAX_PLAN_ITEMS items.
         - VersionConflictError: the root changed since expected_version.
         - InvalidIdError: item_id or expected_version is not an int.
         - NotFoundError: no such item.
@@ -140,6 +143,7 @@ def apply_drop_in(
         - ConfirmTokenError: the token cannot authorize this call, or the
           plan changed since the preview.
         - StateError: state is not in the root kind's dropped category.
+        - PlanSizeError: the plan changes more than MAX_PLAN_ITEMS items.
         - VersionConflictError: the root changed since expected_version.
         - NotFoundError: no such item.
     """
@@ -164,6 +168,7 @@ def preview_reparent(
     Raises:
         - HierarchyError: the new parent is not allowed for the root's kind,
           or the root is a backlog item.
+        - PlanSizeError: the plan changes more than MAX_PLAN_ITEMS items.
         - CrossProjectError: the new parent is in another project.
         - InvalidIdError: item_id or new_parent_id is not an int id.
         - NotFoundError: the item or the new parent does not exist.
@@ -205,6 +210,7 @@ def apply_reparent(  # pylint: disable=too-many-arguments
           plan changed since the preview.
         - VersionConflictError: the root changed since expected_version.
         - HierarchyError: the new parent is not allowed for the root's kind.
+        - PlanSizeError: the plan changes more than MAX_PLAN_ITEMS items.
         - CrossProjectError: the new parent is in another project.
         - InvalidIdError: an id or expected_version is not an int.
         - NotFoundError: the item or the new parent does not exist.
@@ -247,6 +253,7 @@ def apply_reparent_in(
           plan changed since the preview.
         - VersionConflictError: the root changed since expected_version.
         - HierarchyError: the new parent is not allowed for the root's kind.
+        - PlanSizeError: the plan changes more than MAX_PLAN_ITEMS items.
         - CrossProjectError: the new parent is in another project.
         - NotFoundError: the item or the new parent does not exist.
     """
@@ -292,7 +299,11 @@ def write_plan(  # pylint: disable=too-many-arguments,too-many-positional-argume
     """
     conn = scope.conn
     root = require_item(conn, item_id)
-    token = None if confirm is None else consume_token(conn, confirm, root.project_id)
+    token = (
+        None
+        if confirm is None
+        else consume_token(conn, confirm, root.project_id, scope.ctx.actor)
+    )
     if expected_version is not None:
         ensure_version(conn, EntityType.ITEM, root, expected_version)
     plan = planner(conn, root)
@@ -363,9 +374,10 @@ def _plan_drop(
         if change is not None:
             changes.append(change)
             entries.append(item_entry(conn, item, fields))
-    return SubtreePlan(
+    plan = SubtreePlan(
         root_id=root.id, changes=tuple(changes), plan_sha256=plan_digest(entries)
     )
+    return check_plan_size(root, plan)
 
 
 def _plan_reparent(
@@ -374,4 +386,4 @@ def _plan_reparent(
     if root.kind is ItemKind.BACKLOG:
         raise HierarchyError(BACKLOG_MOVES)
     parent = check_parent(conn, root.project_id, root.kind, new_parent_id)
-    return plan_move(conn, root, parent)
+    return check_plan_size(root, plan_move(conn, root, parent))

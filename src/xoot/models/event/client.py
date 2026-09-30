@@ -10,3 +10,4 @@ class Client(StrEnum):
     CODE = "code"
     PASTE = "paste"
     CLI = "cli"
+    DASHBOARD = "dashboard"

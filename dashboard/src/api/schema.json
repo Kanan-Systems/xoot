@@ -10,6 +10,42 @@
       "title": "ActorKind",
       "type": "string"
     },
+    "AffectedItemEntry": {
+      "description": "The item's state, parent and new version, enough for the next item_update.",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "state",
+        "parent",
+        "version"
+      ],
+      "title": "AffectedItemEntry",
+      "type": "object"
+    },
     "BacklogRow": {
       "description": "The backlog entry plus when the item was created and why it was\ncaptured: the first line of its body, cut to WHY_MAX characters.",
       "properties": {
@@ -239,6 +275,36 @@
       "title": "BriefView",
       "type": "object"
     },
+    "CaptureRequest": {
+      "additionalProperties": false,
+      "description": "Open work found on an item, with a body saying why it needs doing.",
+      "properties": {
+        "body": {
+          "maxLength": 32768,
+          "title": "Body",
+          "type": "string"
+        },
+        "found_on": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Found On",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "found_on",
+        "title",
+        "body"
+      ],
+      "title": "CaptureRequest",
+      "type": "object"
+    },
     "Category": {
       "description": "The fixed set of categories. Project workflows name their own states,\nbut every state belongs to exactly one of these, and domain rules\n(completion, backlog counts, tree filtering) reason only in categories.\nBacklog is an item kind, not a category.",
       "enum": [
@@ -251,6 +317,32 @@
       ],
       "title": "Category",
       "type": "string"
+    },
+    "ChangeEntry": {
+      "description": "The item key and its changed fields, old and new, with keys for\nreferences; a move includes the number the item takes.",
+      "properties": {
+        "after": {
+          "additionalProperties": true,
+          "title": "After",
+          "type": "object"
+        },
+        "before": {
+          "additionalProperties": true,
+          "title": "Before",
+          "type": "object"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "before",
+        "after"
+      ],
+      "title": "ChangeEntry",
+      "type": "object"
     },
     "ChangesView": {
       "description": "The project's newest event id; the dashboard polls it for changes.",
@@ -310,10 +402,140 @@
         "chat",
         "code",
         "paste",
-        "cli"
+        "cli",
+        "dashboard"
       ],
       "title": "Client",
       "type": "string"
+    },
+    "CoverOutput": {
+      "description": "The new subtask, the backlog item it closed, and the engine's outcome.",
+      "properties": {
+        "backlog": {
+          "$ref": "#/$defs/ItemSummary"
+        },
+        "blocked": {
+          "items": {
+            "$ref": "#/$defs/BlockedEntry"
+          },
+          "title": "Blocked",
+          "type": "array"
+        },
+        "changed": {
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "title": "Changed",
+          "type": "array"
+        },
+        "completed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Completed",
+          "type": "array"
+        },
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "reopened": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reopened",
+          "type": "array"
+        },
+        "subtask": {
+          "$ref": "#/$defs/ItemDetail"
+        }
+      },
+      "required": [
+        "project",
+        "subtask",
+        "backlog"
+      ],
+      "title": "CoverOutput",
+      "type": "object"
+    },
+    "CoverRequest": {
+      "additionalProperties": false,
+      "description": "Turn a backlog item into a subtask and close it. A goal-level item needs\nthe batch to cover it in; a batch-level one is covered in its own batch.",
+      "properties": {
+        "batch": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Batch"
+        },
+        "key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "CoverRequest",
+      "type": "object"
+    },
+    "DecisionCreateRequest": {
+      "additionalProperties": false,
+      "description": "A decision on the goal, batch or subtask it was made on; supersedes names\nan older decision of the same goal, which becomes superseded.",
+      "properties": {
+        "body": {
+          "default": "",
+          "maxLength": 32768,
+          "title": "Body",
+          "type": "string"
+        },
+        "owner": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Owner",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/DecisionStatus",
+          "default": "locked"
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes"
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner",
+        "title"
+      ],
+      "title": "DecisionCreateRequest",
+      "type": "object"
     },
     "DecisionDetail": {
       "description": "The summary plus the body and creation time.",
@@ -382,6 +604,24 @@
       "title": "DecisionDetail",
       "type": "object"
     },
+    "DecisionOutput": {
+      "description": "One decision in full, and the project it belongs to.",
+      "properties": {
+        "decision": {
+          "$ref": "#/$defs/DecisionDetail"
+        },
+        "project": {
+          "title": "Project",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "decision"
+      ],
+      "title": "DecisionOutput",
+      "type": "object"
+    },
     "DecisionStatus": {
       "description": "Superseded is terminal and only reached by a newer decision.",
       "enum": [
@@ -447,6 +687,61 @@
         "updated_at"
       ],
       "title": "DecisionSummary",
+      "type": "object"
+    },
+    "DecisionUpdateRequest": {
+      "additionalProperties": false,
+      "description": "New title, body or status of a decision, based on expected_version.",
+      "properties": {
+        "body": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Body"
+        },
+        "expected_version": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "title": "Expected Version",
+          "type": "integer"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecisionStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "required": [
+        "expected_version"
+      ],
+      "title": "DecisionUpdateRequest",
       "type": "object"
     },
     "DecisionView": {
@@ -640,6 +935,53 @@
         "version"
       ],
       "title": "GoalProgressEntry",
+      "type": "object"
+    },
+    "ItemCreateRequest": {
+      "additionalProperties": false,
+      "description": "A new goal, batch or subtask. A goal takes no parent, a batch a goal and\na subtask a batch; backlog items come from capture.",
+      "properties": {
+        "body": {
+          "default": "",
+          "maxLength": 32768,
+          "title": "Body",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "goal",
+            "batch",
+            "subtask"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent"
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "title"
+      ],
+      "title": "ItemCreateRequest",
       "type": "object"
     },
     "ItemDetail": {
@@ -836,6 +1178,187 @@
       "title": "ItemSummary",
       "type": "object"
     },
+    "ItemUpdateOutput": {
+      "description": "mode is the path taken. A direct update returns the item. A drop or\nreparent of an item with children first returns a preview plan and a\nconfirm_token, then the applied plan; an applied drop or reparent also\nreturns every item it changed, as it now stands, in items. A reparent\nre-keys the moved subtree; the old keys keep resolving.",
+      "properties": {
+        "blocked": {
+          "items": {
+            "$ref": "#/$defs/BlockedEntry"
+          },
+          "title": "Blocked",
+          "type": "array"
+        },
+        "changed": {
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "title": "Changed",
+          "type": "array"
+        },
+        "completed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Completed",
+          "type": "array"
+        },
+        "confirm_token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confirm Token"
+        },
+        "item": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemDetail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "items": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/AffectedItemEntry"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Items"
+        },
+        "mode": {
+          "enum": [
+            "update",
+            "drop",
+            "reparent"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "preview",
+            "applied"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtreeOutput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "reopened": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reopened",
+          "type": "array"
+        }
+      },
+      "required": [
+        "project",
+        "mode",
+        "phase",
+        "confirm_token",
+        "item",
+        "plan"
+      ],
+      "title": "ItemUpdateOutput",
+      "type": "object"
+    },
+    "ItemUpdateRequest": {
+      "additionalProperties": false,
+      "description": "New title, body or state, based on expected_version. Dropping an item that\nhas children first returns a preview and a confirm_token; send the state\nalone, then the same body plus the token.",
+      "properties": {
+        "body": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Body"
+        },
+        "confirm_token": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confirm Token"
+        },
+        "expected_version": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "title": "Expected Version",
+          "type": "integer"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "State"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "required": [
+        "expected_version"
+      ],
+      "title": "ItemUpdateRequest",
+      "type": "object"
+    },
     "ItemView": {
       "description": "One item in full: its children (work first, then backlog), its most\nrecent events (newest first) and the decisions made on it, with bodies.",
       "properties": {
@@ -869,6 +1392,52 @@
       "title": "ItemView",
       "type": "object"
     },
+    "ItemWriteOutput": {
+      "description": "The new item, and what the completion engine did.",
+      "properties": {
+        "blocked": {
+          "items": {
+            "$ref": "#/$defs/BlockedEntry"
+          },
+          "title": "Blocked",
+          "type": "array"
+        },
+        "changed": {
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "title": "Changed",
+          "type": "array"
+        },
+        "completed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Completed",
+          "type": "array"
+        },
+        "item": {
+          "$ref": "#/$defs/ItemDetail"
+        },
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "reopened": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reopened",
+          "type": "array"
+        }
+      },
+      "required": [
+        "project",
+        "item"
+      ],
+      "title": "ItemWriteOutput",
+      "type": "object"
+    },
     "MetaOutput": {
       "description": "The running xoot version.",
       "properties": {
@@ -881,6 +1450,51 @@
         "version"
       ],
       "title": "MetaOutput",
+      "type": "object"
+    },
+    "MoveRequest": {
+      "additionalProperties": false,
+      "description": "Move a batch to another goal, or a subtask to another batch, with its\nsubtree. An item with children first returns a preview and a\nconfirm_token; send the same body plus the token to apply.",
+      "properties": {
+        "confirm_token": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confirm Token"
+        },
+        "expected_version": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "title": "Expected Version",
+          "type": "integer"
+        },
+        "key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "parent": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Parent",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "parent",
+        "expected_version"
+      ],
+      "title": "MoveRequest",
       "type": "object"
     },
     "ProjectInfo": {
@@ -910,6 +1524,41 @@
       "title": "ProjectInfo",
       "type": "object"
     },
+    "ProjectRenameRequest": {
+      "additionalProperties": false,
+      "description": "A new display name, an extra alias, or both. The key prefix never\nchanges: keys and URLs are built from it.",
+      "properties": {
+        "alias": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9-]{1,31}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alias"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        }
+      },
+      "title": "ProjectRenameRequest",
+      "type": "object"
+    },
     "ProjectsOutput": {
       "description": "Every registered project, by key prefix.",
       "properties": {
@@ -925,6 +1574,115 @@
         "projects"
       ],
       "title": "ProjectsOutput",
+      "type": "object"
+    },
+    "PushOutput": {
+      "description": "A preview returns the plan (the new key) and a confirm_token; an apply\nreturns the plan written, the item as it now stands, and the engine's\noutcome. The old key keeps resolving to the item.",
+      "properties": {
+        "blocked": {
+          "items": {
+            "$ref": "#/$defs/BlockedEntry"
+          },
+          "title": "Blocked",
+          "type": "array"
+        },
+        "changed": {
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "title": "Changed",
+          "type": "array"
+        },
+        "completed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Completed",
+          "type": "array"
+        },
+        "confirm_token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confirm Token"
+        },
+        "item": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AffectedItemEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "phase": {
+          "enum": [
+            "preview",
+            "applied"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "plan": {
+          "$ref": "#/$defs/SubtreeOutput"
+        },
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "reopened": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reopened",
+          "type": "array"
+        }
+      },
+      "required": [
+        "project",
+        "phase",
+        "confirm_token",
+        "plan",
+        "item"
+      ],
+      "title": "PushOutput",
+      "type": "object"
+    },
+    "PushRequest": {
+      "additionalProperties": false,
+      "description": "Push a backlog item one level up. Always two-phase: the first call\nreturns the plan and a confirm_token; send the same body plus the token.",
+      "properties": {
+        "confirm_token": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confirm Token"
+        },
+        "key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "PushRequest",
       "type": "object"
     },
     "StateSpec": {
@@ -945,6 +1703,28 @@
         "category"
       ],
       "title": "StateSpec",
+      "type": "object"
+    },
+    "SubtreeOutput": {
+      "description": "Every row that changes, in write order; a move lists each key change.",
+      "properties": {
+        "changes": {
+          "items": {
+            "$ref": "#/$defs/ChangeEntry"
+          },
+          "title": "Changes",
+          "type": "array"
+        },
+        "root": {
+          "title": "Root",
+          "type": "string"
+        }
+      },
+      "required": [
+        "root",
+        "changes"
+      ],
+      "title": "SubtreeOutput",
       "type": "object"
     },
     "TreeEntry": {
@@ -1000,6 +1780,30 @@
       "title": "TreeView",
       "type": "object"
     },
+    "VersionEntry": {
+      "description": "The item's key, new version and state, for the next expected_version.",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "version",
+        "state"
+      ],
+      "title": "VersionEntry",
+      "type": "object"
+    },
     "WorkflowEntry": {
       "description": "Every state of one kind with its category, so a client picks real state\nnames, and whether only listed transitions are allowed.",
       "properties": {
@@ -1020,6 +1824,91 @@
         "transitions_restricted"
       ],
       "title": "WorkflowEntry",
+      "type": "object"
+    },
+    "WorkflowKindView": {
+      "description": "Every state of one kind with its category, in workflow order, and the\nmoves a user may make. transitions is null when any state may move to\nany other; when the kind restricts them it maps every state name to the\nstates it may move to (possibly none). Keeping the current state is\nalways allowed and is not listed.",
+      "properties": {
+        "states": {
+          "items": {
+            "$ref": "#/$defs/StateSpec"
+          },
+          "title": "States",
+          "type": "array"
+        },
+        "transitions": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Transitions"
+        },
+        "transitions_restricted": {
+          "title": "Transitions Restricted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "states",
+        "transitions_restricted",
+        "transitions"
+      ],
+      "title": "WorkflowKindView",
+      "type": "object"
+    },
+    "WorkflowView": {
+      "description": "The project's active workflow: every state of each item kind with its\ncategory, as brief_get shows it, plus the allowed moves of a kind that\nrestricts them, so an editor offers only real states and real moves.",
+      "properties": {
+        "workflow": {
+          "additionalProperties": {
+            "$ref": "#/$defs/WorkflowKindView"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/ItemKind"
+          },
+          "title": "Workflow",
+          "type": "object"
+        }
+      },
+      "required": [
+        "workflow"
+      ],
+      "title": "WorkflowView",
+      "type": "object"
+    },
+    "WriteErrorOutput": {
+      "description": "A write error: the class name and safe message of ErrorOutput plus\ndetails, always present. details is an empty object when there is\nnothing to report, or structured facts such as a version conflict's\ncurrent version, changed fields and actors. A separate model, because\nread errors keep their two-field body.",
+      "properties": {
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "error": {
+          "title": "Error",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "error",
+        "message",
+        "details"
+      ],
+      "title": "WriteErrorOutput",
       "type": "object"
     }
   },

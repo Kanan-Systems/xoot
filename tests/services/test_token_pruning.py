@@ -3,6 +3,9 @@
 from datetime import UTC, datetime, timedelta
 
 from xoot.models.confirm.new_confirm_token import NewConfirmToken
+from xoot.models.event.actor import Actor
+from xoot.models.event.actor_kind import ActorKind
+from xoot.models.event.client import Client
 from xoot.models.project.project import Project
 from xoot.repositories.confirm import confirm_token_db
 from xoot.services.confirm_service import TOKEN_TTL, hash_token, issue_token
@@ -10,6 +13,7 @@ from xoot.store.store import Store
 
 NOW = datetime(2026, 9, 27, 12, 0, tzinfo=UTC)
 DIGEST = "f" * 64
+USER = Actor(kind=ActorKind.USER, client=Client.CLI)
 
 
 def _backdated(
@@ -25,6 +29,8 @@ def _backdated(
                 tool="backlog_push",
                 args_sha256=DIGEST,
                 plan_sha256=DIGEST,
+                actor_kind=USER.kind,
+                client=USER.client,
                 expires_at=issued + TOKEN_TTL,
             ),
         )
@@ -41,7 +47,9 @@ def test_issue_prunes_only_old_spent_tokens(store: Store, project: Project) -> N
     _backdated(store, project, "d", NOW - day + timedelta(minutes=1), used=False)
     _backdated(store, project, "e", NOW - timedelta(hours=1), used=True)
     _backdated(store, project, "f", NOW - timedelta(minutes=1), used=False)
-    token = issue_token(store, project.id, "backlog_push", DIGEST, DIGEST, now=NOW)
+    token = issue_token(
+        store, project.id, "backlog_push", DIGEST, DIGEST, actor=USER, now=NOW
+    )
     with store.read() as conn:
         left = {
             row["token_sha256"]

@@ -49,7 +49,9 @@ def fixture_plan_changed(
         change: Callable[[], object],
         apply: Apply,
     ) -> None:
-        token = issue_token(store, project_id, tool, DIGEST, plan_sha256)
+        token = issue_token(
+            store, project_id, tool, DIGEST, plan_sha256, actor=CLAUDE.actor
+        )
         change()
         before = row_counts()
         claim = Confirmation(token=token, tool=tool, args_sha256=DIGEST)

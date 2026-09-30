@@ -11,10 +11,13 @@ from xoot.dashboard.schemas.decisions_view import DecisionsView
 from xoot.dashboard.schemas.project_info import ProjectInfo
 from xoot.dashboard.schemas.projects_output import ProjectsOutput
 from xoot.dashboard.schemas.tree_view import TreeView
+from xoot.dashboard.schemas.workflow_kind_view import WorkflowKindView
+from xoot.dashboard.schemas.workflow_view import WorkflowView
 from xoot.dashboard.views.lookup import item_of, project_of
 from xoot.models.fields import format_timestamp
 from xoot.models.item.tree_query import TreeQuery
 from xoot.models.project.project_overview import ProjectOverview
+from xoot.models.workflow.kind_workflow import KindWorkflow
 from xoot.repositories.decision import decision_db
 from xoot.repositories.project import project_db
 from xoot.server.brief import build_brief
@@ -23,6 +26,7 @@ from xoot.server.render import decision_summary, item_summary, tree_entries
 from xoot.server.schemas.blocked_entry import BlockedEntry
 from xoot.services.backlog_reads import backlog_items, backlog_level, blocked_items
 from xoot.services.history_service import latest_event_id
+from xoot.services.lookups import active_workflow
 from xoot.services.project_service import overview
 from xoot.services.tree_service import tree_in
 
@@ -201,6 +205,46 @@ def changes_view(conn: sqlite3.Connection, prefix: str) -> ChangesView:
     """
     return ChangesView(
         latest_event_id=latest_event_id(conn, project_of(conn, prefix).id)
+    )
+
+
+def workflow_view(conn: sqlite3.Connection, prefix: str) -> WorkflowView:
+    """
+    Report every item kind's states, categories and allowed moves from the
+    active workflow.
+
+    Args:
+        - conn (sqlite3.Connection): a connection inside a read transaction.
+        - prefix (str): the project prefix from the path.
+
+    Returns:
+        - view (WorkflowView): the states per kind.
+
+    Raises:
+        - ApiError: 404, no such project.
+    """
+    definition = active_workflow(conn, project_of(conn, prefix)).definition
+    return WorkflowView(
+        workflow={kind: _kind_view(flow) for kind, flow in definition.kinds.items()}
+    )
+
+
+def _kind_view(workflow: KindWorkflow) -> WorkflowKindView:
+    """
+    One kind's states and moves. The moves are read through allows(), the
+    rule check_transition applies, so the map can never disagree with it.
+    """
+    names = [spec.name for spec in workflow.states]
+    moves = None
+    if workflow.transitions is not None:
+        moves = {
+            source: [t for t in names if t != source and workflow.allows(source, t)]
+            for source in names
+        }
+    return WorkflowKindView(
+        states=list(workflow.states),
+        transitions_restricted=workflow.transitions is not None,
+        transitions=moves,
     )
 
 

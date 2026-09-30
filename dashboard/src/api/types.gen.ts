@@ -42,7 +42,11 @@ export type DecisionStatus = 'locked' | 'deferred' | 'superseded';
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
  * via the `definition` "Client".
  */
-export type Client = 'chat' | 'code' | 'paste' | 'cli';
+export type Client = 'chat' | 'code' | 'paste' | 'cli' | 'dashboard';
+/**
+ * Superseded is terminal and only reached by a newer decision.
+ */
+export type DecisionStatus1 = 'locked' | 'deferred' | 'superseded';
 /**
  * The kind of mutation an event row describes.
  *
@@ -60,6 +64,18 @@ export type EventAction =
 
 export interface XootDashboardApi {
   [k: string]: unknown;
+}
+/**
+ * The item's state, parent and new version, enough for the next item_update.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "AffectedItemEntry".
+ */
+export interface AffectedItemEntry {
+  key: string;
+  parent: string | null;
+  state: string;
+  version: number;
 }
 /**
  * The backlog entry plus when the item was created and why it was
@@ -214,6 +230,33 @@ export interface StateSpec {
   name: string;
 }
 /**
+ * Open work found on an item, with a body saying why it needs doing.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "CaptureRequest".
+ */
+export interface CaptureRequest {
+  body: string;
+  found_on: string;
+  title: string;
+}
+/**
+ * The item key and its changed fields, old and new, with keys for
+ * references; a move includes the number the item takes.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "ChangeEntry".
+ */
+export interface ChangeEntry {
+  after: {
+    [k: string]: unknown;
+  };
+  before: {
+    [k: string]: unknown;
+  };
+  key: string;
+}
+/**
  * The project's newest event id; the dashboard polls it for changes.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
@@ -237,6 +280,82 @@ export interface ChildrenSummary {
   truncated: boolean;
 }
 /**
+ * The new subtask, the backlog item it closed, and the engine's outcome.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "CoverOutput".
+ */
+export interface CoverOutput {
+  backlog: ItemSummary;
+  blocked?: BlockedEntry[];
+  changed?: VersionEntry[];
+  completed?: string[];
+  project: string;
+  reopened?: string[];
+  subtask: ItemDetail;
+}
+/**
+ * The item's key, new version and state, for the next expected_version.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "VersionEntry".
+ */
+export interface VersionEntry {
+  key: string;
+  state: string;
+  version: number;
+}
+/**
+ * The summary plus the body, the awaited decision, the backlog links
+ * (found_on and covered_by on a backlog item, origin on a subtask made
+ * from one), every older key that still resolves to it, and timestamps.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "ItemDetail".
+ */
+export interface ItemDetail {
+  aliases: string[];
+  awaiting_decision: string | null;
+  body: string;
+  category: Category | null;
+  covered_by: string | null;
+  created_at: string;
+  found_on: string | null;
+  key: string;
+  kind: ItemKind;
+  origin: string | null;
+  parent: string | null;
+  state: string;
+  title: string;
+  updated_at: string;
+  version: number;
+}
+/**
+ * Turn a backlog item into a subtask and close it. A goal-level item needs
+ * the batch to cover it in; a batch-level one is covered in its own batch.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "CoverRequest".
+ */
+export interface CoverRequest {
+  batch?: string | null;
+  key: string;
+}
+/**
+ * A decision on the goal, batch or subtask it was made on; supersedes names
+ * an older decision of the same goal, which becomes superseded.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "DecisionCreateRequest".
+ */
+export interface DecisionCreateRequest {
+  body?: string;
+  owner: string;
+  status?: DecisionStatus1;
+  supersedes?: string | null;
+  title: string;
+}
+/**
  * The summary plus the body and creation time.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
@@ -252,6 +371,28 @@ export interface DecisionDetail {
   title: string;
   updated_at: string;
   version: number;
+}
+/**
+ * One decision in full, and the project it belongs to.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "DecisionOutput".
+ */
+export interface DecisionOutput {
+  decision: DecisionDetail;
+  project: string;
+}
+/**
+ * New title, body or status of a decision, based on expected_version.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "DecisionUpdateRequest".
+ */
+export interface DecisionUpdateRequest {
+  body?: string | null;
+  expected_version: number;
+  status?: DecisionStatus | null;
+  title?: string | null;
 }
 /**
  * One decision with its body.
@@ -306,29 +447,65 @@ export interface EventEntry {
   redacted: boolean;
 }
 /**
- * The summary plus the body, the awaited decision, the backlog links
- * (found_on and covered_by on a backlog item, origin on a subtask made
- * from one), every older key that still resolves to it, and timestamps.
+ * A new goal, batch or subtask. A goal takes no parent, a batch a goal and
+ * a subtask a batch; backlog items come from capture.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
- * via the `definition` "ItemDetail".
+ * via the `definition` "ItemCreateRequest".
  */
-export interface ItemDetail {
-  aliases: string[];
-  awaiting_decision: string | null;
-  body: string;
-  category: Category | null;
-  covered_by: string | null;
-  created_at: string;
-  found_on: string | null;
-  key: string;
-  kind: ItemKind;
-  origin: string | null;
-  parent: string | null;
-  state: string;
+export interface ItemCreateRequest {
+  body?: string;
+  kind: 'goal' | 'batch' | 'subtask';
+  parent?: string | null;
   title: string;
-  updated_at: string;
-  version: number;
+}
+/**
+ * mode is the path taken. A direct update returns the item. A drop or
+ * reparent of an item with children first returns a preview plan and a
+ * confirm_token, then the applied plan; an applied drop or reparent also
+ * returns every item it changed, as it now stands, in items. A reparent
+ * re-keys the moved subtree; the old keys keep resolving.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "ItemUpdateOutput".
+ */
+export interface ItemUpdateOutput {
+  blocked?: BlockedEntry[];
+  changed?: VersionEntry[];
+  completed?: string[];
+  confirm_token: string | null;
+  item: ItemDetail | null;
+  items?: AffectedItemEntry[] | null;
+  mode: 'update' | 'drop' | 'reparent';
+  phase: 'preview' | 'applied';
+  plan: SubtreeOutput | null;
+  project: string;
+  reopened?: string[];
+}
+/**
+ * Every row that changes, in write order; a move lists each key change.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "SubtreeOutput".
+ */
+export interface SubtreeOutput {
+  changes: ChangeEntry[];
+  root: string;
+}
+/**
+ * New title, body or state, based on expected_version. Dropping an item that
+ * has children first returns a preview and a confirm_token; send the state
+ * alone, then the same body plus the token.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "ItemUpdateRequest".
+ */
+export interface ItemUpdateRequest {
+  body?: string | null;
+  confirm_token?: string | null;
+  expected_version: number;
+  state?: string | null;
+  title?: string | null;
 }
 /**
  * One item in full: its children (work first, then backlog), its most
@@ -344,6 +521,20 @@ export interface ItemView {
   item: ItemDetail;
 }
 /**
+ * The new item, and what the completion engine did.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "ItemWriteOutput".
+ */
+export interface ItemWriteOutput {
+  blocked?: BlockedEntry[];
+  changed?: VersionEntry[];
+  completed?: string[];
+  item: ItemDetail;
+  project: string;
+  reopened?: string[];
+}
+/**
  * The running xoot version.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
@@ -353,6 +544,31 @@ export interface MetaOutput {
   version: string;
 }
 /**
+ * Move a batch to another goal, or a subtask to another batch, with its
+ * subtree. An item with children first returns a preview and a
+ * confirm_token; send the same body plus the token to apply.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "MoveRequest".
+ */
+export interface MoveRequest {
+  confirm_token?: string | null;
+  expected_version: number;
+  key: string;
+  parent: string;
+}
+/**
+ * A new display name, an extra alias, or both. The key prefix never
+ * changes: keys and URLs are built from it.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "ProjectRenameRequest".
+ */
+export interface ProjectRenameRequest {
+  alias?: string | null;
+  name?: string | null;
+}
+/**
  * Every registered project, by key prefix.
  *
  * This interface was referenced by `XootDashboardApi`'s JSON-Schema
@@ -360,6 +576,36 @@ export interface MetaOutput {
  */
 export interface ProjectsOutput {
   projects: ProjectInfo[];
+}
+/**
+ * A preview returns the plan (the new key) and a confirm_token; an apply
+ * returns the plan written, the item as it now stands, and the engine's
+ * outcome. The old key keeps resolving to the item.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "PushOutput".
+ */
+export interface PushOutput {
+  blocked?: BlockedEntry[];
+  changed?: VersionEntry[];
+  completed?: string[];
+  confirm_token: string | null;
+  item: AffectedItemEntry | null;
+  phase: 'preview' | 'applied';
+  plan: SubtreeOutput;
+  project: string;
+  reopened?: string[];
+}
+/**
+ * Push a backlog item one level up. Always two-phase: the first call
+ * returns the plan and a confirm_token; send the same body plus the token.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "PushRequest".
+ */
+export interface PushRequest {
+  confirm_token?: string | null;
+  key: string;
 }
 /**
  * An item and its depth below the query's roots.
@@ -384,4 +630,51 @@ export interface TreeView {
   nodes: TreeEntry[];
   project: string;
   truncated: boolean;
+}
+/**
+ * Every state of one kind with its category, in workflow order, and the
+ * moves a user may make. transitions is null when any state may move to
+ * any other; when the kind restricts them it maps every state name to the
+ * states it may move to (possibly none). Keeping the current state is
+ * always allowed and is not listed.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "WorkflowKindView".
+ */
+export interface WorkflowKindView {
+  states: StateSpec[];
+  transitions: {
+    [k: string]: string[];
+  } | null;
+  transitions_restricted: boolean;
+}
+/**
+ * The project's active workflow: every state of each item kind with its
+ * category, as brief_get shows it, plus the allowed moves of a kind that
+ * restricts them, so an editor offers only real states and real moves.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "WorkflowView".
+ */
+export interface WorkflowView {
+  workflow: {
+    [k: string]: WorkflowKindView;
+  };
+}
+/**
+ * A write error: the class name and safe message of ErrorOutput plus
+ * details, always present. details is an empty object when there is
+ * nothing to report, or structured facts such as a version conflict's
+ * current version, changed fields and actors. A separate model, because
+ * read errors keep their two-field body.
+ *
+ * This interface was referenced by `XootDashboardApi`'s JSON-Schema
+ * via the `definition` "WriteErrorOutput".
+ */
+export interface WriteErrorOutput {
+  details: {
+    [k: string]: unknown;
+  };
+  error: string;
+  message: string;
 }

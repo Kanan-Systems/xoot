@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from xoot.cli.commands.common import USER
 from xoot.cli.render.results import render_redaction
 from xoot.models.event.actor import Actor
 from xoot.models.event.entity_type import EntityType
@@ -30,7 +31,7 @@ DIGEST = "c" * 64
 @pytest.fixture(name="pending_token")
 def fixture_pending_token(store: Store, project: Project) -> None:
     """An unused confirm token of the project."""
-    issue_token(store, project.id, "backlog_push", DIGEST, DIGEST)
+    issue_token(store, project.id, "backlog_push", DIGEST, DIGEST, actor=USER)
 
 
 @pytest.mark.usefixtures("pending_token")

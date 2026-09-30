@@ -88,13 +88,17 @@ def test_push_is_bound_to_its_preview(
     goal, _, first, _ = work_tree
     item = capture_on(first)
     plan = preview_push(store, item.id)
-    token = issue_token(store, project.id, "backlog_push", DIGEST, plan.plan_sha256)
+    token = issue_token(
+        store, project.id, "backlog_push", DIGEST, plan.plan_sha256, actor=ctx.actor
+    )
     capture_on(goal)
     claim = Confirmation(token=token, tool="backlog_push", args_sha256=DIGEST)
     with pytest.raises(ConfirmTokenError, match="plan changed"):
         apply_push(store, item.id, ctx, claim)
     plan = preview_push(store, item.id)
-    token = issue_token(store, project.id, "backlog_push", DIGEST, plan.plan_sha256)
+    token = issue_token(
+        store, project.id, "backlog_push", DIGEST, plan.plan_sha256, actor=ctx.actor
+    )
     claim = Confirmation(token=token, tool="backlog_push", args_sha256=DIGEST)
     applied, _ = apply_push(store, item.id, ctx, claim)
     assert applied.plan_sha256 == plan.plan_sha256

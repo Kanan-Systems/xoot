@@ -20,6 +20,7 @@ from xoot.services.backlog_service import check_open_backlog
 from xoot.services.id_checks import check_id
 from xoot.services.lookups import require_item
 from xoot.services.move_planner import plan_move
+from xoot.services.plan_cap import check_plan_size
 from xoot.services.subtree_service import write_plan
 from xoot.services.write_scope import WriteScope
 from xoot.store.store import Store
@@ -113,10 +114,11 @@ def plan_push(conn: sqlite3.Connection, item: Item) -> SubtreePlan:
 
     Raises:
         - BacklogError: not an open backlog item, or already on the project.
+        - PlanSizeError: the plan changes more than MAX_PLAN_ITEMS items.
     """
     check_open_backlog(conn, item)
     if item.parent_id is None:
         raise BacklogError(f"{item.key} is on the project; it cannot be pushed further")
     parent = require_item(conn, item.parent_id)
     upper = None if parent.parent_id is None else require_item(conn, parent.parent_id)
-    return plan_move(conn, item, upper)
+    return check_plan_size(item, plan_move(conn, item, upper))

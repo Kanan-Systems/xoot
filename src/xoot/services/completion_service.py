@@ -14,10 +14,15 @@ report lists it as blocked. One with no children never completes. A closed
 goal or batch that gains open work (a new or reopened child, a captured or
 pushed backlog item) moves back to its default open state. Every such write
 is the system's, in the same transaction, and lands in the scope's log.
+
+Completion is the engine's alone: check_manual_done refuses a requested
+done state on a goal or batch while open work or open backlog sits on it.
 """
 
+import sqlite3
 from collections.abc import Iterable
 
+from xoot.exceptions.open_children_error import OpenChildrenError
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.workflow.category import Category
@@ -52,6 +57,36 @@ def settle(scope: WriteScope, item: Item, previous: Item | None = None) -> None:
     for container in _containers(scope, parents):
         if container.id not in scope.held:
             _evaluate(scope, definition, container)
+
+
+def check_manual_done(
+    conn: sqlite3.Connection, definition: WorkflowDefinition, item: Item, state: str
+) -> None:
+    """
+    Refuse a requested done state on a goal or batch that still has open work.
+
+    Args:
+        - conn (sqlite3.Connection): a connection inside the write.
+        - definition (WorkflowDefinition): the project's active workflow.
+        - item (Item): the item being updated.
+        - state (str): the state the caller asked for.
+
+    Raises:
+        - OpenChildrenError: a child work item or a backlog item on it is
+          neither done nor dropped; the error lists their keys.
+    """
+    if item.kind not in _CHILD_KIND:
+        return
+    if definition.for_kind(item.kind).category_of(state) is not Category.DONE:
+        return
+    open_keys = [
+        child.key
+        for kind in (_CHILD_KIND[item.kind], ItemKind.BACKLOG)
+        for child in item_db.list_children_of_kind(conn, item.id, kind)
+        if not is_closed(definition, child)
+    ]
+    if open_keys:
+        raise OpenChildrenError(item.key, open_keys)
 
 
 def _containers(scope: WriteScope, parent_ids: Iterable[int | None]) -> list[Item]:

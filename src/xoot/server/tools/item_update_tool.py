@@ -122,7 +122,9 @@ async def item_update(  # pylint: disable=too-many-arguments
             return plan_output(store, request, "applied", None, plan, report)
         if confirm_token is None:
             plan = request.preview(store)
-            token = issue_token(store, found.id, TOOL, digest, plan.plan_sha256)
+            token = issue_token(
+                store, found.id, TOOL, digest, plan.plan_sha256, actor=write.actor
+            )
             return plan_output(store, request, "preview", token, plan)
         claim = confirmation(TOOL, confirm_token, digest)
         plan, report = request.apply(store, claim)

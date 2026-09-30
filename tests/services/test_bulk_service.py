@@ -231,7 +231,7 @@ def test_apply_consumes_its_token(
     """With a confirmation, the apply spends it; a replay is refused."""
     plan = preview_bulk(store, project.id, _tree())
     token = issue_token(
-        store, project.id, "items_create_bulk", DIGEST, plan.plan_sha256
+        store, project.id, "items_create_bulk", DIGEST, plan.plan_sha256, actor=claude
     )
     claim = Confirmation(token=token, tool="items_create_bulk", args_sha256=DIGEST)
     write = WriteContext(actor=claude)

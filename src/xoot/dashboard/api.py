@@ -27,6 +27,7 @@ from xoot.dashboard.views.project_views import (
     decisions_view,
     projects_view,
     tree_view,
+    workflow_view,
 )
 from xoot.dashboard.views.record_views import decision_view, item_view
 
@@ -91,6 +92,10 @@ def api_routes(db_path: Path) -> list[Route]:
         (
             "/projects/{prefix}/changes",
             lambda r: _no_query(r, lambda c: changes_view(c, path(r, "prefix"))),
+        ),
+        (
+            "/projects/{prefix}/workflow",
+            lambda r: _no_query(r, lambda c: workflow_view(c, path(r, "prefix"))),
         ),
     ]
     return [

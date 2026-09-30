@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from xoot.dashboard import export_schema
+from xoot.dashboard.write_api import WRITES
 
 COMMITTED = Path(__file__).resolve().parents[2] / "dashboard/src/api/schema.json"
 
@@ -27,11 +28,16 @@ def test_main_writes_the_export(tmp_path: Path) -> None:
 
 
 def test_every_response_has_a_definition() -> None:
-    """Each envelope and leaf model is a named definition for json2ts."""
+    """Each envelope, request body and leaf model is a named definition for json2ts."""
     text = export_schema.export()
-    for model in export_schema.RESPONSES:
+    for model in (*export_schema.RESPONSES, *export_schema.REQUESTS):
         assert f'"{model.__name__}": {{' in text
     for leaf in ("ItemSummary", "GoalProgressEntry", "DecisionDetail", "EventEntry"):
         assert f'"{leaf}": {{' in text
     for dropped in ("resolved_by", "db_path", '"header"'):
         assert dropped not in text
+
+
+def test_every_write_route_body_is_exported() -> None:
+    """Each write route's request model is in REQUESTS, so the frontend is typed."""
+    assert {spec.body for spec in WRITES} == set(export_schema.REQUESTS)

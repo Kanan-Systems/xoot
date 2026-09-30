@@ -23,10 +23,7 @@ from xoot.services.lookups import active_workflow, require_project
 
 type UpdatePath = Literal["update", "drop", "reparent"]
 
-ALONE = (
-    "{} must be the only field in changes; send the other changes in a "
-    "separate item_update call"
-)
+ALONE = "{} must be the only change; send the other changes in a separate update"
 BACKLOG_PARENT = "backlog items move with backlog_push or backlog_cover"
 
 

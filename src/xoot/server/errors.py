@@ -19,6 +19,8 @@ from xoot.exceptions.hierarchy_error import HierarchyError
 from xoot.exceptions.invalid_id_error import InvalidIdError
 from xoot.exceptions.legacy_database_error import LegacyDatabaseError
 from xoot.exceptions.not_found_error import NotFoundError
+from xoot.exceptions.open_children_error import OpenChildrenError
+from xoot.exceptions.plan_size_error import PlanSizeError
 from xoot.exceptions.qualifier_error import QualifierError
 from xoot.exceptions.schema_version_error import SchemaVersionError
 from xoot.exceptions.stale_write_error import StaleWriteError
@@ -90,7 +92,7 @@ _REASONS: dict[type[XootError], str] = {
 # Errors whose messages are fixed text plus stored keys or prefixes only.
 _DETAILED: tuple[type[XootError], ...] = (
     BacklogError, ConfirmTokenError, DecisionError, LegacyDatabaseError,
-    QualifierError,
+    OpenChildrenError, PlanSizeError, QualifierError,
 )  # fmt: skip
 
 

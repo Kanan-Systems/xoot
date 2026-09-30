@@ -35,7 +35,7 @@ def test_redaction_deletes_every_token(
     item = make_item(project, ItemKind.GOAL, title="short secret")
     for tool in ("backlog_push", "items_create_bulk"):
         for owner in (project, other_project):
-            issue_token(store, owner.id, tool, DIGEST, DIGEST)
+            issue_token(store, owner.id, tool, DIGEST, DIGEST, actor=ctx.actor)
     assert _tokens(store) == 4
     redact_field(store, "item", item.id, "title", ctx.actor)
     assert _tokens(store) == 0
@@ -49,7 +49,7 @@ def test_refused_redaction_keeps_the_tokens(
 ) -> None:
     """The delete shares the redaction's transaction: a refusal rolls it back."""
     item = make_item(project, ItemKind.GOAL)
-    issue_token(store, project.id, "backlog_push", DIGEST, DIGEST)
+    issue_token(store, project.id, "backlog_push", DIGEST, DIGEST, actor=ctx.actor)
     with pytest.raises(RedactionError):
         redact_field(store, "item", item.id, "body", ctx.actor)
     assert _tokens(store) == 1

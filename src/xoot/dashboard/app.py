@@ -1,6 +1,6 @@
 """
-The dashboard application: the API routes, the static bundle and the
-single-page fallback, wrapped in the guard.
+The dashboard application: the API read and write routes, the static bundle
+and the single-page fallback, wrapped in the guard.
 """
 
 from pathlib import Path
@@ -17,6 +17,7 @@ from xoot.dashboard.api_error import ApiError
 from xoot.dashboard.errors import UNAVAILABLE, error_response
 from xoot.dashboard.guard import guard
 from xoot.dashboard.launch_codes import LaunchCodes
+from xoot.dashboard.write_api import write_routes
 
 STATIC = Path(__file__).parent / "static"
 
@@ -42,6 +43,7 @@ def create_app(
         - app (ASGIApp): the application, guard outermost.
     """
     index = static_dir / "index.html"
+    writes = write_routes(db_path)
 
     async def spa(_request: Request) -> Response:
         # Client-side routes all load the same page; it holds no data.
@@ -56,6 +58,7 @@ def create_app(
     app = Starlette(
         routes=[
             *api_routes(db_path),
+            *writes,
             Mount(
                 "/assets",
                 app=StaticFiles(directory=static_dir / "assets", check_dir=False),
@@ -63,4 +66,4 @@ def create_app(
             Route("/{path:path}", spa, methods=["GET"]),
         ]
     )
-    return guard(app, token=token, port=port, launch_codes=launch_codes)
+    return guard(app, token=token, port=port, launch_codes=launch_codes, writes=writes)

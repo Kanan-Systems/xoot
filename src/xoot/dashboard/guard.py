@@ -2,9 +2,17 @@
 The request guard: every request passes through it before any route.
 
 In order it checks the Host header against the allowlist (400), the method
-(405: the dashboard is read-only), exchanges a ?token query, or a one-time
-?launch code, for the session cookie (a redirect that drops the query), and
-on /api requires a same-origin Origin, if any (403), and the cookie (401).
+(405), exchanges a ?token query, or a one-time ?launch code, for the session
+cookie (a redirect that drops the query), and on /api requires a same-origin
+Origin, if any (403), and the cookie (401).
+
+GET and HEAD are reads. POST and PATCH are writes, allowed only on the
+registered write routes (any other method or path is a 405). A write is
+never authenticated by a query: it needs the cookie, an Origin header that
+is present and names the served origin (403), and a JSON body (415). An
+absent Origin is refused on a write because only the dashboard's own page
+may write; a page on another origin, localhost ports included, sends its
+own Origin and a same-site cookie.
 The cookie is named after the port, so dashboards on two ports never
 overwrite each other's cookie. It adds the security headers to every
 response, its own refusals included. Token comparisons are constant time,
@@ -12,20 +20,25 @@ and neither the token nor a code is ever logged or echoed.
 """
 
 import hmac
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from urllib.parse import parse_qs, quote
 
+from pydantic import BaseModel
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.requests import cookie_parser
 from starlette.responses import JSONResponse, Response
+from starlette.routing import BaseRoute, Match
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from xoot.dashboard.headers import ALWAYS, API_ONLY
 from xoot.dashboard.launch_codes import LaunchCodes
 from xoot.dashboard.schemas.error_output import ErrorOutput
+from xoot.dashboard.schemas.write_error_output import WriteErrorOutput
 
 COOKIE_PREFIX = "xoot_token_"
 ALLOWED_METHODS = ("GET", "HEAD")
+WRITE_METHODS = ("POST", "PATCH")
+JSON = "application/json"
 HOST_NAMES = ("xoot.localhost", "localhost", "127.0.0.1")
 
 
@@ -43,7 +56,11 @@ def cookie_name(port: int) -> str:
 
 
 def guard(
-    app: ASGIApp, token: str, port: int, launch_codes: LaunchCodes | None = None
+    app: ASGIApp,
+    token: str,
+    port: int,
+    launch_codes: LaunchCodes | None = None,
+    writes: Sequence[BaseRoute] = (),
 ) -> ASGIApp:
     """
     Wrap an app in the dashboard's access rules for one launch.
@@ -54,6 +71,8 @@ def guard(
         - port (int): the port the server listens on.
         - launch_codes (LaunchCodes | None): the one-time codes a ?launch
           query may redeem; none are accepted when None.
+        - writes (Sequence[BaseRoute]): the write routes; a POST or PATCH
+          must match one of them in full, method included.
 
     Returns:
         - guarded (ASGIApp): the app behind the guard.
@@ -72,9 +91,19 @@ def guard(
     def refusal(scope: Scope, is_api: bool) -> Response | None:
         headers = Headers(scope=scope)
         host = headers.get("host")
-        early = _host_or_method(scope, host, hosts)
-        if early is not None:
-            return early
+        if host not in hosts:
+            return _error(400, "BadRequest", "the Host header is not allowed")
+        if scope["method"] in WRITE_METHODS and is_api and _is_write(scope, writes):
+            return write_access(headers, host)
+        if scope["method"] not in ALLOWED_METHODS:
+            return _not_allowed(scope, writes)
+        exchanged = login(scope)
+        if exchanged is not None:
+            return exchanged
+        return api_access(headers, host) if is_api else None
+
+    def login(scope: Scope) -> Response | None:
+        """A read's ?token or ?launch: the cookie exchange, or a 401."""
         query = parse_qs(scope["query_string"].decode("latin-1"))
         offered = query.get("token")
         if offered is not None:
@@ -87,7 +116,27 @@ def guard(
                 if launch_codes.redeem(launch[0]):
                     return _exchange(scope["path"], cookie, token)
             return _error(401, "Unauthorized", "the launch code is not valid")
-        return api_access(headers, host) if is_api else None
+        return None
+
+    def write_access(headers: Headers, host: str | None) -> Response | None:
+        if headers.get("origin") != f"http://{host}":
+            return _error(
+                403, "Forbidden", "a write needs the served Origin", write=True
+            )
+        presented = cookie_parser(headers.get("cookie", "")).get(cookie)
+        if presented is None or not valid(presented):
+            return _error(
+                401, "Unauthorized", "a valid session cookie is required", write=True
+            )
+        media = headers.get("content-type", "").partition(";")[0].strip().lower()
+        if media != JSON:
+            return _error(
+                415,
+                "UnsupportedMediaType",
+                "a write body must be application/json",
+                write=True,
+            )
+        return None
 
     def api_access(headers: Headers, host: str | None) -> Response | None:
         origin = headers.get("origin")
@@ -117,17 +166,21 @@ def guard(
     return guarded
 
 
-def _host_or_method(
-    scope: Scope, host: str | None, hosts: frozenset[str]
-) -> Response | None:
-    """Refuse a Host outside the allowlist (400) or a write method (405)."""
-    if host not in hosts:
-        return _error(400, "BadRequest", "the Host header is not allowed")
-    if scope["method"] not in ALLOWED_METHODS:
-        response = _error(405, "MethodNotAllowed", "the dashboard is read-only")
-        response.headers["allow"] = ", ".join(ALLOWED_METHODS)
-        return response
-    return None
+def _is_write(scope: Scope, writes: Sequence[BaseRoute]) -> bool:
+    """Tell whether a write route matches the path and the method."""
+    return any(route.matches(scope)[0] is Match.FULL for route in writes)
+
+
+def _not_allowed(scope: Scope, writes: Sequence[BaseRoute]) -> Response:
+    """405, naming the reads plus any write method the path takes."""
+    allowed = list(ALLOWED_METHODS)
+    for method in WRITE_METHODS:
+        probe = {**scope, "method": method}
+        if scope["path"].startswith("/api/") and _is_write(probe, writes):
+            allowed.append(method)
+    response = _error(405, "MethodNotAllowed", "the method is not allowed here")
+    response.headers["allow"] = ", ".join(allowed)
+    return response
 
 
 def _exchange(path: str, cookie: str, token: str) -> Response:
@@ -145,8 +198,14 @@ def _same_path(path: str) -> str:
     return quote(path, safe="/")
 
 
-def _error(status: int, error: str, message: str) -> JSONResponse:
-    body = ErrorOutput(error=error, message=message)
+def _error(
+    status: int, error: str, message: str, *, write: bool = False
+) -> JSONResponse:
+    """A refusal; a write's carries the write routes' three-field body."""
+    if write:
+        body: BaseModel = WriteErrorOutput(error=error, message=message, details={})
+    else:
+        body = ErrorOutput(error=error, message=message)
     return JSONResponse(body.model_dump(), status_code=status)
 
 

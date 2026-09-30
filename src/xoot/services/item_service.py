@@ -18,6 +18,7 @@ from xoot.models.item.item_create import ItemCreate
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.item_update import ItemUpdate
 from xoot.models.workflow.category import Category
+from xoot.services.completion_service import check_manual_done
 from xoot.services.conflicts import ensure_version
 from xoot.services.id_checks import check_id
 from xoot.services.item_rules import (
@@ -141,6 +142,8 @@ def update_item(
     Raises:
         - VersionConflictError: the item changed since expected_version.
         - StateError: unknown state or disallowed transition.
+        - OpenChildrenError: a done state was asked for on a goal or batch
+          with open work or open backlog under it.
         - CrossProjectError: a reference is in another project.
         - InvalidIdError: item_id or expected_version is not an int.
         - NotFoundError: the item or a reference does not exist.
@@ -171,6 +174,8 @@ def update_item_in(
     Raises:
         - VersionConflictError: the item changed since expected_version.
         - StateError: unknown state or disallowed transition.
+        - OpenChildrenError: a done state was asked for on a goal or batch
+          with open work or open backlog under it.
         - CrossProjectError: a reference is in another project.
         - NotFoundError: the item or a reference does not exist.
     """
@@ -178,11 +183,14 @@ def update_item_in(
     item = require_item(conn, item_id)
     ensure_version(conn, EntityType.ITEM, item, expected_version)
     project = require_project(conn, item.project_id)
-    workflow = active_workflow(conn, project).definition.for_kind(item.kind)
+    definition = active_workflow(conn, project).definition
+    workflow = definition.for_kind(item.kind)
     fields: dict[str, Any] = changes.provided()
     state = fields.get("state", item.state)
     check_state(workflow, state)
     check_transition(workflow, item.state, state)
+    if "state" in fields:
+        check_manual_done(conn, definition, item, state)
     check_awaited_decision(conn, item.project_id, fields.get("awaiting_decision_id"))
     return write_item(scope, item, fields)
 

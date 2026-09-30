@@ -8,6 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from xoot.models.item.bulk_item import BulkItem
 
 MAX_BULK_ITEMS = 50
+# The most items one move, push or drop plan may change; larger subtrees are
+# refused at plan time rather than written in one long transaction.
+MAX_PLAN_ITEMS = 200
 
 
 class BulkCreate(BaseModel):

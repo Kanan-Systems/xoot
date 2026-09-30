@@ -7,7 +7,9 @@ session table, is refused: the data model changed and nothing is migrated.
 Each migration runs in its own BEGIN IMMEDIATE transaction, re-reads
 user_version under the lock (so several processes opening a fresh database
 at once all succeed) and passes a foreign-key check before it commits.
-Before an existing database takes a pending migration it is backed up.
+Before an existing database takes a pending migration it is backed up, under
+that same lock and after the re-read, so only the process that migrates
+writes the copy.
 SQLite failures surface as MigrationFailedError, never as raw sqlite3 errors.
 """
 
@@ -172,9 +174,9 @@ def migrate(
     """
     Apply every pending migration, oldest first.
 
-    A database already at the baseline or later is backed up once, before
-    its first pending migration, when db_path is given. A fresh database
-    (version 0) has nothing to lose and is not backed up.
+    A database already at the baseline or later is backed up once, inside
+    the transaction of its first pending migration, when db_path is given.
+    A fresh database (version 0) has nothing to lose and is not backed up.
 
     Args:
         - conn (sqlite3.Connection): an autocommit connection.
@@ -204,9 +206,7 @@ def migrate(
             raise LegacyDatabaseError()
         current = user_version(conn)
         _refuse_newer(current, known)
-        pending = [version for version, _ in ordered if version > current]
-        if pending and current > 0 and db_path is not None:
-            backup_database(conn, db_path, pending[-1])
+        backed_up = db_path is None
         for version, sql in ordered:
             if version <= user_version(conn):
                 continue
@@ -217,6 +217,9 @@ def migrate(
                 _refuse_newer(current, known)
                 if current >= version:
                     continue
+                if not backed_up and current > 0 and db_path is not None:
+                    _backup(db_path, known)
+                backed_up = True
                 conn.executescript(sql)
                 check_foreign_keys(conn)
                 # PRAGMA takes no bound parameters; version is an int we parsed.
@@ -225,6 +228,21 @@ def migrate(
         return user_version(conn)
     except sqlite3.Error as exc:
         raise MigrationFailedError(applying, exc) from exc
+
+
+def _backup(db_path: Path, target: int) -> None:
+    """
+    Copy the database while the caller holds the write lock.
+
+    The copy reads through a second connection: SQLite's backup cannot read
+    from a connection that is itself inside a write transaction. Under WAL
+    that reader still sees the last commit, the state before the migration.
+    """
+    source = sqlite3.connect(db_path)
+    try:
+        backup_database(source, db_path, target)
+    finally:
+        source.close()
 
 
 def _refuse_newer(found: int, known: int) -> None:

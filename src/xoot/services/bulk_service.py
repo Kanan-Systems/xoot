@@ -123,7 +123,11 @@ def apply_bulk_in(
         - NotFoundError: the project or an existing parent does not exist.
     """
     conn = scope.conn
-    token = None if confirm is None else consume_token(conn, confirm, project_id)
+    token = (
+        None
+        if confirm is None
+        else consume_token(conn, confirm, project_id, scope.ctx.actor)
+    )
     check_plan(token, _plan(conn, project_id, request).plan_sha256)
     project = require_project(conn, project_id)
     definition = active_workflow(conn, project).definition

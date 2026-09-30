@@ -120,7 +120,9 @@ async def backlog_push(
             item_id = item_by_key(conn, found, key).id
         if confirm_token is None:
             plan = preview_push(store, item_id)
-            token = issue_token(store, found.id, PUSH_TOOL, digest, plan.plan_sha256)
+            token = issue_token(
+                store, found.id, PUSH_TOOL, digest, plan.plan_sha256, actor=write.actor
+            )
             return _output(store, found, plan, token)
         claim = confirmation(PUSH_TOOL, confirm_token, digest)
         plan, report = apply_push(store, item_id, write, claim)

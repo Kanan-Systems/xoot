@@ -211,7 +211,7 @@ def test_newer_database_is_refused(db_path: Path) -> None:
 
 def test_latest_version_is_the_newest_shipped() -> None:
     """latest_version names the last shipped migration, which a fresh DB reaches."""
-    assert latest_version() == load_migrations()[-1][0] == 2
+    assert latest_version() == load_migrations()[-1][0] == 3
 
 
 def test_latest_version_without_migrations(monkeypatch: pytest.MonkeyPatch) -> None:

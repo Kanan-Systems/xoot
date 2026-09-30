@@ -55,8 +55,10 @@ def test_paths_and_mixed_change_rejection(
         }
 
     out = harness.run(scenario)
-    assert "parent must be the only field" in out["mixed_parent"]
-    assert "a drop of an item with children must be the only field" in out["mixed_drop"]
+    assert "parent must be the only change" in out["mixed_parent"]
+    assert (
+        "a drop of an item with children must be the only change" in out["mixed_drop"]
+    )
     assert "backlog_push or backlog_cover" in out["backlog_parent"]
     moved = out["move_leaf"]
     assert (moved["mode"], moved["phase"], moved["confirm_token"]) == (
