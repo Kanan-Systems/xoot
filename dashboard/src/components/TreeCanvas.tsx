@@ -153,8 +153,9 @@ function toFlow(graph: Graph): { nodes: FlowNode[]; edges: Edge[] } {
     }
     const { item, blocked, fold } = node.data;
     const held = blocked === null ? '' : `, ${blockedLine(blocked)}`;
-    const folded =
-      fold?.collapsed === true ? `, collapsed, ${String(fold.children)} children` : '';
+    const hides =
+      fold !== null && fold.open > 0 ? `, ${String(fold.open)} open children` : '';
+    const folded = fold?.collapsed === true ? `, collapsed${hides}` : '';
     return {
       ...node,
       position,

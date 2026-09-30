@@ -4,7 +4,7 @@
 // shows as colour, icon and state name together. A backlog item has its own
 // icon, word and dashed card. A goal or batch held open by backlog says so,
 // with a read-only hint of what to ask for. A goal or batch with children
-// folds them away; folded, it says how many it hides.
+// folds them away; folded, it says how many open ones it hides, if any.
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { MouseEvent } from 'react';
 
@@ -73,12 +73,12 @@ export function ItemNode({ data }: NodeProps<ItemFlowNode>) {
             <button
               type="button"
               className="node-toggle"
-              title={`${String(fold.children)} children`}
+              title={fold.open > 0 ? `${String(fold.open)} open children` : undefined}
               aria-expanded={!fold.collapsed}
               aria-label={`${fold.collapsed ? 'Expand' : 'Collapse'} ${item.key}`}
               onClick={toggle}
             >
-              {fold.collapsed ? `▸ ${String(fold.children)}` : '▾'}
+              {!fold.collapsed ? '▾' : fold.open > 0 ? `▸ ${String(fold.open)}` : '▸'}
             </button>
           )}
         </span>

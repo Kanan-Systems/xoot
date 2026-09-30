@@ -124,8 +124,11 @@ export function blockedCounts(blocked: readonly BlockedEntry[]): Map<string, num
 }
 
 // Direct children in the tree data, and whether a goal or batch hides them.
+// children (any category) decides whether it can fold; open (neither done
+// nor dropped, backlog included) is the count a folded node shows.
 export interface Fold {
   children: number;
+  open: number;
   collapsed: boolean;
 }
 
@@ -171,9 +174,15 @@ export interface GraphOptions {
   collapsed?: ReadonlySet<string>;
 }
 
-export function childCounts(entries: readonly TreeEntry[]): Map<string, number> {
+export function childCounts(
+  entries: readonly TreeEntry[],
+  onlyOpen = false,
+): Map<string, number> {
   const counts = new Map<string, number>();
   for (const entry of entries) {
+    if (onlyOpen && closedCategory(entry.item) !== null) {
+      continue;
+    }
     const parent = parentId(entry);
     counts.set(parent, (counts.get(parent) ?? 0) + 1);
   }
@@ -195,6 +204,7 @@ export function buildGraph(
   const { visible, hidden } = collapseDone(scoped, options.showDone, rootKey, folded);
   const backlog = openBacklog(scoped);
   const children = childCounts(scoped);
+  const open = childCounts(scoped, true);
   const shown = new Set(visible.map((entry) => entry.item.key));
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -215,7 +225,11 @@ export function buildGraph(
         item: entry.item,
         hidden: hidden.get(key) ?? {},
         fold: isCollapsible(entry.item)
-          ? { children: children.get(key) ?? 0, collapsed: folded.has(key) }
+          ? {
+              children: children.get(key) ?? 0,
+              open: open.get(key) ?? 0,
+              collapsed: folded.has(key),
+            }
           : null,
         decisions: options.decisionCounts.get(key) ?? 0,
         blocked: blockedOf(entry.item, options.blocked, backlog),

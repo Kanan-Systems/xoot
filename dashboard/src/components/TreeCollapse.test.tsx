@@ -3,9 +3,19 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { Category } from '../api/types.gen.ts';
 import { storageKey } from '../lib/collapsed.ts';
-import { mockApi, projectRoutes } from '../test/api.ts';
-import { B1, B2, G1, G1_BACKLOG, P_BACKLOG, S3 } from '../test/fixtures.ts';
+import { mockApi, projectRoutes, treeView } from '../test/api.ts';
+import {
+  B1,
+  B2,
+  entry,
+  G1,
+  G1_BACKLOG,
+  item,
+  P_BACKLOG,
+  S3,
+} from '../test/fixtures.ts';
 import { mockReactFlowDom } from '../test/reactFlow.ts';
 import { renderApp } from '../test/renderApp.tsx';
 
@@ -51,7 +61,7 @@ describe('collapsing goals and batches', () => {
     const expand = screen.getByRole('button', { name: `Expand ${G1}` });
     expect(expand).toHaveAttribute('aria-expanded', 'false');
     expect(expand).toHaveTextContent('▸ 3');
-    expect(await flowNode(G1)).toHaveAccessibleName(/collapsed, 3 children/);
+    expect(await flowNode(G1)).toHaveAccessibleName(/collapsed, 3 open children/);
     expect((await flowNode(P_BACKLOG)).style.transform).not.toBe(before);
     // The toggle does not open the drawer.
     expect(screen.queryByRole('complementary')).toBeNull();
@@ -102,5 +112,47 @@ describe('collapsing goals and batches', () => {
     await flowNode(S3);
     fireEvent.click(screen.getByRole('button', { name: `Collapse ${B2}` }));
     await absent(S3);
+  });
+});
+
+// goal-1 > batch-1 with four subtasks in the given categories.
+function oneBatch(categories: readonly Category[]) {
+  const nodes = [
+    entry(item(G1, 'goal', null), 0),
+    entry(item(B1, 'batch', G1), 1),
+    ...categories.map((category, i) =>
+      entry(item(`${B1}/subtask-${String(i + 1)}`, 'subtask', B1, category), 2),
+    ),
+  ];
+  return projectRoutes({ '/projects/x/tree': { ...treeView(), nodes, blocked: [] } });
+}
+
+describe('the count on a collapsed node', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    mockReactFlowDom();
+  });
+
+  it('counts open work only: three of four subtasks done shows 1', async () => {
+    mockApi(oneBatch(['done', 'done', 'done', 'open']));
+    renderApp('/x/tree');
+    await flowNode(B1);
+    fireEvent.click(screen.getByRole('button', { name: `Collapse ${B1}` }));
+    const expand = await screen.findByRole('button', { name: `Expand ${B1}` });
+    expect(expand).toHaveTextContent(/^▸ 1$/);
+    expect(await flowNode(B1)).toHaveAccessibleName(/collapsed, 1 open children/);
+  });
+
+  it('shows no count when every child is done or dropped', async () => {
+    mockApi(oneBatch(['done', 'done', 'dropped', 'done']));
+    renderApp('/x/tree');
+    await flowNode(B1);
+    fireEvent.click(screen.getByRole('button', { name: `Collapse ${B1}` }));
+    const expand = await screen.findByRole('button', { name: `Expand ${B1}` });
+    expect(expand).toHaveTextContent(/^▸$/);
+    expect(expand).not.toHaveAttribute('title');
+    const node = await flowNode(B1);
+    expect(node).toHaveAccessibleName(/, collapsed\. Press Enter/);
   });
 });
