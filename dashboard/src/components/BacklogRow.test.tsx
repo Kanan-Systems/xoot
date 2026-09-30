@@ -1,8 +1,10 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { createQueryClient } from '../App.tsx';
 import type { CoverOutput } from '../api/types.gen.ts';
 import {
+  backlogView,
   mockApi,
   projectRoutes,
   requests,
@@ -61,6 +63,40 @@ describe('covering backlog', () => {
     ]);
   });
 
+  // The row leaves the list before the cover answer lands, as when a
+  // refetch overtakes it: the notice must not depend on the row's form.
+  it('keeps the notice when the covered row leaves the list first', async () => {
+    const after = backlogView();
+    after.items = after.items.filter((row) => row.key !== B1_BACKLOG);
+    const fetchMock = mockApi(
+      projectRoutes({
+        [COVERS]: covered('goal-1/batch-1/subtask-3'),
+        '/projects/x/backlog': sequence(backlogView(), after),
+      }),
+    );
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? gate.then(() => fetchMock(input, init))
+        : fetchMock(input, init),
+    );
+    const client = createQueryClient();
+    renderApp('/x/backlog', client);
+    const form = await coverForm(B1_BACKLOG);
+    fireEvent.click(within(form).getByRole('button', { name: 'Cover' }));
+    await client.invalidateQueries({ queryKey: ['project', 'x', 'backlog'] });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: `Cover ${B1_BACKLOG}` })).toBeNull();
+    });
+    release();
+    expect(
+      await screen.findByText(`Covered ${B1_BACKLOG} with goal-1/batch-1/subtask-3.`),
+    ).toBeInTheDocument();
+  });
+
   it('names another batch of the same goal', async () => {
     const fetchMock = open({ [COVERS]: covered('goal-1/batch-2/subtask-2') });
     const form = await coverForm(B1_BACKLOG);
@@ -102,7 +138,7 @@ describe('covering backlog', () => {
 });
 
 describe('pushing backlog', () => {
-  it('previews first, then confirms with the token', async () => {
+  it('previews in plain words first, then confirms with the token', async () => {
     const fetchMock = open({
       [PUSHES]: sequence(pushed('preview', 'tok-p'), pushed('applied', null)),
     });
@@ -110,12 +146,21 @@ describe('pushing backlog', () => {
       await screen.findByRole('button', { name: `Push ${G1_BACKLOG} up` }),
     );
     const region = await screen.findByRole('region', { name: /Confirm: Push/ });
-    expect(region).toHaveTextContent(
+    expect(within(region).getByText(/^Move backlog item/)).toHaveTextContent(
+      "Move backlog item 'title of goal-1/backlog-1' up from goal 'title of goal-1' " +
+        'to the project. It will be listed in the project backlog.',
+    );
+    // The raw field changes stay available under Details.
+    const details = within(region).getByText('Details').closest('details');
+    expect(details).toHaveTextContent(
       'goal-1/backlog-1: key goal-1/backlog-1 → backlog-3',
     );
     fireEvent.click(within(region).getByRole('button', { name: 'Confirm' }));
     expect(
-      await screen.findByText(`Pushed ${G1_BACKLOG} up: it is now backlog-3.`),
+      await screen.findByText(
+        "Moved backlog item 'title of goal-1/backlog-1' up to the project. " +
+          'It is now listed in the project backlog.',
+      ),
     ).toBeInTheDocument();
     expect(requests(fetchMock, 'POST').map((r) => r.body)).toEqual([
       { key: G1_BACKLOG },

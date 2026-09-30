@@ -72,7 +72,8 @@ interface CreateItemFormProps {
   kind: 'goal' | 'batch' | 'subtask';
   // The goal of a batch, the batch of a subtask; null for a goal.
   parent: string | null;
-  onDone: (message: string) => void;
+  // With the new item's key, so a caller can open it.
+  onDone: (message: string, key: string) => void;
   onCancel: () => void;
 }
 
@@ -103,7 +104,7 @@ export function CreateItemForm({
           { kind, title, body, ...(parent === null ? {} : { parent }) },
           {
             onSuccess: (output) => {
-              onDone(created(output, 'Created'));
+              onDone(created(output, 'Created'), output.item.key);
             },
           },
         );

@@ -1,12 +1,13 @@
-// The LTR tree. Nodes are not selectable; only batch and subtask nodes are
-// draggable, each onto a new parent (useTreeDrag); the drawer's "Move to…"
-// is the keyboard path, not React Flow's arrow-key nudging. onNodeClick is
-// what gives React Flow's node wrappers pointer events (without a click
-// handler it renders them with pointer-events: none, and clicks fall through
-// to the pane). Item wrappers are focusable groups (a button role would hide the
-// focus and badge buttons inside them): Enter or Space on one does what a
-// click does. Double-click focuses a goal or batch, so it does not zoom.
-// The project node only draws and is not focusable.
+// The LTR tree. Nodes are not selectable. A double-click arms a batch or
+// subtask, and only the armed node can be dragged, onto a new parent
+// (useTreeDrag); the drawer's "Move to…" is the keyboard path, not React
+// Flow's arrow-key nudging. onNodeClick is what gives React Flow's node
+// wrappers pointer events (without a click handler it renders them with
+// pointer-events: none, and clicks fall through to the pane). Item wrappers
+// are focusable groups (a button role would hide the focus and badge buttons
+// inside them): Enter or Space on one does what a click does. Double-click
+// focuses a goal, so it does not zoom. The project node only draws and is
+// not focusable.
 import {
   Background,
   Controls,
@@ -18,7 +19,12 @@ import {
 import { useCallback, useMemo, type KeyboardEvent } from 'react';
 
 import type { ItemSummary, TreeEntry } from '../api/types.gen.ts';
-import { useTreeDrag, withDragged, type FlowNode } from '../hooks/useTreeDrag.ts';
+import {
+  shownDragged,
+  useTreeDrag,
+  withDragged,
+  type FlowNode,
+} from '../hooks/useTreeDrag.ts';
 import { KIND } from '../lib/display.ts';
 import { isMovable } from '../lib/itemRules.ts';
 import { layout } from '../lib/layout.ts';
@@ -44,17 +50,43 @@ export interface TreeCanvasProps {
   onFocus: (key: string) => void;
   onShowDone: () => void;
   onToggle: (key: string) => void;
-  // A batch or subtask dropped onto a parent the hierarchy allows.
-  onMove?: (item: ItemSummary, parent: string) => void;
+  // The armed node (the only one that can be dragged) and the node whose
+  // drop waits for confirmation (drawn where it was dropped).
+  armed?: string | null;
+  held?: string | null;
+  onArm?: (item: ItemSummary) => void;
+  onDisarm?: () => void;
+  // The armed node dropped onto a parent the hierarchy allows.
+  onDrop?: (item: ItemSummary, parent: string) => void;
 }
 
-const NO_MOVE = () => undefined;
+const NOTHING = () => undefined;
+
+export const ARMED_HINT = 'Drag it onto a new parent; Esc cancels.';
+
+// Only the armed node is draggable, and it says so.
+function arm(nodes: FlowNode[], armed: string | null): FlowNode[] {
+  if (armed === null) {
+    return nodes;
+  }
+  return nodes.map((node) =>
+    node.id === armed && node.type === 'item'
+      ? {
+          ...node,
+          draggable: true,
+          className: 'node-armed',
+          ariaLabel: `${node.ariaLabel ?? ''} Armed: ${ARMED_HINT}`,
+        }
+      : node,
+  );
+}
 
 export function TreeCanvas(props: TreeCanvasProps) {
   const { entries, rootKey, project, decisionCounts, blocked, showDone, collapsed } =
     props;
-  const { onOpen, onFocus, onShowDone, onToggle, onMove = NO_MOVE } = props;
-  const drag = useTreeDrag(onMove);
+  const { onOpen, onFocus, onShowDone, onToggle } = props;
+  const { armed = null, held = null, onArm = NOTHING, onDisarm = NOTHING } = props;
+  const drag = useTreeDrag(props.onDrop ?? NOTHING);
   // A toggle changes the graph, so the layout below is recomputed.
   const graph = useMemo(
     () =>
@@ -68,7 +100,11 @@ export function TreeCanvas(props: TreeCanvasProps) {
       }),
     [entries, showDone, rootKey, project, decisionCounts, blocked, collapsed],
   );
-  const flow = useMemo(() => toFlow(graph), [graph]);
+  const laidOut = useMemo(() => toFlow(graph), [graph]);
+  const flow = useMemo(
+    () => ({ nodes: arm(laidOut.nodes, armed), edges: laidOut.edges }),
+    [laidOut, armed],
+  );
   const activate = useCallback(
     (node: FlowNode) => {
       if (node.type === 'item') {
@@ -77,19 +113,30 @@ export function TreeCanvas(props: TreeCanvasProps) {
     },
     [onOpen],
   );
+  // The armed node is being moved: a click on it (or one ending a drag) must
+  // not reopen the drawer that arming closed.
   const onNodeClick: NodeMouseHandler<FlowNode> = useCallback(
     (_event, node) => {
-      activate(node);
+      if (node.id !== armed) {
+        activate(node);
+      }
     },
-    [activate],
+    [activate, armed],
   );
+  // A double-click arms a batch or subtask for dragging; on a goal it still
+  // focuses the tree on it.
   const onNodeDoubleClick: NodeMouseHandler<FlowNode> = useCallback(
     (_event, node) => {
-      if (node.type === 'item' && ['goal', 'batch'].includes(node.data.item.kind)) {
+      if (node.type !== 'item') {
+        return;
+      }
+      if (isMovable(node.data.item.kind)) {
+        onArm(node.data.item);
+      } else if (node.data.item.kind === 'goal') {
         onFocus(node.id);
       }
     },
-    [onFocus],
+    [onFocus, onArm],
   );
   // Key events from a focused node wrapper bubble here; inner buttons keep
   // their own native Enter/Space.
@@ -124,11 +171,13 @@ export function TreeCanvas(props: TreeCanvasProps) {
         </p>
       )}
       <p className="warning drop-message" role="status">
-        {drag.message}
+        {armed !== null && held === null
+          ? `${armed} is armed. ${ARMED_HINT}`
+          : drag.message}
       </p>
       <ReactFlow<FlowNode>
         key={rootKey ?? 'all'}
-        nodes={withDragged(flow.nodes, drag.dragged)}
+        nodes={withDragged(flow.nodes, shownDragged(drag, held))}
         edges={flow.edges}
         nodeTypes={nodeTypes}
         nodesDraggable={false}
@@ -142,6 +191,7 @@ export function TreeCanvas(props: TreeCanvasProps) {
         onNodeDragStop={drag.onNodeDragStop}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
+        onPaneClick={onDisarm}
         onKeyDown={onKeyDown}
         zoomOnDoubleClick={false}
         fitView
@@ -174,7 +224,7 @@ function toFlow(graph: Graph): { nodes: FlowNode[]; edges: Edge[] } {
     return {
       ...node,
       position,
-      draggable: isMovable(item.kind),
+      draggable: false,
       ariaLabel: `${KIND[item.kind].label}: ${item.title} (${item.key}), ${item.state}${held}${folded}. Press Enter for details`,
     };
   });

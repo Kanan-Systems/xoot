@@ -1,9 +1,9 @@
-// Dragging a batch or subtask onto a new parent in the tree. Positions come
-// from the layout, so the dragged node's position is held here only while
-// it moves; on drop it is released (the layout puts the node back, or puts
-// it under its new parent once the move is written). The drop target is
-// the first intersecting node the hierarchy allows; anything else is
-// refused with a message.
+// Dragging the armed batch or subtask onto a new parent in the tree.
+// Positions come from the layout, so the dragged node's position is held
+// here while it moves and, after a drop onto an allowed parent, while that
+// move waits for confirmation (shownDragged); otherwise it is released and
+// the layout puts the node back. The drop target is the first intersecting
+// node the hierarchy allows; anything else is refused with a message.
 import type {
   NodeChange,
   OnNodeDrag,
@@ -26,6 +26,8 @@ export interface Dragged {
 
 export interface TreeDrag {
   dragged: Dragged | null;
+  // True while the pointer is dragging, false once dropped.
+  active: boolean;
   message: string;
   onInit: (instance: ReactFlowInstance<FlowNode>) => void;
   onNodesChange: (changes: NodeChange<FlowNode>[]) => void;
@@ -38,10 +40,11 @@ function itemsOf(nodes: readonly FlowNode[]): ItemSummary[] {
 }
 
 export function useTreeDrag(
-  onMove: (item: ItemSummary, parent: string) => void,
+  onDrop: (item: ItemSummary, parent: string) => void,
 ): TreeDrag {
   const instance = useRef<ReactFlowInstance<FlowNode> | null>(null);
   const [dragged, setDragged] = useState<Dragged | null>(null);
+  const [active, setActive] = useState(false);
   const [message, setMessage] = useState('');
 
   const onInit = useCallback((flow: ReactFlowInstance<FlowNode>) => {
@@ -52,6 +55,7 @@ export function useTreeDrag(
     for (const change of changes) {
       if (change.type === 'position' && change.dragging === true && change.position) {
         setDragged({ id: change.id, position: change.position });
+        setActive(true);
       }
     }
   }, []);
@@ -62,22 +66,39 @@ export function useTreeDrag(
 
   const onNodeDragStop: OnNodeDrag<FlowNode> = useCallback(
     (_event, node) => {
-      setDragged(null);
+      setActive(false);
       if (node.type !== 'item') {
+        setDragged(null);
         return;
       }
       const hits = instance.current?.getIntersectingNodes(node) ?? [];
       const result = dropTarget(node.data.item, itemsOf(hits));
       if (result.ok) {
-        onMove(node.data.item, result.parent);
+        // Held where it was dropped until the move is confirmed or not.
+        onDrop(node.data.item, result.parent);
       } else {
+        setDragged(null);
         setMessage(result.reason);
       }
     },
-    [onMove],
+    [onDrop],
   );
 
-  return { dragged, message, onInit, onNodesChange, onNodeDragStart, onNodeDragStop };
+  return {
+    dragged,
+    active,
+    message,
+    onInit,
+    onNodesChange,
+    onNodeDragStart,
+    onNodeDragStop,
+  };
+}
+
+// The position to draw: while dragging, or for the node whose move waits.
+export function shownDragged(drag: TreeDrag, held: string | null): Dragged | null {
+  const { dragged } = drag;
+  return dragged !== null && (drag.active || dragged.id === held) ? dragged : null;
 }
 
 // The layout's nodes with the one being dragged where the pointer has it.

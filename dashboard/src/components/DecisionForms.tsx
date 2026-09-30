@@ -11,13 +11,13 @@ import type {
   DecisionStatus,
   DecisionUpdateRequest,
 } from '../api/types.gen.ts';
-import { DECISION_STATUS } from '../lib/display.ts';
+import { DECISION_STATUS, truncate } from '../lib/display.ts';
 import { decisionOwners, optionLabel } from '../lib/itemRules.ts';
 import { goalOf } from '../lib/keys.ts';
 import { bodyProblem, titleProblem } from '../lib/limits.ts';
 import { QueryState } from './QueryState.tsx';
 import { WriteError } from './WriteError.tsx';
-import { BodyField, SelectField, TitleField } from './fields.tsx';
+import { BodyField, ChoiceField, SelectField, TitleField } from './fields.tsx';
 
 const NEW_STATUSES: readonly DecisionStatus[] = ['locked', 'deferred'];
 
@@ -107,7 +107,7 @@ export function DecisionForm({
       />
       <TitleField label="Title" value={title} onChange={setTitle} inputRef={titleRef} />
       <BodyField label="Body (optional)" value={body} onChange={setBody} />
-      <SelectField
+      <ChoiceField
         label="Status"
         value={status}
         onChange={(value) => {
@@ -122,7 +122,10 @@ export function DecisionForm({
         value={supersedes}
         onChange={setSupersedes}
         placeholder="Nothing"
-        choices={older.map((d) => ({ value: d.key, label: `${d.title} (${d.key})` }))}
+        choices={older.map((d) => ({
+          value: d.key,
+          label: `${truncate(d.title).text} (${d.key})`,
+        }))}
       />
       <Problem text={problem} />
       <WriteError error={create.error} />
@@ -221,7 +224,7 @@ function DecisionFields({ prefix, detail, onDone, onCancel }: DecisionFieldsProp
       )}
       <TitleField label="Title" value={title} onChange={setTitle} inputRef={titleRef} />
       <BodyField label="Body" value={body} onChange={setBody} />
-      <SelectField
+      <ChoiceField
         label="Status"
         value={status}
         onChange={(value) => {

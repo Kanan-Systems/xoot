@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { useDecisions } from '../api/queries.ts';
 import type { DecisionStatus } from '../api/types.gen.ts';
 import { DecisionHierarchy } from '../components/DecisionHierarchy.tsx';
+import { Filter } from '../components/Filter.tsx';
 import { QueryState } from '../components/QueryState.tsx';
 import { TabHelp } from '../components/TabHelp.tsx';
 import { useCollapsed } from '../hooks/useCollapsed.ts';
@@ -29,34 +30,6 @@ function oneOf<T extends string>(
   value: string | null,
 ): T | null {
   return options.find((option) => option === value) ?? null;
-}
-
-interface FilterProps {
-  label: string;
-  value: string | null;
-  options: readonly { value: string; label: string }[];
-  onChange: (value: string | null) => void;
-}
-
-function Filter({ label, value, options, onChange }: FilterProps) {
-  return (
-    <label className="control">
-      {label}{' '}
-      <select
-        value={value ?? ''}
-        onChange={(event) => {
-          onChange(event.target.value === '' ? null : event.target.value);
-        }}
-      >
-        <option value="">All</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
 }
 
 export function DecisionsPage() {

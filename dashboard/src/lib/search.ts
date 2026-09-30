@@ -4,7 +4,10 @@
 // goal-1/batch-2 always travel here, URL-encoded, never as a path segment.
 export const PARAM = {
   item: 'item',
+  // The create panel in the drawer slot; its only value is "goal".
+  create: 'create',
   goal: 'goal',
+  batch: 'batch',
   focus: 'focus',
   level: 'level',
   status: 'status',

@@ -33,6 +33,33 @@
   resize: vertical;
 }
 
+/* A native select sizes itself to its longest option; keep it (and its
+   closed text) inside the drawer. Option labels are cut in the code too. */
+.field select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.choice-field {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.choice-field legend {
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+}
+
 .form-actions {
   display: flex;
   flex-wrap: wrap;
@@ -63,6 +90,32 @@
 
 .plan-changes li {
   overflow-wrap: anywhere;
+}
+
+.plan-summary {
+  margin: 0.25rem 0 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.plan-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* The node armed for dragging: an outline and a second ring, not only a
+   colour; the status line above the canvas says how to move or cancel. */
+.react-flow__node.node-armed {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 6px var(--bg),
+    0 0 0 8px var(--accent);
+  cursor: grab;
+}
+
+.actions-help dt {
+  font-weight: 600;
 }
 
 .notice:empty,

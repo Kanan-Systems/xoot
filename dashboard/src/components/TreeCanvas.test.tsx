@@ -66,11 +66,13 @@ describe('tree node clicks', () => {
     },
   );
 
-  it('double-click on a goal or batch focuses it through the query', async () => {
+  // A double-click on a batch or subtask arms it for dragging instead
+  // (TreeDrag.test.tsx); a batch still focuses from its focus icon.
+  it('double-click on a goal focuses it through the query', async () => {
     renderApp('/x/tree');
-    fireEvent.doubleClick(await flowNode(B1));
+    fireEvent.doubleClick(await flowNode(G1));
     await waitFor(() => {
-      expect(location()).toBe('/x/tree?focus=goal-1%2Fbatch-1');
+      expect(location()).toBe('/x/tree?focus=goal-1');
     });
   });
 

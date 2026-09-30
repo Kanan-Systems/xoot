@@ -2,7 +2,7 @@
 // that collapses its group (expanded unless this viewer collapsed it; the
 // set is kept per project in browser storage). A goal's own decisions come
 // before its batches; decisions whose owner is gone form the last group.
-import { useId, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import type { DecisionSummary } from '../api/types.gen.ts';
 import {
@@ -11,6 +11,7 @@ import {
   type DecisionNode,
 } from '../lib/decisionGroups.ts';
 import type { Titles } from '../lib/titles.ts';
+import { CollapsibleGroup } from './CollapsibleGroup.tsx';
 import { DecisionsSection } from './DecisionsSection.tsx';
 import { KeyTag, TitleText } from './Titled.tsx';
 
@@ -78,59 +79,29 @@ interface GroupProps extends HierarchyProps {
   children?: ReactNode;
 }
 
-function Heading({
-  depth,
-  id,
-  children,
-}: {
-  depth: number;
-  id: string;
-  children: ReactNode;
-}) {
-  if (depth === 2) {
-    return <h2 id={id}>{children}</h2>;
-  }
-  return depth === 3 ? <h3 id={id}>{children}</h3> : <h4 id={id}>{children}</h4>;
-}
-
 function Group(props: GroupProps) {
   const { prefix, groupKey, depth, label, count, decisions, children } = props;
   const { successors, titles, collapsed, onToggle } = props;
-  const headingId = useId();
-  const panelId = `${headingId}-panel`;
-  const open = !collapsed.has(groupKey);
   return (
-    <section
-      aria-labelledby={headingId}
-      className={`decision-group depth-${String(depth)}`}
+    <CollapsibleGroup
+      depth={depth}
+      label={label}
+      count={count}
+      open={!collapsed.has(groupKey)}
+      onToggle={() => {
+        onToggle(groupKey);
+      }}
+      className="decision-group"
     >
-      <Heading depth={depth} id={headingId}>
-        <button
-          type="button"
-          className="group-toggle"
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={() => {
-            onToggle(groupKey);
-          }}
-        >
-          <span aria-hidden="true">{open ? '▾' : '▸'}</span> {label}{' '}
-          <span className="count">({count})</span>
-        </button>
-      </Heading>
-      {open && (
-        <div id={panelId}>
-          {decisions.length > 0 && (
-            <DecisionsSection
-              prefix={prefix}
-              decisions={decisions}
-              successors={successors}
-              titles={titles}
-            />
-          )}
-          {children}
-        </div>
+      {decisions.length > 0 && (
+        <DecisionsSection
+          prefix={prefix}
+          decisions={decisions}
+          successors={successors}
+          titles={titles}
+        />
       )}
-    </section>
+      {children}
+    </CollapsibleGroup>
   );
 }

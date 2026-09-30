@@ -2,27 +2,26 @@
 // tree; ?goal=<key> narrows it to one goal and ?focus=<key> roots it at any
 // goal or batch. Both keys are nested paths, so they stay query parameters.
 // Collapsed goals and batches are per viewer, kept in browser storage, and
-// forgotten once a complete tree no longer has them. A batch or subtask
-// dropped onto a new parent is moved here, confirmed first when it has
-// children.
+// forgotten once a complete tree no longer has them. A double-clicked batch
+// or subtask is armed for dragging; dropped onto a new parent, the move is
+// confirmed in plain words before anything is sent (TreeMove).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { useDecisions, useProjects, useTree } from '../api/queries.ts';
-import type { ItemSummary } from '../api/types.gen.ts';
-import { CreateItemForm } from '../components/CreateForms.tsx';
-import { Disclosure } from '../components/Disclosure.tsx';
-import { PlanConfirm } from '../components/PlanConfirm.tsx';
+import type { ItemSummary, TreeEntry } from '../api/types.gen.ts';
 import { QueryState } from '../components/QueryState.tsx';
 import { KeyLabel } from '../components/Titled.tsx';
 import { TreeCanvas } from '../components/TreeCanvas.tsx';
+import { TreeMovePanel, useTreeMove } from '../components/TreeMove.tsx';
 import { TreeToolbar } from '../components/TreeToolbar.tsx';
 import { useCollapsed } from '../hooks/useCollapsed.ts';
 import { useDrawer } from '../hooks/useDrawer.ts';
-import { movedMessage, useMoveFlow } from '../hooks/useMoveFlow.ts';
 import { useTitles } from '../hooks/useTitles.ts';
 import { PARAM, withParam } from '../lib/search.ts';
 import { blockedCounts, countByOwner } from '../lib/tree.ts';
+
+const NO_ENTRIES: readonly TreeEntry[] = [];
 
 export function TreePage() {
   const { project = '' } = useParams();
@@ -45,15 +44,15 @@ export function TreePage() {
       prune(new Set(complete.nodes.map((entry) => entry.item.key)));
     }
   }, [complete, prune]);
-  const move = useMoveFlow(project, (output, request) => {
-    setNotice(movedMessage(output, request));
-  });
-  const moving = move.flow.step === 'idle' ? null : move.flow.request.key;
-  const onMove = (item: ItemSummary, parent: string) => {
-    if (moving === null) {
-      setNotice('');
-      void move.start({ key: item.key, parent, expected_version: item.version });
+  const entries = tree.data?.nodes ?? NO_ENTRIES;
+  const moving = useTreeMove(project, entries, titles, setNotice);
+  // A double-click also clicked, opening the drawer: arming closes it again
+  // without a history entry, so the canvas is free to drag on.
+  const onArm = (item: ItemSummary) => {
+    if (drawer.itemKey !== null) {
+      drawer.dismiss();
     }
+    moving.arm(item);
   };
   const focus = search.get(PARAM.focus);
   const rootKey = focus ?? search.get(PARAM.goal);
@@ -83,32 +82,14 @@ export function TreePage() {
         onShowDone={setShowDone}
         truncated={tree.data?.truncated ?? false}
       >
-        <Disclosure label="New goal">
-          {(close) => (
-            <CreateItemForm
-              prefix={project}
-              kind="goal"
-              parent={null}
-              onDone={(message) => {
-                close();
-                setNotice(message);
-              }}
-              onCancel={close}
-            />
-          )}
-        </Disclosure>
+        <button type="button" onClick={drawer.openCreate}>
+          New goal
+        </button>
       </TreeToolbar>
       <p role="status" className="notice">
         {notice}
       </p>
-      {moving !== null && (
-        <PlanConfirm
-          title={`Move ${moving}`}
-          flow={move.flow}
-          onConfirm={() => void move.confirm()}
-          onCancel={move.cancel}
-        />
-      )}
+      <TreeMovePanel tree={moving} entries={entries} titles={titles} />
       {focus !== null && (
         <p className="focus-bar">
           Focus: <KeyLabel itemKey={focus} titles={titles} />{' '}
@@ -131,7 +112,11 @@ export function TreePage() {
             onFocus={onFocus}
             onShowDone={onShowDone}
             onToggle={collapsed.toggle}
-            onMove={onMove}
+            armed={moving.state.armed}
+            held={moving.state.pending?.item.key ?? null}
+            onArm={onArm}
+            onDisarm={moving.disarm}
+            onDrop={moving.drop}
           />
         )}
       </QueryState>

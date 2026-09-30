@@ -1,61 +1,116 @@
-// The backlog view's tables, by level: each batch's backlog (headed by its
-// goal and batch titles), then each goal's, then the project backlog.
-// Groups keep the API's order within them; groups sort by key naturally.
+// The backlog view's groups: each goal (its own backlog, then each of its
+// batches' backlog), then the project backlog. Groups sort by key
+// naturally; rows keep the API's order within them. A goal or batch filter
+// shows only that group.
 import type { BacklogRow, BacklogView } from '../api/types.gen.ts';
-import { compareKeys } from './keys.ts';
-import type { Titles } from './titles.ts';
+import { batchOf, compareKeys, goalOf } from './keys.ts';
 
-export type Level = BacklogRow['level'];
+// Keys never contain '@', so the project group cannot collide with one.
+export const PROJECT_GROUP = '@project';
 
-export const LEVEL_ORDER: readonly Level[] = ['batch', 'goal', 'project'];
-
-export const LEVEL_HEADING: Record<Level, string> = {
-  batch: 'Batch backlog',
-  goal: 'Goal backlog',
-  project: 'Project backlog',
-};
-
-export interface Holder {
-  key: string;
-  title: string | null;
-}
-
-export interface BacklogGroup {
-  id: string;
-  level: Level;
-  // Outermost first: the goal then the batch; none for the project.
-  holders: Holder[];
+export interface BatchGroup {
+  batch: string;
   items: BacklogRow[];
 }
 
-function holdersOf(key: string | null, titles: Titles): Holder[] {
-  if (key === null) {
-    return [];
-  }
-  const parts = key.split('/');
-  return parts.map((_, index) => {
-    const prefix = parts.slice(0, index + 1).join('/');
-    return { key: prefix, title: titles.get(prefix) ?? null };
-  });
+export interface GoalGroup {
+  goal: string;
+  // The goal's own backlog, not its batches'.
+  items: BacklogRow[];
+  batches: BatchGroup[];
 }
 
-export function backlogGroups(view: BacklogView, titles: Titles): BacklogGroup[] {
-  const byHolder = new Map<string, BacklogGroup>();
-  for (const row of view.items) {
-    const id = `${row.level}:${row.parent ?? ''}`;
-    const group = byHolder.get(id) ?? {
-      id,
-      level: row.level,
-      holders: holdersOf(row.parent, titles),
-      items: [],
-    };
-    group.items.push(row);
-    byHolder.set(id, group);
+export interface BacklogTree {
+  goals: GoalGroup[];
+  project: BacklogRow[];
+}
+
+export interface BacklogFilter {
+  goal: string | null;
+  batch: string | null;
+}
+
+// Where a row sits: its goal and, for batch backlog, its batch.
+function holders(row: BacklogRow): { goal: string | null; batch: string | null } {
+  if (row.parent === null) {
+    return { goal: null, batch: null };
   }
-  const groups = [...byHolder.values()];
-  return LEVEL_ORDER.flatMap((level) =>
-    groups
-      .filter((group) => group.level === level)
-      .sort((a, b) => compareKeys(a.id, b.id)),
+  return { goal: goalOf(row.parent), batch: batchOf(row.parent) };
+}
+
+export function backlogGoals(view: BacklogView): string[] {
+  const goals = new Set(view.items.flatMap((row) => holders(row).goal ?? []));
+  return [...goals].sort(compareKeys);
+}
+
+// The batches holding backlog, only the goal's when one is chosen.
+export function backlogBatches(view: BacklogView, goal: string | null): string[] {
+  const batches = new Set(
+    view.items.flatMap((row) => {
+      const where = holders(row);
+      return where.batch !== null && (goal === null || where.goal === goal)
+        ? [where.batch]
+        : [];
+    }),
+  );
+  return [...batches].sort(compareKeys);
+}
+
+// URL values that name no group are ignored, like the Decisions filters.
+export function validFilter(
+  view: BacklogView,
+  goal: string | null,
+  batch: string | null,
+): BacklogFilter {
+  const knownGoal = goal !== null && backlogGoals(view).includes(goal) ? goal : null;
+  const knownBatch =
+    batch !== null && backlogBatches(view, knownGoal).includes(batch) ? batch : null;
+  return { goal: knownGoal, batch: knownBatch };
+}
+
+function shown(row: BacklogRow, filter: BacklogFilter): boolean {
+  const where = holders(row);
+  if (filter.batch !== null) {
+    return where.batch === filter.batch;
+  }
+  return filter.goal === null || where.goal === filter.goal;
+}
+
+export function backlogTree(view: BacklogView, filter: BacklogFilter): BacklogTree {
+  const goals = new Map<string, GoalGroup>();
+  const project: BacklogRow[] = [];
+  for (const row of view.items) {
+    if (!shown(row, filter)) {
+      continue;
+    }
+    const where = holders(row);
+    if (where.goal === null) {
+      project.push(row);
+      continue;
+    }
+    const group = goals.get(where.goal) ?? { goal: where.goal, items: [], batches: [] };
+    goals.set(where.goal, group);
+    if (where.batch === null) {
+      group.items.push(row);
+      continue;
+    }
+    const batch = group.batches.find((entry) => entry.batch === where.batch);
+    if (batch === undefined) {
+      group.batches.push({ batch: where.batch, items: [row] });
+    } else {
+      batch.items.push(row);
+    }
+  }
+  const sorted = [...goals.values()].sort((a, b) => compareKeys(a.goal, b.goal));
+  for (const group of sorted) {
+    group.batches.sort((a, b) => compareKeys(a.batch, b.batch));
+  }
+  return { goals: sorted, project };
+}
+
+export function goalCount(group: GoalGroup): number {
+  return group.batches.reduce(
+    (sum, batch) => sum + batch.items.length,
+    group.items.length,
   );
 }

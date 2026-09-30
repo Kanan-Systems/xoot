@@ -1,48 +1,88 @@
 import { describe, expect, it } from 'vitest';
 
+import type { BacklogView } from '../api/types.gen.ts';
 import { backlogView } from '../test/api.ts';
 import { B1, B1_BACKLOG, G1, G1_BACKLOG, P_BACKLOG } from '../test/fixtures.ts';
-import { backlogGroups } from './backlogGroups.ts';
+import {
+  backlogBatches,
+  backlogGoals,
+  backlogTree,
+  goalCount,
+  validFilter,
+} from './backlogGroups.ts';
 
-const TITLES = new Map([
-  [G1, 'Ship export'],
-  [B1, 'Writer'],
-]);
+const ALL = { goal: null, batch: null };
 
-describe('backlogGroups', () => {
-  it('orders batch backlog, then goal backlog, then the project backlog', () => {
-    const groups = backlogGroups(backlogView(), TITLES);
-    expect(groups.map((group) => group.level)).toEqual(['batch', 'goal', 'project']);
-    expect(groups.map((group) => group.items.map((row) => row.key))).toEqual([
-      [B1_BACKLOG],
-      [G1_BACKLOG],
-      [P_BACKLOG],
+// One goal-level and one batch-level row more, under goal-10 and goal-2.
+function wider(): BacklogView {
+  const view = backlogView();
+  const [, goalRow, batchRow] = view.items;
+  if (goalRow === undefined || batchRow === undefined) {
+    throw new Error('fixture rows');
+  }
+  view.items.push(
+    { ...goalRow, key: 'goal-10/backlog-1', parent: 'goal-10' },
+    { ...batchRow, key: 'goal-2/batch-3/backlog-1', parent: 'goal-2/batch-3' },
+  );
+  return view;
+}
+
+describe('backlogTree', () => {
+  it('groups goal > batch, the goal backlog first, the project last', () => {
+    const tree = backlogTree(backlogView(), ALL);
+    expect(tree.goals).toEqual([
+      {
+        goal: G1,
+        items: [expect.objectContaining({ key: G1_BACKLOG }) as unknown],
+        batches: [
+          {
+            batch: B1,
+            items: [expect.objectContaining({ key: B1_BACKLOG }) as unknown],
+          },
+        ],
+      },
+    ]);
+    expect(tree.project.map((row) => row.key)).toEqual([P_BACKLOG]);
+    expect(tree.goals.map(goalCount)).toEqual([2]);
+  });
+
+  it('sorts goals and batches by key, naturally', () => {
+    const tree = backlogTree(wider(), ALL);
+    expect(tree.goals.map((group) => group.goal)).toEqual([G1, 'goal-2', 'goal-10']);
+    expect(tree.goals[1]?.batches.map((batch) => batch.batch)).toEqual([
+      'goal-2/batch-3',
     ]);
   });
 
-  it('heads a batch group with its goal and batch titles, keys second', () => {
-    const [batch, goal, project] = backlogGroups(backlogView(), TITLES);
-    expect(batch?.holders).toEqual([
-      { key: G1, title: 'Ship export' },
-      { key: B1, title: 'Writer' },
+  it('shows only the goal, or only the batch, a filter names', () => {
+    const byGoal = backlogTree(wider(), { goal: G1, batch: null });
+    expect(byGoal.goals.map((group) => group.goal)).toEqual([G1]);
+    expect(byGoal.project).toEqual([]);
+    const byBatch = backlogTree(wider(), { goal: null, batch: B1 });
+    expect(byBatch.goals).toEqual([
+      {
+        goal: G1,
+        items: [],
+        batches: [expect.objectContaining({ batch: B1 }) as unknown],
+      },
     ]);
-    expect(goal?.holders).toEqual([{ key: G1, title: 'Ship export' }]);
-    expect(project?.holders).toEqual([]);
+    expect(byBatch.project).toEqual([]);
+  });
+});
+
+describe('backlog filters', () => {
+  it('offer the goals and batches holding backlog', () => {
+    expect(backlogGoals(wider())).toEqual([G1, 'goal-2', 'goal-10']);
+    expect(backlogBatches(wider(), null)).toEqual([B1, 'goal-2/batch-3']);
+    expect(backlogBatches(wider(), 'goal-2')).toEqual(['goal-2/batch-3']);
   });
 
-  it('sorts groups of one level by key, naturally', () => {
-    const view = backlogView();
-    const base = view.items[1];
-    if (base === undefined) {
-      throw new Error('fixture has a goal row');
-    }
-    view.items = [
-      { ...base, key: 'goal-10/backlog-1', parent: 'goal-10' },
-      { ...base, key: 'goal-2/backlog-1', parent: 'goal-2' },
-    ];
-    expect(backlogGroups(view, TITLES).map((group) => group.id)).toEqual([
-      'goal:goal-2',
-      'goal:goal-10',
-    ]);
+  it('ignore values that name no group, or a batch of another goal', () => {
+    expect(validFilter(wider(), 'goal-99', 'nope')).toEqual(ALL);
+    expect(validFilter(wider(), G1, 'goal-2/batch-3')).toEqual({
+      goal: G1,
+      batch: null,
+    });
+    expect(validFilter(wider(), null, B1)).toEqual({ goal: null, batch: B1 });
   });
 });

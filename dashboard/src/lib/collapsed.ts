@@ -1,9 +1,9 @@
 // What a viewer collapsed, kept per project and per view in this browser
-// only: the tree's goals and batches, the decisions view's headings. Storage
-// may be missing, full, blocked or hold anything, so every access is guarded
-// and a bad value reads as nothing collapsed.
+// only: the tree's goals and batches, the decisions and backlog headings.
+// Storage may be missing, full, blocked or hold anything, so every access is
+// guarded and a bad value reads as nothing collapsed.
 
-export type CollapseView = 'tree' | 'decisions';
+export type CollapseView = 'tree' | 'decisions' | 'backlog';
 
 export function storageKey(project: string, view: CollapseView = 'tree'): string {
   return view === 'tree'

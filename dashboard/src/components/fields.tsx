@@ -1,7 +1,7 @@
 // Labelled form controls shared by the write forms, with the schema's limits.
 // Required fields are marked for assistive tech but checked by the forms, so
 // every refusal shows the same inline message instead of a browser bubble.
-import type { Ref } from 'react';
+import { useId, type Ref } from 'react';
 
 import { LIMITS } from '../lib/limits.ts';
 
@@ -97,5 +97,37 @@ export function SelectField({
         ))}
       </select>
     </label>
+  );
+}
+
+// A small set of exclusive options as radio buttons, compact enough for the
+// drawer, where a native select's popup could overflow it.
+export function ChoiceField({
+  label,
+  value,
+  choices,
+  onChange,
+}: Omit<SelectProps, 'placeholder'>) {
+  const name = useId();
+  return (
+    <fieldset className="field choice-field">
+      <legend>{label}</legend>
+      <div className="choices">
+        {choices.map((choice) => (
+          <label key={choice.value} className="choice">
+            <input
+              type="radio"
+              name={name}
+              value={choice.value}
+              checked={value === choice.value}
+              onChange={() => {
+                onChange(choice.value);
+              }}
+            />{' '}
+            {choice.label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }

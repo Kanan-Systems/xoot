@@ -3,6 +3,7 @@
 // items never move by reparenting; they are covered or pushed. The UI only
 // offers what these rules allow; the server checks again.
 import type { BacklogRow, ItemKind, ItemSummary, TreeEntry } from '../api/types.gen.ts';
+import { truncate } from './display.ts';
 
 type WorkKind = 'goal' | 'batch' | 'subtask';
 
@@ -101,7 +102,8 @@ export function decisionOwners(entries: readonly TreeEntry[]): ItemSummary[] {
   return items(entries).filter((candidate) => isDecisionOwner(candidate.kind));
 }
 
-// "title (key, state)" for a select option.
+// "title (key, state)" for a select option, the title cut so a long one
+// cannot widen the select past the drawer.
 export function optionLabel(candidate: ItemSummary): string {
-  return `${candidate.title} (${candidate.key}, ${candidate.state})`;
+  return `${truncate(candidate.title).text} (${candidate.key}, ${candidate.state})`;
 }

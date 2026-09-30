@@ -117,7 +117,11 @@ describe('move in the drawer', () => {
       target: { value: B1 },
     });
     fireEvent.click(within(form).getByRole('button', { name: 'Move' }));
-    expect(await screen.findByText(`Moved ${S3} to ${B1}.`)).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        `Moved subtask 'title of ${S3}' to batch 'title of ${B1}' (goal 'title of ${G1}').`,
+      ),
+    ).toBeInTheDocument();
     expect(requests(fetchMock, 'POST').map((r) => r.body)).toEqual([
       { key: S3, parent: B1, expected_version: 1 },
     ]);
@@ -138,9 +142,16 @@ describe('move in the drawer', () => {
       target: { value: G2 },
     });
     fireEvent.click(within(form).getByRole('button', { name: 'Move' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+    const region = await screen.findByRole('region', { name: /Confirm: Move/ });
+    expect(region).toHaveTextContent(
+      `Move batch 'title of ${B2}' from goal 'title of ${G1}' to goal 'title of ${G2}'. ` +
+        'Its key will change to goal-2/batch-2.',
+    );
+    fireEvent.click(within(region).getByRole('button', { name: 'Confirm' }));
     expect(
-      await screen.findByText(`Moved ${B2} to ${G2}: it is now goal-2/batch-2.`),
+      await screen.findByText(
+        `Moved batch 'title of ${B2}' to goal 'title of ${G2}'. Its key is now goal-2/batch-2.`,
+      ),
     ).toBeInTheDocument();
     expect(requests(fetchMock, 'POST').at(-1)?.body).toEqual({
       key: B2,
@@ -225,9 +236,15 @@ describe('recording a decision in the drawer', () => {
     fireEvent.change(within(form).getByLabelText('Title'), {
       target: { value: 'rule' },
     });
-    fireEvent.change(within(form).getByLabelText('Status'), {
-      target: { value: 'deferred' },
-    });
+    // Status is a two-option radio group, not a select.
+    const status = within(form).getByRole('group', { name: 'Status' });
+    expect(
+      within(status)
+        .getAllByRole('radio')
+        .map((r) => r.getAttribute('value')),
+    ).toEqual(['locked', 'deferred']);
+    expect(within(form).queryByRole('combobox', { name: 'Status' })).toBeNull();
+    fireEvent.click(within(status).getByRole('radio', { name: 'Deferred' }));
     fireEvent.click(within(form).getByRole('button', { name: 'Record decision' }));
     expect(
       await screen.findByText('Recorded goal-1/batch-2/decision-1.'),

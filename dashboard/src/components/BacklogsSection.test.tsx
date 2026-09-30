@@ -1,6 +1,6 @@
-// The backlog tab: tables by level (batch, goal, project), each group
-// collapsible from its heading, with the title, key, state, found on, why,
-// created and actions columns; a row click opens the drawer.
+// The backlog tab: tables grouped goal > batch, then the project backlog,
+// each group collapsible from its heading, with the title, key, state,
+// found on, why, created and actions columns; a row click opens the drawer.
 import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -13,20 +13,22 @@ describe('backlog groups', () => {
     mockApi(projectRoutes());
   });
 
-  it('are ordered batch, goal, project, under level headings', async () => {
+  it('are grouped goal > batch, then the project backlog', async () => {
     renderApp('/x/backlog');
     const toggles = await screen.findAllByRole('button', { expanded: true });
     expect(toggles.map((toggle) => toggle.textContent)).toEqual([
-      '▾ title of goal-1 goal-1 › title of goal-1/batch-1 goal-1/batch-1 (1)',
-      '▾ title of goal-1 goal-1 (1)',
+      '▾ title of goal-1 goal-1 (2)',
+      '▾ title of goal-1/batch-1 goal-1/batch-1 (1)',
       '▾ Project backlog (1)',
     ]);
-    const levels = screen.getAllByRole('heading', { level: 2 });
-    expect(levels.map((heading) => heading.textContent)).toEqual([
-      'Batch backlog',
-      'Goal backlog',
-      'Project backlog',
+    const tops = screen.getAllByRole('heading', { level: 2 });
+    expect(tops.map((heading) => heading.textContent)).toEqual([
+      '▾ title of goal-1 goal-1 (2)',
+      '▾ Project backlog (1)',
     ]);
+    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent(
+      'goal-1/batch-1',
+    );
   });
 
   it('have the seven columns, with "why" as the first line of the body', async () => {

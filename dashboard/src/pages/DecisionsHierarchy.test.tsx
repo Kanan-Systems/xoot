@@ -113,9 +113,17 @@ describe('editing a decision in place', () => {
     expect(within(form).getByLabelText('Title')).toHaveFocus();
     expect(within(form).getByLabelText('Body')).toHaveValue('the body');
     fireEvent.change(within(form).getByLabelText('Body'), { target: { value: 'new' } });
-    fireEvent.change(within(form).getByLabelText('Status'), {
-      target: { value: 'deferred' },
-    });
+    // Status is a radio group, not a select; a superseded decision keeps its
+    // own status as a third choice so an edit does not change it silently.
+    const status = within(form).getByRole('group', { name: 'Status' });
+    expect(
+      within(status)
+        .getAllByRole('radio')
+        .map((r) => r.getAttribute('value')),
+    ).toEqual(['superseded', 'locked', 'deferred']);
+    expect(within(status).getByRole('radio', { name: 'Superseded' })).toBeChecked();
+    expect(within(form).queryByRole('combobox', { name: 'Status' })).toBeNull();
+    fireEvent.click(within(status).getByRole('radio', { name: 'Deferred' }));
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
     expect(await screen.findByText(`Saved ${OLD}.`)).toBeInTheDocument();
     expect(requests(fetchMock, 'PATCH').map((r) => r.body)).toEqual([

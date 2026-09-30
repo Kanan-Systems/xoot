@@ -6,7 +6,9 @@ import { useState, type SubmitEvent } from 'react';
 import { useTree } from '../api/queries.ts';
 import type { ItemDetail } from '../api/types.gen.ts';
 import { movedMessage, useMoveFlow } from '../hooks/useMoveFlow.ts';
+import { useTitles } from '../hooks/useTitles.ts';
 import { moveTargets, optionLabel } from '../lib/itemRules.ts';
+import { moveFactsFromPlan, movePlanText } from '../lib/wording.ts';
 import { PlanConfirm } from './PlanConfirm.tsx';
 import { SelectField } from './fields.tsx';
 
@@ -21,8 +23,9 @@ export function MoveForm({ prefix, item, onDone, onCancel }: MoveFormProps) {
   const tree = useTree(prefix);
   const [parent, setParent] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
+  const titles = useTitles(prefix);
   const flow = useMoveFlow(prefix, (output, request) => {
-    onDone(movedMessage(output, request));
+    onDone(movedMessage(output, request, titles));
   });
   const targets = moveTargets(item, tree.data?.nodes ?? []);
   const submit = (event: SubmitEvent) => {
@@ -62,6 +65,9 @@ export function MoveForm({ prefix, item, onDone, onCancel }: MoveFormProps) {
       <PlanConfirm
         title={`Move ${item.key}`}
         flow={flow.flow}
+        summarize={(plan) =>
+          movePlanText(moveFactsFromPlan(item.key, parent, plan), titles)
+        }
         onConfirm={() => void flow.confirm()}
         onCancel={flow.cancel}
       />

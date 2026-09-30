@@ -121,6 +121,34 @@ describe('drawer editing', () => {
     ]);
   });
 
+  it('words the drop of an item with children plainly, before and after', async () => {
+    const parent = itemView(B2);
+    parent.children.total = 1;
+    const changes = [
+      { key: S3, before: { state: 'open' }, after: { state: 'dropped' } },
+      { key: B2, before: { state: 'open' }, after: { state: 'dropped' } },
+    ];
+    const preview = previewed('drop', 'tok-5', changes);
+    const applied = { ...preview, phase: 'applied' as const, confirm_token: null };
+    open({
+      [`/projects/x/items/${B2}`]: parent,
+      [PATCH_B2]: sequence(preview, applied),
+    });
+    const form = await startEditing();
+    fireEvent.change(within(form).getByLabelText('State'), {
+      target: { value: 'dropped' },
+    });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+    const region = await screen.findByRole('region', { name: /Confirm: Save/ });
+    expect(region).toHaveTextContent(
+      `Drop batch 'title of ${B2}' and its 1 open subtask.`,
+    );
+    fireEvent.click(within(region).getByRole('button', { name: 'Confirm' }));
+    expect(
+      await screen.findByText(`Dropped batch 'title of ${B2}' and its 1 open subtask.`),
+    ).toBeInTheDocument();
+  });
+
   it('refuses a drop with children combined with other fields before sending', async () => {
     const parent = itemView(B2);
     parent.children.total = 1;

@@ -18,21 +18,29 @@ export interface TwoPhaseResult {
 export const RESTARTED =
   'The change no longer matched its preview, so here is a fresh one to review.';
 
+// A plan on screen, or being applied.
+interface Shown<Req> {
+  step: 'preview' | 'confirming';
+  request: Req;
+  token: string;
+  plan: SubtreeOutput;
+  notice: string | null;
+}
+
 export type Flow<Req> =
   | { step: 'idle' }
   | { step: 'sending'; request: Req }
-  | {
-      step: 'preview' | 'confirming';
-      request: Req;
-      token: string;
-      plan: SubtreeOutput;
-      notice: string | null;
-    }
+  | Shown<Req>
   | { step: 'failed'; request: Req; error: unknown };
+
+export interface StartOptions {
+  // True when a returned plan is exactly what the user already confirmed.
+  autoConfirm?: (plan: SubtreeOutput) => boolean;
+}
 
 export interface TwoPhase<Req> {
   flow: Flow<Req>;
-  start: (request: Req) => Promise<void>;
+  start: (request: Req, options?: StartOptions) => Promise<void>;
   confirm: () => Promise<void>;
   cancel: () => void;
 }
@@ -45,25 +53,42 @@ export function useTwoPhase<Req, Res extends TwoPhaseResult>(
 ): TwoPhase<Req> {
   const [flow, setFlow] = useState<Flow<Req>>({ step: 'idle' });
 
-  const settle = (request: Req, result: Res, notice: string | null) => {
+  // A preview the user already agreed to (autoConfirm says the plan is the
+  // one they confirmed) is applied at once instead of asking twice.
+  const settle = async (
+    request: Req,
+    result: Res,
+    notice: string | null,
+    options: StartOptions,
+  ): Promise<void> => {
     if (result.phase === 'preview' && result.confirm_token !== null && result.plan) {
-      setFlow({
+      const shown: Shown<Req> = {
         step: 'preview',
         request,
         token: result.confirm_token,
         plan: result.plan,
         notice,
-      });
+      };
+      if (options.autoConfirm?.(result.plan) === true) {
+        await apply(shown);
+        return;
+      }
+      setFlow(shown);
       return;
     }
     setFlow({ step: 'idle' });
     onApplied(result, request);
   };
 
-  const preview = async (request: Req, notice: string | null, retried: boolean) => {
+  const preview = async (
+    request: Req,
+    notice: string | null,
+    retried: boolean,
+    options: StartOptions = {},
+  ) => {
     setFlow({ step: 'sending', request });
     try {
-      settle(request, await send(request, null), notice);
+      await settle(request, await send(request, null), notice, options);
     } catch (error) {
       if (!retried && isRestart(error)) {
         await preview(request, RESTARTED, true);
@@ -73,22 +98,26 @@ export function useTwoPhase<Req, Res extends TwoPhaseResult>(
     }
   };
 
-  const start = (request: Req) => preview(request, null, false);
+  const start = (request: Req, options: StartOptions = {}) =>
+    preview(request, null, false, options);
 
-  const confirm = async () => {
-    if (flow.step !== 'preview') {
-      return;
-    }
-    const { request, token } = flow;
-    setFlow({ ...flow, step: 'confirming', notice: null });
+  const apply = async (shown: Shown<Req>) => {
+    const { request, token } = shown;
+    setFlow({ ...shown, step: 'confirming', notice: null });
     try {
-      settle(request, await send(request, token), null);
+      await settle(request, await send(request, token), null, {});
     } catch (error) {
       if (isRestart(error)) {
         await preview(request, RESTARTED, true);
         return;
       }
       setFlow({ step: 'failed', request, error });
+    }
+  };
+
+  const confirm = async () => {
+    if (flow.step === 'preview') {
+      await apply(flow);
     }
   };
 

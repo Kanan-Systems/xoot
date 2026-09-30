@@ -14,6 +14,7 @@ import { useTwoPhase } from '../hooks/useTwoPhase.ts';
 import { categoryClass, categoryGlyph, when } from '../lib/display.ts';
 import { coverChoice, optionLabel } from '../lib/itemRules.ts';
 import type { Titles } from '../lib/titles.ts';
+import { pushPlanText, pushResultText } from '../lib/wording.ts';
 import { PlanConfirm } from './PlanConfirm.tsx';
 import { KeyLabel, KeyTag, TitleText } from './Titled.tsx';
 import { WriteError } from './WriteError.tsx';
@@ -28,7 +29,11 @@ interface BacklogRowProps {
   onDone: (message: string) => void;
 }
 
-function pushedMessage(output: PushOutput, key: string): string {
+function pushedMessage(output: PushOutput, key: string, titles: Titles): string {
+  const plain = pushResultText(key, output.plan, titles);
+  if (plain !== null) {
+    return plain;
+  }
   const moved = output.plan.changes.find((change) => change.key === key);
   const newKey = output.item?.key ?? moved?.after.key;
   return typeof newKey === 'string'
@@ -39,7 +44,7 @@ function pushedMessage(output: PushOutput, key: string): string {
 export function BacklogRow({ prefix, row, titles, onDone }: BacklogRowProps) {
   const { hrefFor } = useDrawer();
   const [covering, setCovering] = useState(false);
-  const push = usePushFlow(prefix, row.key, onDone);
+  const push = usePushFlow(prefix, row.key, titles, onDone);
   const category = categoryGlyph(row.category);
   const panel = covering || push.flow.step !== 'idle';
   return (
@@ -106,6 +111,7 @@ export function BacklogRow({ prefix, row, titles, onDone }: BacklogRowProps) {
             <PlanConfirm
               title={`Push ${row.key} up`}
               flow={push.flow}
+              summarize={(plan) => pushPlanText(row.key, plan, titles)}
               onConfirm={() => void push.confirm()}
               onCancel={push.cancel}
             />
@@ -116,13 +122,18 @@ export function BacklogRow({ prefix, row, titles, onDone }: BacklogRowProps) {
   );
 }
 
-function usePushFlow(prefix: string, key: string, onDone: (message: string) => void) {
+function usePushFlow(
+  prefix: string,
+  key: string,
+  titles: Titles,
+  onDone: (message: string) => void,
+) {
   const push = usePush(prefix);
   return useTwoPhase(
     (request: PushRequest, token: string | null) =>
       push.mutateAsync(token === null ? request : { ...request, confirm_token: token }),
     (output) => {
-      onDone(pushedMessage(output, key));
+      onDone(pushedMessage(output, key, titles));
     },
   );
 }
@@ -149,14 +160,17 @@ function CoverForm({ prefix, row, onDone, onCancel }: CoverFormProps) {
     setProblem(null);
     // The item's own batch is the server's default; only another is named.
     const named = batch === choice.ownBatch ? {} : { batch };
-    cover.mutate(
-      { key: row.key, ...named },
-      {
-        onSuccess: (output) => {
-          onDone(`Covered ${row.key} with ${output.subtask.key}.`);
-        },
-      },
-    );
+    // mutateAsync, not mutate's onSuccess: the refetch after a cover drops
+    // this row, and a per-call callback of an unmounted form never runs.
+    // onDone sets state above the row, so the notice outlives it.
+    cover
+      .mutateAsync({ key: row.key, ...named })
+      .then((output) => {
+        onDone(`Covered ${row.key} with ${output.subtask.key}.`);
+      })
+      .catch(() => {
+        // Shown from cover.error while the form is still mounted.
+      });
   };
   return (
     <form className="write-form" aria-label={`Cover ${row.key}`} onSubmit={submit}>

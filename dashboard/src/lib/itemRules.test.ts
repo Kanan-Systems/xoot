@@ -8,6 +8,7 @@ import {
   dropTarget,
   isMovable,
   moveTargets,
+  optionLabel,
 } from './itemRules.ts';
 
 const batch = item(B2, 'batch', G1);
@@ -29,6 +30,12 @@ describe('the hierarchy in the UI', () => {
     expect(keys(moveTargets(batch, sampleTree()))).toEqual([G2]);
     expect(keys(moveTargets(subtask, sampleTree()))).toEqual([B1, 'goal-2/batch-1']);
     expect(moveTargets(item(G1, 'goal', null), sampleTree())).toEqual([]);
+  });
+
+  it('cuts long titles in picker options so a select stays narrow', () => {
+    const long = { ...batch, title: 'x'.repeat(150) };
+    const label = optionLabel(long);
+    expect(label).toMatch(/^x{59}… \(goal-1\/batch-2, open\)$/);
   });
 
   it('offers decisions on goals, batches and subtasks only', () => {

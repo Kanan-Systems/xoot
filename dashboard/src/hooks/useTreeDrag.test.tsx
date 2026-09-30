@@ -7,7 +7,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ItemSummary } from '../api/types.gen.ts';
 import { B1, B2, G1, G2, item } from '../test/fixtures.ts';
-import { useTreeDrag, withDragged, type FlowNode } from './useTreeDrag.ts';
+import {
+  shownDragged,
+  useTreeDrag,
+  withDragged,
+  type FlowNode,
+} from './useTreeDrag.ts';
 
 function flowNode(summary: ItemSummary): FlowNode {
   return {
@@ -57,7 +62,7 @@ describe('useTreeDrag', () => {
     expect(result.current.dragged).toEqual({ id: B2, position: { x: 40, y: 50 } });
   });
 
-  it('moves onto the first allowed node it was dropped on, then lets go', () => {
+  it('drops onto the first allowed node and holds it there for confirmation', () => {
     const goal2 = flowNode(item(G2, 'goal', null));
     const { result, onMove, instance } = setup([
       PROJECT,
@@ -74,7 +79,13 @@ describe('useTreeDrag', () => {
     });
     expect(instance.getIntersectingNodes).toHaveBeenCalledWith(BATCH);
     expect(onMove).toHaveBeenCalledWith(BATCH_ITEM, G2);
-    expect(result.current.dragged).toBeNull();
+    // Drawn where it was dropped only while its move waits.
+    expect(result.current.active).toBe(false);
+    expect(shownDragged(result.current, B2)).toEqual({
+      id: B2,
+      position: { x: 1, y: 1 },
+    });
+    expect(shownDragged(result.current, null)).toBeNull();
     expect(result.current.message).toBe('');
   });
 
