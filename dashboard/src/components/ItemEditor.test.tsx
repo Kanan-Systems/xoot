@@ -143,6 +143,16 @@ describe('drawer editing', () => {
     expect(region).toHaveTextContent(
       `Drop batch 'title of ${B2}' and its 1 open subtask.`,
     );
+    const dropped = within(region).getByRole('list', { name: 'Dropped' });
+    expect(
+      within(dropped)
+        .getAllByRole('listitem')
+        .map((line) => [line.className, line.textContent]),
+    ).toEqual([
+      ['stair-0', `title of ${B2} (batch)`],
+      ['stair-1', `title of ${S3} (subtask)`],
+    ]);
+    expect(region.textContent).not.toMatch(/key .* (->|→) .*; parent/);
     fireEvent.click(within(region).getByRole('button', { name: 'Confirm' }));
     expect(
       await screen.findByText(`Dropped batch 'title of ${B2}' and its 1 open subtask.`),

@@ -15,6 +15,11 @@ export function childKindOf(kind: ItemKind): WorkKind | null {
   return CHILD[kind] ?? null;
 }
 
+// The kind an item of this kind sits on, for the kinds that move.
+export function parentKindOf(kind: ItemKind): WorkKind | null {
+  return PARENT[kind] ?? null;
+}
+
 export function isMovable(kind: ItemKind): boolean {
   return PARENT[kind] !== undefined;
 }
@@ -37,34 +42,6 @@ export function moveTargets(
   return items(entries).filter(
     (candidate) => candidate.kind === want && candidate.key !== moved.parent,
   );
-}
-
-export type DropResult = { ok: true; parent: string } | { ok: false; reason: string };
-
-// What a drop means: the first node under the dragged one that may be its
-// new parent, or why there is none.
-export function dropTarget(
-  dragged: ItemSummary,
-  candidates: readonly ItemSummary[],
-): DropResult {
-  const want = PARENT[dragged.kind];
-  if (want === undefined) {
-    return { ok: false, reason: 'Only batches and subtasks can be moved.' };
-  }
-  const fitting = candidates.filter(
-    (candidate) => candidate.kind === want && candidate.key !== dragged.key,
-  );
-  const target = fitting.find((candidate) => candidate.key !== dragged.parent);
-  if (target !== undefined) {
-    return { ok: true, parent: target.key };
-  }
-  if (fitting.length > 0) {
-    return { ok: false, reason: `${dragged.key} is already there.` };
-  }
-  return {
-    ok: false,
-    reason: `Drop a ${dragged.kind} onto a ${want} to move it; it stayed where it was.`,
-  };
 }
 
 export interface CoverChoice {

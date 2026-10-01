@@ -13,25 +13,7 @@
   margin: 1.25rem 0 0.4rem;
 }
 
-.items {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.items th,
-.items td {
-  text-align: left;
-  padding: 0.3rem 0.5rem;
-  border-bottom: 1px solid var(--line);
-  vertical-align: top;
-}
-
-.items th {
-  color: var(--muted);
-  font-weight: 600;
-}
-
-/* The key link covers its row, so the whole row opens it. */
+/* The title link covers its row, so the whole row opens it. */
 .row {
   position: relative;
 }
@@ -46,19 +28,53 @@
   inset: 0;
 }
 
-.cell-title {
+/* Backlog rows sit under their headings like decisions; they carry the
+   backlog icon and a left rule, not only a colour. */
+.backlog-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+}
+
+.backlog-row {
+  border-bottom: 1px solid var(--line);
+  border-left: 3px dashed var(--backlog);
+  padding: 0.4rem 0 0.4rem 0.5rem;
+}
+
+.backlog-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  align-items: baseline;
+}
+
+.backlog-title {
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.cell-why {
+.backlog-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.25rem;
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.backlog-facts div {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.backlog-facts dd {
+  margin: 0;
+}
+
+.backlog-why {
   max-width: 28rem;
   overflow-wrap: anywhere;
-  color: var(--muted);
-}
-
-/* Backlog rows carry the backlog icon and a left rule, not only a colour. */
-.row-backlog td:first-child {
-  border-left: 3px dashed var(--backlog);
 }
 
 .view h3 {

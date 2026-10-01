@@ -2,8 +2,9 @@
 // Positions come from the layout, so the dragged node's position is held
 // here while it moves and, after a drop onto an allowed parent, while that
 // move waits for confirmation (shownDragged); otherwise it is released and
-// the layout puts the node back. The drop target is the first intersecting
-// node the hierarchy allows; anything else is refused with a message.
+// the layout puts the node back. Of the nodes xyflow reports as
+// intersecting, the target is the allowed one the dragged node overlaps
+// most, past a minimum (dropTarget); anything else snaps back with a hint.
 import type {
   NodeChange,
   OnNodeDrag,
@@ -15,7 +16,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { ItemSummary } from '../api/types.gen.ts';
 import type { ItemFlowNode } from '../components/ItemNode.tsx';
 import type { ProjectFlowNode } from '../components/ProjectNode.tsx';
-import { dropTarget } from '../lib/itemRules.ts';
+import { dropTarget, type Placed } from '../lib/dropTarget.ts';
 
 export type FlowNode = ItemFlowNode | ProjectFlowNode;
 
@@ -35,8 +36,20 @@ export interface TreeDrag {
   onNodeDragStop: OnNodeDrag<FlowNode>;
 }
 
-function itemsOf(nodes: readonly FlowNode[]): ItemSummary[] {
-  return nodes.flatMap((node) => (node.type === 'item' ? [node.data.item] : []));
+// Tree nodes have no parent node, so a position is already absolute.
+function placed(node: ItemFlowNode): Placed {
+  return {
+    item: node.data.item,
+    rect: {
+      ...node.position,
+      width: node.measured?.width ?? node.width ?? 0,
+      height: node.measured?.height ?? node.height ?? 0,
+    },
+  };
+}
+
+function placedItems(nodes: readonly FlowNode[]): Placed[] {
+  return nodes.flatMap((node) => (node.type === 'item' ? [placed(node)] : []));
 }
 
 export function useTreeDrag(
@@ -72,7 +85,7 @@ export function useTreeDrag(
         return;
       }
       const hits = instance.current?.getIntersectingNodes(node) ?? [];
-      const result = dropTarget(node.data.item, itemsOf(hits));
+      const result = dropTarget(placed(node), placedItems(hits));
       if (result.ok) {
         // Held where it was dropped until the move is confirmed or not.
         onDrop(node.data.item, result.parent);

@@ -150,11 +150,15 @@ describe('pushing backlog', () => {
       "Move backlog item 'title of goal-1/backlog-1' up from goal 'title of goal-1' " +
         'to the project. It will be listed in the project backlog.',
     );
-    // The raw field changes stay available under Details.
-    const details = within(region).getByText('Details').closest('details');
-    expect(details).toHaveTextContent(
-      'goal-1/backlog-1: key goal-1/backlog-1 → backlog-3',
+    // Origin, then destination, by title; never the raw field changes.
+    expect(within(region).getByRole('list', { name: 'From' })).toHaveTextContent(
+      'title of goal-1title of goal-1/backlog-1 (backlog item)',
     );
+    expect(within(region).getByRole('list', { name: 'To' })).toHaveTextContent(
+      '(project backlog)',
+    );
+    expect(region.textContent).not.toMatch(/key .* (->|→) .*; parent/);
+    expect(region).not.toHaveTextContent('backlog-3');
     fireEvent.click(within(region).getByRole('button', { name: 'Confirm' }));
     expect(
       await screen.findByText(

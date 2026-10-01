@@ -9,7 +9,7 @@ import { mockApi, projectRoutes } from '../test/api.ts';
 import { B1, B1_BACKLOG, G1, P_BACKLOG, S3 } from '../test/fixtures.ts';
 import { mockReactFlowDom } from '../test/reactFlow.ts';
 import { renderApp } from '../test/renderApp.tsx';
-import { CONTROLS_CLASS } from './TreeCanvas.tsx';
+import { ARMED_HINT, CONTROLS_CLASS, dragStatus } from './TreeCanvas.tsx';
 
 function flowNode(key: string): Promise<HTMLElement> {
   // Measured nodes are visible; until then React Flow hides them.
@@ -124,5 +124,16 @@ describe('the project-root tree', () => {
     expect(
       controls?.querySelectorAll('.react-flow__controls-button').length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe('the drag status line', () => {
+  it('shows a refused drop hint although the node stays armed', () => {
+    expect(dragStatus(B1, null, 'Drop it on a batch or goal to move it.')).toBe(
+      'Drop it on a batch or goal to move it.',
+    );
+    expect(dragStatus(B1, null, '')).toBe(`${B1} is armed. ${ARMED_HINT}`);
+    expect(dragStatus(B1, B1, '')).toBe('');
+    expect(dragStatus(null, null, '')).toBe('');
   });
 });

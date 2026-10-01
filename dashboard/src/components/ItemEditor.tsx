@@ -17,6 +17,7 @@ import { useTitles } from '../hooks/useTitles.ts';
 import { useTwoPhase } from '../hooks/useTwoPhase.ts';
 import { CATEGORY } from '../lib/display.ts';
 import { editRequest, stateOptions, type Base } from '../lib/itemEdit.ts';
+import { dropJourney } from '../lib/journey.ts';
 import type { Titles } from '../lib/titles.ts';
 import { dropPlanText, dropResultText } from '../lib/wording.ts';
 import { PlanConfirm } from './PlanConfirm.tsx';
@@ -132,6 +133,7 @@ export function ItemEditor({ prefix, view, onClose, onSaved }: ItemEditorProps) 
         title={`Save ${base.key}`}
         flow={save.flow}
         summarize={(plan) => dropPlanText(base.key, plan, titles)}
+        journey={(plan) => dropJourney(base.key, plan, titles)}
         onConfirm={() => void save.confirm()}
         onCancel={save.cancel}
       />

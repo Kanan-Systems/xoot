@@ -88,19 +88,49 @@
   border: 1px dashed var(--accent);
 }
 
-.plan-changes li {
+.stair {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stair li {
   overflow-wrap: anywhere;
+}
+
+.stair-1 {
+  padding-left: 1rem;
+}
+
+.stair-2 {
+  padding-left: 2rem;
+}
+
+.stair-3 {
+  padding-left: 3rem;
+}
+
+.stair-4 {
+  padding-left: 4rem;
+}
+
+.journey {
+  margin: 0 0 0.5rem;
+}
+
+/* The destination sits under an arrow, indented past it. */
+.journey-to {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.journey-arrow {
+  color: var(--accent);
 }
 
 .plan-summary {
   margin: 0.25rem 0 0.5rem;
   overflow-wrap: anywhere;
-}
-
-.plan-details summary {
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 0.85rem;
 }
 
 /* The node armed for dragging: an outline and a second ring, not only a
@@ -141,18 +171,24 @@
   margin: 0.5rem 0;
 }
 
-/* Above the row link stretched over the row, so the buttons stay usable. */
-.cell-actions {
+/* Above the row link stretched over the row, so the buttons and the open
+   action's panel stay usable. */
+.row-actions,
+.row-panel {
   position: relative;
   z-index: 1;
+}
+
+.row-actions {
   white-space: nowrap;
 }
 
-.cell-actions button + button {
+.row-actions button + button {
   margin-left: 0.4rem;
 }
 
-.row-panel td {
+.row-panel {
+  margin-top: 0.4rem;
   background: var(--bg);
 }
 
@@ -169,6 +205,7 @@
 }
 
 .decision-group.depth-3,
-.decision-group.depth-4 {
+.decision-group.depth-4,
+.backlog-group.depth-3 {
   margin-left: 1rem;
 }

@@ -146,7 +146,9 @@ export function ItemDetails({
       <h3>Recent history</h3>
       <ol className="history">
         {view.events.map((event, index) => (
-          <li key={`${event.created_at}-${String(index)}`}>{historyLine(event)}</li>
+          <li key={`${event.created_at}-${String(index)}`}>
+            {historyLine(event, titles)}
+          </li>
         ))}
       </ol>
     </>

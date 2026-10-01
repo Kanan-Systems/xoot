@@ -51,7 +51,23 @@ describe('historyLine', () => {
           after: { parent: null },
         }),
       ),
-    ).toBe('claude · code · 2026-09-28 10:15 · parent: goal-1 → none');
+    ).toBe('claude · code · 2026-09-28 10:15 · moved from goal-1 to the project');
+  });
+
+  it('shows a move as origin and destination, never its key, parent or number', () => {
+    const line = historyLine(
+      event({
+        changed: ['key', 'parent', 'number', 'state'],
+        before: { key: 'goal-1/backlog-2', parent: 'goal-1', number: 2, state: 'open' },
+        after: { key: 'backlog-1', parent: null, number: 1, state: 'open' },
+      }),
+      new Map([['goal-1', 'Alpha']]),
+    );
+    expect(line).toBe(
+      'claude · code · 2026-09-28 10:15 · moved from Alpha to the project; state: open → open',
+    );
+    expect(line).not.toMatch(/key .* (->|→) .*; parent/);
+    expect(line).not.toMatch(/(key|number):/);
   });
 });
 

@@ -1,6 +1,7 @@
-// The backlog view: one collapsible group per goal (its own backlog, then a
-// collapsible group per batch), then the project backlog. Groups start
-// expanded; what a viewer collapses is kept per project in browser storage.
+// The backlog view, laid out like the Decisions tab: one indented staircase
+// of collapsible headings, each goal (its own backlog, then a heading per
+// batch under it), then the project backlog. Groups start expanded; what a
+// viewer collapses is kept per project in browser storage.
 // What a cover or push did is announced above the groups, since its row
 // leaves the list.
 import { useState } from 'react';
@@ -12,8 +13,8 @@ import {
   PROJECT_GROUP,
   type BacklogFilter,
 } from '../lib/backlogGroups.ts';
-import type { Titles } from '../lib/titles.ts';
-import { BacklogTable } from './BacklogTable.tsx';
+import { labelOf, type Titles } from '../lib/titles.ts';
+import { BacklogList } from './BacklogList.tsx';
 import { CollapsibleGroup } from './CollapsibleGroup.tsx';
 import { KeyTag, TitleText } from './Titled.tsx';
 
@@ -34,15 +35,22 @@ function Label({ itemKey, titles }: { itemKey: string; titles: Titles }) {
   );
 }
 
+function emptyText(filter: BacklogFilter, titles: Titles): string {
+  const chosen = filter.batch ?? filter.goal;
+  return chosen === null
+    ? 'No open backlog.'
+    : `No open backlog under ${labelOf(chosen, titles)}.`;
+}
+
 export function BacklogsSection(props: BacklogsSectionProps) {
   const { prefix, view, titles, filter, collapsed, onToggle } = props;
   const [notice, setNotice] = useState('');
   const tree = backlogTree(view, filter);
   const title = (key: string) => titles.get(key) ?? key;
-  const table = (caption: string, rows: readonly BacklogRow[]) => (
-    <BacklogTable
+  const list = (label: string, rows: readonly BacklogRow[]) => (
+    <BacklogList
       prefix={prefix}
-      caption={caption}
+      label={label}
       rows={rows}
       titles={titles}
       onDone={setNotice}
@@ -62,7 +70,7 @@ export function BacklogsSection(props: BacklogsSectionProps) {
       <p role="status" className="notice">
         {notice}
       </p>
-      {empty && <p className="muted">No open backlog.</p>}
+      {empty && <p className="muted">{emptyText(filter, titles)}</p>}
       {tree.goals.map((goal) => (
         <CollapsibleGroup
           key={goal.goal}
@@ -70,7 +78,7 @@ export function BacklogsSection(props: BacklogsSectionProps) {
           label={<Label itemKey={goal.goal} titles={titles} />}
           count={goalCount(goal)}
         >
-          {goal.items.length > 0 && table(title(goal.goal), goal.items)}
+          {goal.items.length > 0 && list(title(goal.goal), goal.items)}
           {goal.batches.map((batch) => (
             <CollapsibleGroup
               key={batch.batch}
@@ -78,7 +86,7 @@ export function BacklogsSection(props: BacklogsSectionProps) {
               label={<Label itemKey={batch.batch} titles={titles} />}
               count={batch.items.length}
             >
-              {table(`${title(goal.goal)} › ${title(batch.batch)}`, batch.items)}
+              {list(`${title(goal.goal)} › ${title(batch.batch)}`, batch.items)}
             </CollapsibleGroup>
           ))}
         </CollapsibleGroup>
@@ -89,7 +97,7 @@ export function BacklogsSection(props: BacklogsSectionProps) {
           label={<TitleText title="Project backlog" />}
           count={tree.project.length}
         >
-          {table('Project backlog', tree.project)}
+          {list('Project backlog', tree.project)}
         </CollapsibleGroup>
       )}
       {view.truncated && <p className="warning">Only the first 200 are shown.</p>}

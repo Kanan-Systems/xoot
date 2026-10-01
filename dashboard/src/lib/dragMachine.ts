@@ -8,6 +8,9 @@ import { isMovable } from './itemRules.ts';
 export interface PendingMove {
   item: ItemSummary;
   parent: string;
+  // The item and everything under it when it was dropped: the only set a
+  // returned plan may move without being shown again.
+  keys: readonly string[];
 }
 
 export interface DragState {
@@ -18,7 +21,7 @@ export interface DragState {
 export type DragEvent =
   | { type: 'arm'; item: ItemSummary }
   | { type: 'disarm' }
-  | { type: 'drop'; item: ItemSummary; parent: string }
+  | { type: 'drop'; item: ItemSummary; parent: string; keys: readonly string[] }
   | { type: 'confirm' }
   | { type: 'cancel' };
 
@@ -35,11 +38,42 @@ export function dragReducer(state: DragState, event: DragEvent): DragState {
       return { armed: event.item.key, pending: null };
     case 'drop':
       return state.armed === event.item.key && state.pending === null
-        ? { armed: state.armed, pending: { item: event.item, parent: event.parent } }
+        ? {
+            armed: state.armed,
+            pending: { item: event.item, parent: event.parent, keys: event.keys },
+          }
         : state;
     case 'disarm':
     case 'confirm':
     case 'cancel':
       return IDLE;
   }
+}
+
+// The item's key and every key below it in the tree.
+export function subtreeKeys(
+  key: string,
+  entries: readonly { item: { key: string } }[],
+): string[] {
+  return [
+    key,
+    ...entries.flatMap(({ item }) =>
+      item.key.startsWith(`${key}/`) ? [item.key] : [],
+    ),
+  ];
+}
+
+// True only when a plan changes exactly the confirmed items: a count match
+// is not enough, since one child can leave and another arrive in between.
+export function sameKeys(
+  changes: readonly { key: string }[],
+  keys: readonly string[],
+): boolean {
+  const planned = new Set(changes.map((change) => change.key));
+  const confirmed = new Set(keys);
+  return (
+    planned.size === changes.length &&
+    planned.size === confirmed.size &&
+    [...planned].every((key) => confirmed.has(key))
+  );
 }

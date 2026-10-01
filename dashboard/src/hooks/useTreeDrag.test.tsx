@@ -6,6 +6,7 @@ import type { NodeChange, ReactFlowInstance } from '@xyflow/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ItemSummary } from '../api/types.gen.ts';
+import { NO_TARGET } from '../lib/dropTarget.ts';
 import { B1, B2, G1, G2, item } from '../test/fixtures.ts';
 import {
   shownDragged,
@@ -14,11 +15,13 @@ import {
   type FlowNode,
 } from './useTreeDrag.ts';
 
-function flowNode(summary: ItemSummary): FlowNode {
+// A measured 200x60 node, at the origin unless placed elsewhere.
+function flowNode(summary: ItemSummary, x = 0, y = 0): FlowNode {
   return {
     id: summary.key,
     type: 'item',
-    position: { x: 0, y: 0 },
+    position: { x, y },
+    measured: { width: 200, height: 60 },
     data: { item: summary, hidden: {}, fold: null, decisions: 0, blocked: null },
   };
 }
@@ -62,7 +65,7 @@ describe('useTreeDrag', () => {
     expect(result.current.dragged).toEqual({ id: B2, position: { x: 40, y: 50 } });
   });
 
-  it('drops onto the first allowed node and holds it there for confirmation', () => {
+  it('drops onto the allowed node it overlaps and holds it there for confirmation', () => {
     const goal2 = flowNode(item(G2, 'goal', null));
     const { result, onMove, instance } = setup([
       PROJECT,
@@ -109,7 +112,23 @@ describe('useTreeDrag', () => {
       result.current.onNodeDragStop(event, BATCH, [BATCH]);
     });
     expect(onMove).not.toHaveBeenCalled();
-    expect(result.current.message).toMatch(/onto a goal/);
+    expect(result.current.message).toBe(NO_TARGET);
+  });
+
+  it('snaps back with the hint when a goal it touches only grazes it', () => {
+    // xyflow reports the goal as intersecting: a 4px corner, in empty space.
+    const { result, onMove } = setup([flowNode(item(G2, 'goal', null), 196, 56)]);
+    act(() => {
+      result.current.onNodesChange([
+        { id: B2, type: 'position', position: { x: 0, y: 0 }, dragging: true },
+      ]);
+    });
+    act(() => {
+      result.current.onNodeDragStop(event, BATCH, [BATCH]);
+    });
+    expect(onMove).not.toHaveBeenCalled();
+    expect(result.current.dragged).toBeNull();
+    expect(result.current.message).toBe(NO_TARGET);
   });
 
   it('ignores a stop on the project node', () => {

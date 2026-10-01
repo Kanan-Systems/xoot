@@ -43,18 +43,20 @@ describe('a backlog row', () => {
 
   it('leads with the title; key and "found on" follow as secondary text', async () => {
     renderApp('/x/backlog');
-    const table = await screen.findByRole('table', {
+    const list = await screen.findByRole('list', {
       name: 'title of goal-1 › title of goal-1/batch-1',
     });
-    const [, row] = within(table).getAllByRole('row');
-    const cells = within(row as HTMLElement).getAllByRole('cell');
-    const link = within(cells[0] as HTMLElement).getByRole('link');
+    const row = within(list).getByRole('listitem');
+    const link = within(row).getByRole('link');
     expect(link).toHaveTextContent('title of goal-1/batch-1/backlog-1');
-    expect(cells[1]?.firstElementChild).toHaveClass('key');
-    expect(cells[1]).toHaveTextContent('goal-1/batch-1/backlog-1');
-    const found = within(cells[3] as HTMLElement).getByText('(goal-1/batch-1)');
+    // The title comes first; the key follows it as secondary text.
+    const key = within(row).getByText('goal-1/batch-1/backlog-1', { selector: '.key' });
+    expect(
+      link.compareDocumentPosition(key) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const found = within(row).getByText('(goal-1/batch-1)');
     expect(found).toHaveClass('key');
-    expect(cells[3]).toHaveTextContent(
+    expect(within(row).getByText('Found on').nextElementSibling).toHaveTextContent(
       /^title of goal-1\/batch-1 \(goal-1\/batch-1\)$/,
     );
   });

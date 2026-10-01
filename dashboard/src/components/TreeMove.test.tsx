@@ -169,8 +169,33 @@ describe('drag-initiated moves', () => {
     click('drop batch');
     click('Confirm');
     const region = await screen.findByRole('region', { name: `Confirm: Move ${B2}` });
-    expect(within(region).getByText('Details')).toBeInTheDocument();
+    expect(within(region).getByRole('list', { name: 'To' })).toHaveTextContent(
+      `title of ${G2}title of ${B2} (batch)`,
+    );
+    expect(region.textContent).not.toMatch(/key .* (->|→) .*; parent/);
     expect(requests(fetchMock, 'POST')).toHaveLength(1);
+  });
+
+  it('show the plan when a child was swapped for another, even at the same count', async () => {
+    // Between the drop and Confirm, S3 left the batch and subtask-9 arrived.
+    const changes: ChangeEntry[] = [
+      { key: B2, before: { key: B2 }, after: { key: 'goal-2/batch-2' } },
+      {
+        key: 'goal-1/batch-2/subtask-9',
+        before: { key: 'goal-1/batch-2/subtask-9' },
+        after: { key: 'goal-2/batch-2/subtask-1' },
+      },
+    ];
+    const { fetchMock, onNotice } = setup({
+      'POST /projects/x/moves': previewed('reparent', 'tok-3', changes),
+    });
+    click('arm batch');
+    click('drop batch');
+    click('Confirm');
+    const region = await screen.findByRole('region', { name: `Confirm: Move ${B2}` });
+    expect(within(region).getByRole('button', { name: 'Confirm' })).toBeEnabled();
+    expect(requests(fetchMock, 'POST')).toHaveLength(1);
+    expect(onNotice).not.toHaveBeenCalledWith(expect.stringMatching(/^Moved/));
   });
 
   it('ignore a drop of a node that is not armed', () => {

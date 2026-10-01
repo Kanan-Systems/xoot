@@ -1,6 +1,7 @@
-// The backlog tab: tables grouped goal > batch, then the project backlog,
-// each group collapsible from its heading, with the title, key, state,
-// found on, why, created and actions columns; a row click opens the drawer.
+// The backlog tab: one staircase of headings like the Decisions tab (goal,
+// then batch indented under it, then the project backlog), each group a
+// list collapsible from its heading, each row with title, key, state,
+// actions, then found on, why and created; a row click opens the drawer.
 import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -31,30 +32,38 @@ describe('backlog groups', () => {
     );
   });
 
-  it('have the seven columns, with "why" as the first line of the body', async () => {
+  it('show each row as title, key, state, actions, then its facts', async () => {
     renderApp('/x/backlog');
-    const table = await screen.findByRole('table', { name: 'Project backlog' });
-    const headers = within(table).getAllByRole('columnheader');
-    expect(headers.map((header) => header.textContent)).toEqual([
-      'Title',
-      'Key',
-      'State',
-      'Found on',
-      'Why',
-      'Created',
-      'Actions',
-    ]);
-    const [, row] = within(table).getAllByRole('row');
-    const cells = within(row as HTMLElement).getAllByRole('cell');
-    expect(cells.map((cell) => cell.textContent)).toEqual([
+    const list = await screen.findByRole('list', { name: 'Project backlog' });
+    // Rows under a heading, not a separate boxed table per group.
+    expect(screen.queryByRole('table')).toBeNull();
+    const row = within(list).getByRole('listitem');
+    const head = row.firstElementChild as HTMLElement;
+    expect([...head.children].map((part) => part.textContent)).toEqual([
       '⚑ title of backlog-1',
       'backlog-1',
       '○ open',
-      '—',
-      'why backlog-1',
-      '2026-09-28 09:30',
       'Cover',
     ]);
+    const facts = within(row)
+      .getAllByRole('term')
+      .map((term) => [term.textContent, term.nextElementSibling?.textContent]);
+    expect(facts).toEqual([
+      ['Found on', '—'],
+      ['Why', 'why backlog-1'],
+      ['Created', '2026-09-28 09:30'],
+    ]);
+  });
+
+  it('indent a batch under its goal as the Decisions tab does', async () => {
+    renderApp('/x/backlog');
+    const batch = await screen.findByRole('heading', { level: 3 });
+    const section = batch.closest('section');
+    expect(section).toHaveClass('backlog-group', 'depth-3');
+    expect(section?.parentElement?.closest('section')).toHaveClass(
+      'backlog-group',
+      'depth-2',
+    );
   });
 
   it('hide and show the rows, toggling aria-expanded', async () => {
@@ -62,8 +71,8 @@ describe('backlog groups', () => {
     const toggle = await screen.findByRole('button', { name: /Project backlog/ });
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('table', { name: 'Project backlog' })).toBeNull();
-    expect(screen.getByRole('table', { name: 'title of goal-1' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Project backlog' })).toBeNull();
+    expect(screen.getByRole('list', { name: 'title of goal-1' })).toBeInTheDocument();
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('title of backlog-1')).toBeInTheDocument();

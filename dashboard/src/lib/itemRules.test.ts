@@ -5,7 +5,6 @@ import {
   childKindOf,
   coverChoice,
   decisionOwners,
-  dropTarget,
   isMovable,
   moveTargets,
   optionLabel,
@@ -40,54 +39,6 @@ describe('the hierarchy in the UI', () => {
 
   it('offers decisions on goals, batches and subtasks only', () => {
     expect(decisionOwners(sampleTree()).some((i) => i.kind === 'backlog')).toBe(false);
-  });
-});
-
-describe('dropTarget', () => {
-  it('takes a batch dropped on a goal and a subtask dropped on a batch', () => {
-    expect(dropTarget(batch, [item(G2, 'goal', null)])).toEqual({
-      ok: true,
-      parent: G2,
-    });
-    expect(dropTarget(subtask, [item(B1, 'batch', G1)])).toEqual({
-      ok: true,
-      parent: B1,
-    });
-  });
-
-  it('skips nodes of the wrong kind and picks the first fitting one', () => {
-    const hits = [
-      item(S3, 'subtask', B2),
-      item(B1, 'batch', G1),
-      item(G2, 'goal', null),
-    ];
-    expect(dropTarget(batch, hits)).toEqual({ ok: true, parent: G2 });
-  });
-
-  it('refuses the current parent', () => {
-    expect(dropTarget(batch, [item(G1, 'goal', null)])).toEqual({
-      ok: false,
-      reason: `${B2} is already there.`,
-    });
-  });
-
-  it('refuses a drop on nothing or on the wrong kind', () => {
-    const refused = {
-      ok: false,
-      reason: expect.stringMatching(/onto a goal/) as unknown,
-    };
-    expect(dropTarget(batch, [])).toEqual(refused);
-    expect(dropTarget(batch, [item(B1, 'batch', G1)])).toEqual(refused);
-    expect(dropTarget(subtask, [item(G2, 'goal', null)])).toMatchObject({ ok: false });
-  });
-
-  it('never moves goals or backlog items', () => {
-    expect(dropTarget(item(G1, 'goal', null), [item(G2, 'goal', null)])).toMatchObject({
-      ok: false,
-    });
-    expect(dropTarget(item('backlog-1', 'backlog', null), [batch])).toMatchObject({
-      ok: false,
-    });
   });
 });
 

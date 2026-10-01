@@ -79,7 +79,7 @@ function others(
   return counts;
 }
 
-function rootChange(plan: SubtreeOutput, key: string): ChangeEntry | undefined {
+export function rootChange(plan: SubtreeOutput, key: string): ChangeEntry | undefined {
   return plan.changes.find((change) => change.key === key || change.before.key === key);
 }
 

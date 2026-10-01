@@ -64,6 +64,15 @@ const NOTHING = () => undefined;
 
 export const ARMED_HINT = 'Drag it onto a new parent; Esc cancels.';
 
+// A refused drop leaves the node armed, so its hint must win over the
+// armed line or it would never be seen.
+export function dragStatus(armed: string | null, held: string | null, message: string) {
+  if (message !== '') {
+    return message;
+  }
+  return armed !== null && held === null ? `${armed} is armed. ${ARMED_HINT}` : '';
+}
+
 // Only the armed node is draggable, and it says so.
 function arm(nodes: FlowNode[], armed: string | null): FlowNode[] {
   if (armed === null) {
@@ -171,9 +180,7 @@ export function TreeCanvas(props: TreeCanvasProps) {
         </p>
       )}
       <p className="warning drop-message" role="status">
-        {armed !== null && held === null
-          ? `${armed} is armed. ${ARMED_HINT}`
-          : drag.message}
+        {dragStatus(armed, held, drag.message)}
       </p>
       <ReactFlow<FlowNode>
         key={rootKey ?? 'all'}

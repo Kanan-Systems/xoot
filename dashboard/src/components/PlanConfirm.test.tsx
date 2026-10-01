@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../api/client.ts';
 import type { ItemUpdateOutput } from '../api/types.gen.ts';
 import { RESTARTED, useTwoPhase, type Send } from '../hooks/useTwoPhase.ts';
+import { moveJourney } from '../lib/journey.ts';
 import { previewed, updated } from '../test/writes.ts';
 import { PlanConfirm } from './PlanConfirm.tsx';
 
@@ -27,6 +28,7 @@ function Harness({
       <PlanConfirm
         title="Move goal-1/batch-2"
         flow={flow.flow}
+        journey={() => moveJourney('goal-1/batch-2', 'goal-2', new Map())}
         onConfirm={() => void flow.confirm()}
         onCancel={flow.cancel}
       />
@@ -56,7 +58,7 @@ describe('PlanConfirm', () => {
     expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull();
   });
 
-  it('lists the plan, then resends the same request with the token', async () => {
+  it('shows the plan as origin and destination, then resends with the token', async () => {
     const send = vi
       .fn<Send<Req, ItemUpdateOutput>>()
       .mockResolvedValueOnce(previewed('reparent'))
@@ -64,9 +66,14 @@ describe('PlanConfirm', () => {
     const onApplied = setup(send);
     const region = await screen.findByRole('region', { name: /Confirm: Move/ });
     expect(region).toHaveTextContent('this changes 1 item');
-    expect(region).toHaveTextContent(
-      'goal-1/batch-2: key goal-1/batch-2 → goal-2/batch-2; parent goal-1 → goal-2',
+    // Unknown titles fall back to keys, in their place on the staircase.
+    expect(within(region).getByRole('list', { name: 'From' })).toHaveTextContent(
+      'goal-1goal-1/batch-2 (batch)',
     );
+    expect(within(region).getByRole('list', { name: 'To' })).toHaveTextContent(
+      'goal-2goal-1/batch-2 (batch)',
+    );
+    expect(region.textContent).not.toMatch(/key .* (->|→) .*; parent/);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => {
       expect(onApplied).toHaveBeenCalledTimes(1);

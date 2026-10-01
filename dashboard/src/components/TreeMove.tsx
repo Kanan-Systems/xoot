@@ -2,14 +2,22 @@
 // plain words that every drag-initiated move shows before anything is sent,
 // then the move itself. A childless move is sent once confirmed, as the
 // single request the server applies directly. A move with children returns
-// the server's plan; when that plan moves exactly the items the user just
-// confirmed, it is applied without asking again, otherwise it is shown.
+// the server's plan; when that plan moves exactly the items (by key, not by
+// count) that were under it at the drop, it is applied without asking
+// again, otherwise it is shown.
 import { useEffect, useReducer } from 'react';
 
 import type { ItemSummary, TreeEntry, MoveRequest } from '../api/types.gen.ts';
 import { movedMessage, useMoveFlow } from '../hooks/useMoveFlow.ts';
 import type { TwoPhase } from '../hooks/useTwoPhase.ts';
-import { dragReducer, IDLE, type DragState } from '../lib/dragMachine.ts';
+import {
+  dragReducer,
+  IDLE,
+  sameKeys,
+  subtreeKeys,
+  type DragState,
+} from '../lib/dragMachine.ts';
+import { moveJourney } from '../lib/journey.ts';
 import type { Titles } from '../lib/titles.ts';
 import {
   descendants,
@@ -80,7 +88,9 @@ export function useTreeMove(
     drop: (item, parent) => {
       // One move at a time: a drop while another is sent snaps back.
       dispatch(
-        move.flow.step === 'idle' ? { type: 'drop', item, parent } : { type: 'cancel' },
+        move.flow.step === 'idle'
+          ? { type: 'drop', item, parent, keys: subtreeKeys(item.key, entries) }
+          : { type: 'cancel' },
       );
     },
     confirm: () => {
@@ -89,12 +99,10 @@ export function useTreeMove(
         return;
       }
       dispatch({ type: 'confirm' });
-      const { item, parent } = pending;
-      const along = Object.values(facts(item, parent, entries).children);
-      const expected = 1 + along.reduce((sum, count) => sum + count, 0);
+      const { item, parent, keys } = pending;
       void move.start(
         { key: item.key, parent, expected_version: item.version },
-        { autoConfirm: (plan) => plan.changes.length === expected },
+        { autoConfirm: (plan) => sameKeys(plan.changes, keys) },
       );
     },
     cancel: () => {
@@ -121,7 +129,7 @@ export function TreeMovePanel({ tree, entries, titles }: TreeMovePanelProps) {
             movePlanText(facts(pending.item, pending.parent, entries), titles) ??
             `Move ${pending.item.key} to ${pending.parent}?`
           }
-          lines={[]}
+          journey={moveJourney(pending.item.key, pending.parent, titles)}
           onConfirm={tree.confirm}
           onCancel={tree.cancel}
         />
@@ -136,6 +144,7 @@ export function TreeMovePanel({ tree, entries, titles }: TreeMovePanelProps) {
               titles,
             )
           }
+          journey={() => moveJourney(flow.request.key, flow.request.parent, titles)}
           onConfirm={() => void tree.move.confirm()}
           onCancel={tree.move.cancel}
         />

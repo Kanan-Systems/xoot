@@ -21,5 +21,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // Above the 5s findBy*/waitFor limit in setup.ts, so a slow wait fails
+    // with its own message instead of a bare test timeout.
+    testTimeout: 15000,
   },
 });

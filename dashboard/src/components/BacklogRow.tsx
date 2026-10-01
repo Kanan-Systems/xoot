@@ -1,8 +1,8 @@
-// One backlog row and its actions. The actions cell sits above the link
-// stretched over the row, so its buttons stay clickable. Cover turns the
-// item into a subtask of a batch the rule allows; Push moves it one level
-// up, always previewed and confirmed. A panel row under the row holds the
-// open action.
+// One backlog row, as a list entry like a decision's: title, key, state and
+// actions, then found on, why and created. The actions and the panel under
+// the row (the open action) sit above the link stretched over the row, so
+// they stay clickable. Cover turns the item into a subtask of a batch the
+// rule allows; Push moves it one level up, always previewed and confirmed.
 import { useState, type SubmitEvent } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -13,14 +13,13 @@ import { useDrawer } from '../hooks/useDrawer.ts';
 import { useTwoPhase } from '../hooks/useTwoPhase.ts';
 import { categoryClass, categoryGlyph, when } from '../lib/display.ts';
 import { coverChoice, optionLabel } from '../lib/itemRules.ts';
+import { pushJourney } from '../lib/journey.ts';
 import type { Titles } from '../lib/titles.ts';
 import { pushPlanText, pushResultText } from '../lib/wording.ts';
 import { PlanConfirm } from './PlanConfirm.tsx';
 import { KeyLabel, KeyTag, TitleText } from './Titled.tsx';
 import { WriteError } from './WriteError.tsx';
 import { SelectField } from './fields.tsx';
-
-export const COLUMNS = 7;
 
 interface BacklogRowProps {
   prefix: string;
@@ -48,31 +47,18 @@ export function BacklogRow({ prefix, row, titles, onDone }: BacklogRowProps) {
   const category = categoryGlyph(row.category);
   const panel = covering || push.flow.step !== 'idle';
   return (
-    <>
-      <tr className="row row-backlog">
-        <td className="cell-title">
+    <li className="row backlog-row">
+      <div className="backlog-head">
+        <span className="backlog-title">
           <Link className="row-link" to={hrefFor(row.key)}>
             <span aria-hidden="true">⚑</span> <TitleText title={row.title} />
           </Link>
-        </td>
-        <td>
-          <KeyTag value={row.key} />
-        </td>
-        <td>
-          <span className={categoryClass(row.category)}>
-            <span aria-hidden="true">{category.icon}</span> {row.state}
-          </span>
-        </td>
-        <td>
-          {row.found_on === null ? (
-            '—'
-          ) : (
-            <KeyLabel itemKey={row.found_on} titles={titles} />
-          )}
-        </td>
-        <td className="cell-why">{row.why === '' ? '—' : row.why}</td>
-        <td>{when(row.created_at)}</td>
-        <td className="cell-actions">
+        </span>{' '}
+        <KeyTag value={row.key} />{' '}
+        <span className={categoryClass(row.category)}>
+          <span aria-hidden="true">{category.icon}</span> {row.state}
+        </span>
+        <span className="row-actions">
           <button
             type="button"
             aria-expanded={covering}
@@ -93,32 +79,51 @@ export function BacklogRow({ prefix, row, titles, onDone }: BacklogRowProps) {
               Push up
             </button>
           )}
-        </td>
-      </tr>
-      {panel && (
-        <tr className="row-panel">
-          <td colSpan={COLUMNS}>
-            {covering && (
-              <CoverForm
-                prefix={prefix}
-                row={row}
-                onDone={onDone}
-                onCancel={() => {
-                  setCovering(false);
-                }}
-              />
+        </span>
+      </div>
+      <dl className="backlog-facts">
+        <div>
+          <dt>Found on</dt>
+          <dd>
+            {row.found_on === null ? (
+              '—'
+            ) : (
+              <KeyLabel itemKey={row.found_on} titles={titles} />
             )}
-            <PlanConfirm
-              title={`Push ${row.key} up`}
-              flow={push.flow}
-              summarize={(plan) => pushPlanText(row.key, plan, titles)}
-              onConfirm={() => void push.confirm()}
-              onCancel={push.cancel}
+          </dd>
+        </div>
+        <div>
+          <dt>Why</dt>
+          <dd className="backlog-why">{row.why === '' ? '—' : row.why}</dd>
+        </div>
+        <div>
+          <dt>Created</dt>
+          <dd>{when(row.created_at)}</dd>
+        </div>
+      </dl>
+      {panel && (
+        <div className="row-panel">
+          {covering && (
+            <CoverForm
+              prefix={prefix}
+              row={row}
+              onDone={onDone}
+              onCancel={() => {
+                setCovering(false);
+              }}
             />
-          </td>
-        </tr>
+          )}
+          <PlanConfirm
+            title={`Push ${row.key} up`}
+            flow={push.flow}
+            summarize={(plan) => pushPlanText(row.key, plan, titles)}
+            journey={(plan) => pushJourney(row.key, plan, titles)}
+            onConfirm={() => void push.confirm()}
+            onCancel={push.cancel}
+          />
+        </div>
       )}
-    </>
+    </li>
   );
 }
 

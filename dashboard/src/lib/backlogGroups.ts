@@ -1,8 +1,8 @@
 // The backlog view's groups: each goal (its own backlog, then each of its
 // batches' backlog), then the project backlog. Groups sort by key
 // naturally; rows keep the API's order within them. A goal or batch filter
-// shows only that group.
-import type { BacklogRow, BacklogView } from '../api/types.gen.ts';
+// shows only that group, which may be empty.
+import type { BacklogRow, BacklogView, ItemSummary } from '../api/types.gen.ts';
 import { batchOf, compareKeys, goalOf } from './keys.ts';
 
 // Keys never contain '@', so the project group cannot collide with one.
@@ -56,16 +56,57 @@ export function backlogBatches(view: BacklogView, goal: string | null): string[]
   return [...batches].sort(compareKeys);
 }
 
-// URL values that name no group are ignored, like the Decisions filters.
+// The project's goals and batches, from the tree: a filter may name one of
+// them although it holds no open backlog.
+export interface Holders {
+  goals: readonly string[];
+  batches: readonly string[];
+}
+
+export const NO_HOLDERS: Holders = { goals: [], batches: [] };
+
+export function holdersOf(entries: readonly { item: ItemSummary }[]): Holders {
+  const keys = (kind: string) =>
+    entries.flatMap(({ item }) => (item.kind === kind ? [item.key] : []));
+  return { goals: keys('goal'), batches: keys('batch') };
+}
+
+// A goal or batch of the project is kept even with no open backlog, so the
+// view can say so; values that name neither are ignored.
 export function validFilter(
   view: BacklogView,
   goal: string | null,
   batch: string | null,
+  known: Holders = NO_HOLDERS,
 ): BacklogFilter {
-  const knownGoal = goal !== null && backlogGoals(view).includes(goal) ? goal : null;
+  const knownGoal =
+    goal !== null && (backlogGoals(view).includes(goal) || known.goals.includes(goal))
+      ? goal
+      : null;
+  const inGoal = batch !== null && (knownGoal === null || goalOf(batch) === knownGoal);
   const knownBatch =
-    batch !== null && backlogBatches(view, knownGoal).includes(batch) ? batch : null;
+    batch !== null &&
+    (backlogBatches(view, knownGoal).includes(batch) ||
+      (inGoal && known.batches.includes(batch)))
+      ? batch
+      : null;
   return { goal: knownGoal, batch: knownBatch };
+}
+
+// The filter's options, with its own selection among them even when that
+// goal or batch holds no backlog, so the control shows what is chosen.
+export function filterChoices(
+  view: BacklogView,
+  filter: BacklogFilter,
+): { goals: string[]; batches: string[] } {
+  const withChosen = (keys: string[], chosen: string | null) =>
+    chosen === null || keys.includes(chosen)
+      ? keys
+      : [...keys, chosen].sort(compareKeys);
+  return {
+    goals: withChosen(backlogGoals(view), filter.goal),
+    batches: withChosen(backlogBatches(view, filter.goal), filter.batch),
+  };
 }
 
 function shown(row: BacklogRow, filter: BacklogFilter): boolean {

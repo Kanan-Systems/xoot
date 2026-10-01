@@ -1,9 +1,10 @@
 // /:project/backlog: every open backlog item, grouped goal > batch, then
 // the project backlog; filterable by goal (?goal=) and batch (?batch=),
-// each showing only that group. Unknown values are ignored.
+// each showing only that group, or saying it has no open backlog. Values
+// that name no goal or batch of the project are ignored.
 import { useParams, useSearchParams } from 'react-router-dom';
 
-import { useBacklog } from '../api/queries.ts';
+import { useBacklog, useTree } from '../api/queries.ts';
 import { BacklogsSection } from '../components/BacklogsSection.tsx';
 import { Disclosure } from '../components/Disclosure.tsx';
 import { Filter } from '../components/Filter.tsx';
@@ -11,7 +12,7 @@ import { QueryState } from '../components/QueryState.tsx';
 import { TabHelp } from '../components/TabHelp.tsx';
 import { useCollapsed } from '../hooks/useCollapsed.ts';
 import { useTitles } from '../hooks/useTitles.ts';
-import { backlogBatches, backlogGoals, validFilter } from '../lib/backlogGroups.ts';
+import { filterChoices, holdersOf, validFilter } from '../lib/backlogGroups.ts';
 import { PARAM, withParam } from '../lib/search.ts';
 import { labelOf } from '../lib/titles.ts';
 
@@ -40,6 +41,7 @@ export function BacklogPage() {
   const { project = '' } = useParams();
   const [search, setSearch] = useSearchParams();
   const query = useBacklog(project);
+  const tree = useTree(project);
   const titles = useTitles(project);
   const collapsed = useCollapsed(project, 'backlog');
   return (
@@ -53,7 +55,9 @@ export function BacklogPage() {
             view,
             search.get(PARAM.goal),
             search.get(PARAM.batch),
+            holdersOf(tree.data?.nodes ?? []),
           );
+          const choices = filterChoices(view, filter);
           const choose = (value: string | null) => ({
             value: value ?? '',
             label: value === null ? '' : labelOf(value, titles),
@@ -64,7 +68,7 @@ export function BacklogPage() {
                 <Filter
                   label="Goal"
                   value={filter.goal}
-                  options={backlogGoals(view).map(choose)}
+                  options={choices.goals.map(choose)}
                   onChange={(goal) => {
                     // A batch of another goal would be ignored anyway.
                     const kept = new URLSearchParams(
@@ -76,7 +80,7 @@ export function BacklogPage() {
                 <Filter
                   label="Batch"
                   value={filter.batch}
-                  options={backlogBatches(view, filter.goal).map(choose)}
+                  options={choices.batches.map(choose)}
                   onChange={(batch) => {
                     setSearch(
                       new URLSearchParams(withParam(search, PARAM.batch, batch)),
