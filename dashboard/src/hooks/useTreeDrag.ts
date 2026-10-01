@@ -2,21 +2,25 @@
 // Positions come from the layout, so the dragged node's position is held
 // here while it moves and, after a drop onto an allowed parent, while that
 // move waits for confirmation (shownDragged); otherwise it is released and
-// the layout puts the node back. Of the nodes xyflow reports as
-// intersecting, the target is the allowed one the dragged node overlaps
-// most, past a minimum (dropTarget); anything else snaps back with a hint.
+// the layout puts the node back. The target is decided from xyflow's own
+// measured rectangles and the pointer, all in flow coordinates (flowDrop,
+// dropTarget); anything else snaps back with a hint. The hint clears on
+// Escape and after a drop; the canvas also clears it (say) on pointer-down
+// and when a node is armed.
 import type {
   NodeChange,
   OnNodeDrag,
   ReactFlowInstance,
   XYPosition,
 } from '@xyflow/react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ItemSummary } from '../api/types.gen.ts';
 import type { ItemFlowNode } from '../components/ItemNode.tsx';
 import type { ProjectFlowNode } from '../components/ProjectNode.tsx';
-import { dropTarget, type Placed } from '../lib/dropTarget.ts';
+import { logDrop } from '../lib/dragDebug.ts';
+import { decideDrop, NO_TARGET } from '../lib/dropTarget.ts';
+import { dropScene } from '../lib/flowDrop.ts';
 
 export type FlowNode = ItemFlowNode | ProjectFlowNode;
 
@@ -25,40 +29,42 @@ export interface Dragged {
   position: XYPosition;
 }
 
+// Takes a drop onto an allowed parent; returns why it was refused, if it was.
+export type OnTreeDrop = (item: ItemSummary, parent: string) => string | null;
+
 export interface TreeDrag {
   dragged: Dragged | null;
   // True while the pointer is dragging, false once dropped.
   active: boolean;
   message: string;
+  say: (message: string) => void;
   onInit: (instance: ReactFlowInstance<FlowNode>) => void;
   onNodesChange: (changes: NodeChange<FlowNode>[]) => void;
   onNodeDragStart: OnNodeDrag<FlowNode>;
   onNodeDragStop: OnNodeDrag<FlowNode>;
 }
 
-// Tree nodes have no parent node, so a position is already absolute.
-function placed(node: ItemFlowNode): Placed {
-  return {
-    item: node.data.item,
-    rect: {
-      ...node.position,
-      width: node.measured?.width ?? node.width ?? 0,
-      height: node.measured?.height ?? node.height ?? 0,
-    },
-  };
-}
-
-function placedItems(nodes: readonly FlowNode[]): Placed[] {
-  return nodes.flatMap((node) => (node.type === 'item' ? [placed(node)] : []));
-}
-
-export function useTreeDrag(
-  onDrop: (item: ItemSummary, parent: string) => void,
-): TreeDrag {
+export function useTreeDrag(onDrop: OnTreeDrop): TreeDrag {
   const instance = useRef<ReactFlowInstance<FlowNode> | null>(null);
   const [dragged, setDragged] = useState<Dragged | null>(null);
   const [active, setActive] = useState(false);
   const [message, setMessage] = useState('');
+
+  const shown = message !== '';
+  useEffect(() => {
+    if (!shown) {
+      return undefined;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMessage('');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [shown]);
 
   const onInit = useCallback((flow: ReactFlowInstance<FlowNode>) => {
     instance.current = flow;
@@ -78,20 +84,23 @@ export function useTreeDrag(
   }, []);
 
   const onNodeDragStop: OnNodeDrag<FlowNode> = useCallback(
-    (_event, node) => {
+    (event, node) => {
       setActive(false);
-      if (node.type !== 'item') {
+      const flow = instance.current;
+      if (node.type !== 'item' || flow === null) {
         setDragged(null);
+        setMessage(node.type === 'item' ? NO_TARGET : '');
         return;
       }
-      const hits = instance.current?.getIntersectingNodes(node) ?? [];
-      const result = dropTarget(placed(node), placedItems(hits));
-      if (result.ok) {
-        // Held where it was dropped until the move is confirmed or not.
-        onDrop(node.data.item, result.parent);
-      } else {
+      const scene = dropScene(flow, node, event);
+      const decision = decideDrop(scene.dragged, scene.candidates, scene.pointer);
+      logDrop(node.id, scene, decision);
+      const { result } = decision;
+      // Held where it was dropped until the move is confirmed or not.
+      const refused = result.ok ? onDrop(node.data.item, result.parent) : result.reason;
+      setMessage(refused ?? '');
+      if (refused !== null) {
         setDragged(null);
-        setMessage(result.reason);
       }
     },
     [onDrop],
@@ -101,6 +110,7 @@ export function useTreeDrag(
     dragged,
     active,
     message,
+    say: setMessage,
     onInit,
     onNodesChange,
     onNodeDragStart,

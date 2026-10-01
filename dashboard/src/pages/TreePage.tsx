@@ -52,7 +52,7 @@ export function TreePage() {
     if (drawer.itemKey !== null) {
       drawer.dismiss();
     }
-    moving.arm(item);
+    return moving.arm(item);
   };
   const focus = search.get(PARAM.focus);
   const rootKey = focus ?? search.get(PARAM.goal);

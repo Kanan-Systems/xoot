@@ -1,9 +1,11 @@
-// The drag handlers, driven directly: jsdom has no layout, so a real drag
-// cannot be simulated; these prove what each handler does with what React
-// Flow hands it.
+// The drag handlers, driven directly with a stand-in instance: jsdom has no
+// layout, so a real drag cannot be simulated. The stand-in has no internal
+// nodes, so sizes fall back to the user nodes' own; the shape xyflow really
+// hands the handlers is covered against the real store in
+// useTreeDrag.xyflow.test.tsx and dropRules.xyflow.test.tsx.
 import { act, renderHook } from '@testing-library/react';
 import type { NodeChange, ReactFlowInstance } from '@xyflow/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemSummary } from '../api/types.gen.ts';
 import { NO_TARGET } from '../lib/dropTarget.ts';
@@ -13,6 +15,7 @@ import {
   useTreeDrag,
   withDragged,
   type FlowNode,
+  type OnTreeDrop,
 } from './useTreeDrag.ts';
 
 // A measured 200x60 node, at the origin unless placed elsewhere.
@@ -34,9 +37,14 @@ const PROJECT: FlowNode = {
 };
 
 function setup(hits: FlowNode[]) {
-  const onMove = vi.fn();
+  const onMove = vi.fn<OnTreeDrop>(() => null);
   const { result } = renderHook(() => useTreeDrag(onMove));
-  const instance = { getIntersectingNodes: vi.fn(() => hits) };
+  const instance = {
+    getNodes: vi.fn(() => hits),
+    getInternalNode: () => undefined,
+    screenToFlowPosition: (point: { x: number; y: number }) => point,
+    getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+  };
   act(() => {
     result.current.onInit(instance as unknown as ReactFlowInstance<FlowNode>);
   });
@@ -80,7 +88,7 @@ describe('useTreeDrag', () => {
     act(() => {
       result.current.onNodeDragStop(event, BATCH, [BATCH]);
     });
-    expect(instance.getIntersectingNodes).toHaveBeenCalledWith(BATCH);
+    expect(instance.getNodes).toHaveBeenCalled();
     expect(onMove).toHaveBeenCalledWith(BATCH_ITEM, G2);
     // Drawn where it was dropped only while its move waits.
     expect(result.current.active).toBe(false);
@@ -136,8 +144,91 @@ describe('useTreeDrag', () => {
     act(() => {
       result.current.onNodeDragStop(event, PROJECT, [PROJECT]);
     });
-    expect(instance.getIntersectingNodes).not.toHaveBeenCalled();
+    expect(instance.getNodes).not.toHaveBeenCalled();
     expect(onMove).not.toHaveBeenCalled();
+  });
+});
+
+describe('the drop hint', () => {
+  it('clears on Escape and after a successful drop', () => {
+    const goal2 = flowNode(item(G2, 'goal', null));
+    const { result, onMove } = setup([goal2]);
+    act(() => {
+      result.current.say(NO_TARGET);
+    });
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
+    expect(result.current.message).toBe('');
+    act(() => {
+      result.current.say(NO_TARGET);
+    });
+    act(() => {
+      result.current.onNodeDragStop(event, BATCH, [BATCH]);
+    });
+    expect(onMove).toHaveBeenCalledWith(BATCH_ITEM, G2);
+    expect(result.current.message).toBe('');
+  });
+
+  it('shows why the parent refused a drop and snaps back', () => {
+    const { result, onMove } = setup([flowNode(item(G2, 'goal', null))]);
+    onMove.mockReturnValue('The last move failed; dismiss it first.');
+    act(() => {
+      result.current.onNodeDragStop(event, BATCH, [BATCH]);
+    });
+    expect(result.current.message).toBe('The last move failed; dismiss it first.');
+    expect(result.current.dragged).toBeNull();
+  });
+});
+
+describe('the drag debug switch', () => {
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  function dropOnGoal() {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const { result } = setup([flowNode(item(G2, 'goal', null), 10, 10)]);
+    act(() => {
+      result.current.onNodeDragStop(event, BATCH, [BATCH]);
+    });
+    return info;
+  }
+
+  it('logs nothing by default', () => {
+    expect(dropOnGoal()).not.toHaveBeenCalled();
+  });
+
+  it('logs nothing when storage throws', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    expect(dropOnGoal()).not.toHaveBeenCalled();
+  });
+
+  it('logs the drop, its candidates and the decision when set', () => {
+    localStorage.setItem('xoot:debug', 'net,drag');
+    const info = dropOnGoal();
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith('[xoot drag] drop', {
+      dragged: { id: B2, rect: { x: 0, y: 0, width: 200, height: 60 } },
+      pointer: { screen: { x: 0, y: 0 }, flow: { x: 0, y: 0 } },
+      viewport: { x: 0, y: 0, zoom: 1 },
+      candidates: [
+        {
+          key: G2,
+          kind: 'goal',
+          rect: { x: 10, y: 10, width: 200, height: 60 },
+          overlap: 190 * 50,
+          pointerInside: false,
+          allowed: true,
+          matches: true,
+        },
+      ],
+      decision: { ok: true, parent: G2 },
+      reason: `${G2}: the largest overlap`,
+    });
   });
 });
 

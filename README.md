@@ -386,6 +386,7 @@ delete `$XDG_DATA_HOME/xoot/` (default `~/.local/share/xoot/`) or your
 | A client behaves like the old version after an upgrade | The running server still has the old code loaded | Restart Claude Code; fully quit and restart Desktop |
 | Desktop tool calls fail with `project not resolved; pass project=<alias or prefix>, one of: ...` | Desktop's working directory is no project's directory | Pass the project; `projects_list` shows the choices |
 | `this database was created by xoot 0.2 or earlier; ...` | A 0.2 database | Move the file aside, then run `xoot init` again |
+| A dragged node in the dashboard tree snaps back where it should move | The drop found no target in this browser | Run `localStorage.setItem('xoot:debug', 'drag')` in the browser console and drop again: each drop logs the node, pointer, viewport, candidates and decision to the console, and nothing leaves the page |
 
 ## Credits
 

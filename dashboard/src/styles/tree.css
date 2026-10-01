@@ -213,3 +213,12 @@ button.badge {
 .cat-unknown {
   color: var(--muted);
 }
+
+/* A move asking for confirmation, or one that failed, stays in view while
+   the page scrolls. */
+.tree-move {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--panel);
+}

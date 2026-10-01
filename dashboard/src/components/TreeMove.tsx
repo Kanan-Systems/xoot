@@ -4,8 +4,10 @@
 // single request the server applies directly. A move with children returns
 // the server's plan; when that plan moves exactly the items (by key, not by
 // count) that were under it at the drop, it is applied without asking
-// again, otherwise it is shown.
-import { useEffect, useReducer } from 'react';
+// again, otherwise it is shown. A drop or an arming that cannot go ahead
+// says why instead of being dropped silently, and arming another node
+// dismisses a failed move.
+import { useEffect, useReducer, useRef } from 'react';
 
 import type { ItemSummary, TreeEntry, MoveRequest } from '../api/types.gen.ts';
 import { movedMessage, useMoveFlow } from '../hooks/useMoveFlow.ts';
@@ -27,12 +29,17 @@ import {
 } from '../lib/wording.ts';
 import { ConfirmPanel, PlanConfirm } from './PlanConfirm.tsx';
 
+export const WAITING = 'A move is waiting for your confirmation.';
+export const FAILED = 'The last move failed; dismiss it first.';
+export const SENDING = 'The last move is still being sent.';
+
 export interface TreeMove {
   state: DragState;
   move: TwoPhase<MoveRequest>;
-  arm: (item: ItemSummary) => void;
+  // Each returns why it was refused, or null.
+  arm: (item: ItemSummary) => string | null;
   disarm: () => void;
-  drop: (item: ItemSummary, parent: string) => void;
+  drop: (item: ItemSummary, parent: string) => string | null;
   confirm: () => void;
   cancel: () => void;
 }
@@ -50,6 +57,13 @@ function facts(
   };
 }
 
+function busy(step: TwoPhase<MoveRequest>['flow']['step']): string | null {
+  if (step === 'idle') {
+    return null;
+  }
+  return step === 'failed' ? FAILED : step === 'preview' ? WAITING : SENDING;
+}
+
 export function useTreeMove(
   prefix: string,
   entries: readonly TreeEntry[],
@@ -61,6 +75,14 @@ export function useTreeMove(
     onNotice(movedMessage(output, request, titles));
   });
   const armed = state.armed !== null;
+  // A refetch can drop the armed item (moved or deleted elsewhere).
+  const armedGone =
+    state.armed !== null && !entries.some(({ item }) => item.key === state.armed);
+  useEffect(() => {
+    if (armedGone) {
+      dispatch({ type: 'disarm' });
+    }
+  }, [armedGone]);
   useEffect(() => {
     if (!armed) {
       return undefined;
@@ -79,19 +101,27 @@ export function useTreeMove(
     state,
     move,
     arm: (item) => {
+      if (state.pending !== null) {
+        return WAITING;
+      }
       onNotice('');
+      if (move.flow.step === 'failed') {
+        move.cancel();
+      }
       dispatch({ type: 'arm', item });
+      return null;
     },
     disarm: () => {
       dispatch({ type: 'disarm' });
     },
     drop: (item, parent) => {
-      // One move at a time: a drop while another is sent snaps back.
-      dispatch(
-        move.flow.step === 'idle'
-          ? { type: 'drop', item, parent, keys: subtreeKeys(item.key, entries) }
-          : { type: 'cancel' },
-      );
+      // One move at a time: a drop while another waits or is sent snaps back.
+      const refused = state.pending !== null ? WAITING : busy(move.flow.step);
+      if (refused !== null) {
+        return refused;
+      }
+      dispatch({ type: 'drop', item, parent, keys: subtreeKeys(item.key, entries) });
+      return null;
     },
     confirm: () => {
       const { pending } = state;
@@ -120,8 +150,18 @@ interface TreeMovePanelProps {
 export function TreeMovePanel({ tree, entries, titles }: TreeMovePanelProps) {
   const { pending } = tree.state;
   const { flow } = tree.move;
+  // Sticky (tree.css), and brought into view whenever it asks for something.
+  const panel = useRef<HTMLDivElement>(null);
+  const asking = pending !== null || flow.step === 'failed' || flow.step === 'preview';
+  useEffect(() => {
+    const element = panel.current;
+    // jsdom has no scrollIntoView.
+    if (asking && element !== null && 'scrollIntoView' in element) {
+      element.scrollIntoView({ block: 'nearest' });
+    }
+  }, [asking]);
   return (
-    <div className="plan-confirm" aria-live="polite">
+    <div ref={panel} className="plan-confirm tree-move" aria-live="polite">
       {pending !== null && (
         <ConfirmPanel
           title={`Move ${pending.item.key}`}

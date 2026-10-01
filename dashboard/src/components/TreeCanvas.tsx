@@ -24,6 +24,7 @@ import {
   useTreeDrag,
   withDragged,
   type FlowNode,
+  type OnTreeDrop,
 } from '../hooks/useTreeDrag.ts';
 import { KIND } from '../lib/display.ts';
 import { isMovable } from '../lib/itemRules.ts';
@@ -54,13 +55,15 @@ export interface TreeCanvasProps {
   // drop waits for confirmation (drawn where it was dropped).
   armed?: string | null;
   held?: string | null;
-  onArm?: (item: ItemSummary) => void;
+  // Return why arming or the drop was refused, or null.
+  onArm?: (item: ItemSummary) => string | null;
   onDisarm?: () => void;
   // The armed node dropped onto a parent the hierarchy allows.
-  onDrop?: (item: ItemSummary, parent: string) => void;
+  onDrop?: OnTreeDrop;
 }
 
 const NOTHING = () => undefined;
+const ACCEPT = () => null;
 
 export const ARMED_HINT = 'Drag it onto a new parent; Esc cancels.';
 
@@ -94,8 +97,9 @@ export function TreeCanvas(props: TreeCanvasProps) {
   const { entries, rootKey, project, decisionCounts, blocked, showDone, collapsed } =
     props;
   const { onOpen, onFocus, onShowDone, onToggle } = props;
-  const { armed = null, held = null, onArm = NOTHING, onDisarm = NOTHING } = props;
-  const drag = useTreeDrag(props.onDrop ?? NOTHING);
+  const { armed = null, held = null, onArm = ACCEPT, onDisarm = NOTHING } = props;
+  const drag = useTreeDrag(props.onDrop ?? ACCEPT);
+  const { say } = drag;
   // A toggle changes the graph, so the layout below is recomputed.
   const graph = useMemo(
     () =>
@@ -140,13 +144,17 @@ export function TreeCanvas(props: TreeCanvasProps) {
         return;
       }
       if (isMovable(node.data.item.kind)) {
-        onArm(node.data.item);
+        say(onArm(node.data.item) ?? '');
       } else if (node.data.item.kind === 'goal') {
         onFocus(node.id);
       }
     },
-    [onFocus, onArm],
+    [onFocus, onArm, say],
   );
+  // The last hint is stale once the user acts on the canvas again.
+  const onPointerDown = useCallback(() => {
+    say('');
+  }, [say]);
   // Key events from a focused node wrapper bubble here; inner buttons keep
   // their own native Enter/Space.
   const onKeyDown = useCallback(
@@ -199,6 +207,7 @@ export function TreeCanvas(props: TreeCanvasProps) {
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onPaneClick={onDisarm}
+        onPointerDownCapture={onPointerDown}
         onKeyDown={onKeyDown}
         zoomOnDoubleClick={false}
         fitView
