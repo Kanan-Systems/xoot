@@ -2,7 +2,9 @@
 Entry point for `xoot-mcp` and `python -m xoot.server`: serve MCP over stdio.
 
 stdout carries only protocol messages, so every log line goes to stderr.
-SIGINT and SIGTERM stop the server quietly, as closing stdin does.
+SIGINT and SIGTERM stop the server quietly, as closing stdin does. An unsafe
+database path is refused at startup, with the line and exit code `xoot
+dashboard` gives, instead of failing every tool call later.
 """
 
 import argparse
@@ -17,11 +19,15 @@ import anyio
 import anyio.abc
 
 from xoot import __version__
+from xoot.cli import exit_codes
+from xoot.cli.render.errors import error_message
 from xoot.exceptions.legacy_database_error import LEGACY_MESSAGE
 from xoot.exceptions.store_error import StoreError
+from xoot.exceptions.unsafe_path_error import UnsafePathError
 from xoot.server.app import build_server
 from xoot.server.xoot_server import XootServer
 from xoot.store.paths import db_path_from_arg
+from xoot.store.permissions import check_private_files
 from xoot.store.store import is_legacy_file
 
 LOG_FORMAT = "%(name)s %(levelname)s: %(message)s"
@@ -37,13 +43,37 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     Args:
         - argv (Sequence[str] | None): arguments; sys.argv[1:] when None.
+
+    Raises:
+        - SystemExit: 3 when the database path is unsafe; nothing is served.
     """
     args = _parser().parse_args(argv)
     db_path = db_path_from_arg(args.db)
+    refuse_unsafe_path(db_path)
     _configure_logging()
     logging.getLogger("xoot.server").info("database: %s", db_path)
     warn_if_legacy(db_path)
     anyio.run(_serve, build_server(db_path))
+
+
+def refuse_unsafe_path(db_path: Path) -> None:
+    """
+    Exit before serving when the database path fails the store's checks.
+
+    Only checks: nothing is created, so a missing file is still made by the
+    first tool call. The line is the CLI's, as `xoot dashboard` prints it.
+
+    Args:
+        - db_path (Path): the database the server would open.
+
+    Raises:
+        - SystemExit: UNAVAILABLE (3) after the error line on stderr.
+    """
+    try:
+        check_private_files(db_path, must_exist=False)
+    except UnsafePathError as exc:
+        print(error_message(exc), file=sys.stderr)
+        sys.exit(exit_codes.UNAVAILABLE)
 
 
 def warn_if_legacy(db_path: Path) -> None:

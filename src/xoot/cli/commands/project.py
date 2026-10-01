@@ -163,7 +163,8 @@ def run_rename(args: argparse.Namespace, store: Store, console: Console) -> int:
     Only the display name changes; the key prefix, and so every key, stays.
 
     Args:
-        - args (argparse.Namespace): the project, --name, --alias and --yes.
+        - args (argparse.Namespace): the project (PROJECT or --project),
+          --name, --alias and --yes.
         - store (Store): the database.
         - console (Console): output and the confirmation prompt.
 

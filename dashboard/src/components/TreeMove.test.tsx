@@ -173,6 +173,9 @@ describe('drag-initiated moves', () => {
       `title of ${G2}title of ${B2} (batch)`,
     );
     expect(region.textContent).not.toMatch(/key .* (->|→) .*; parent/);
+    expect(region).toHaveTextContent(
+      'The plan changed since you confirmed it: now also moves “goal-1/batch-2/subtask-9”.',
+    );
     expect(requests(fetchMock, 'POST')).toHaveLength(1);
   });
 
@@ -194,6 +197,10 @@ describe('drag-initiated moves', () => {
     click('Confirm');
     const region = await screen.findByRole('region', { name: `Confirm: Move ${B2}` });
     expect(within(region).getByRole('button', { name: 'Confirm' })).toBeEnabled();
+    expect(region).toHaveTextContent(
+      'The plan changed since you confirmed it: now also moves ' +
+        `“goal-1/batch-2/subtask-9”; no longer moves “title of ${S3}”.`,
+    );
     expect(requests(fetchMock, 'POST')).toHaveLength(1);
     expect(onNotice).not.toHaveBeenCalledWith(expect.stringMatching(/^Moved/));
   });

@@ -155,6 +155,11 @@ name, to `[redacted]`, removes that field's content from every event of the
 entity, records a `redact` event that names the field but never the
 content, and purges the old text from the database files.
 
+Aliases are kept when a project's name changes or is redacted; remove one
+that spells the old name with `xoot project remove-alias ALIAS --project
+PREFIX`. After a name redaction, the CLI lists the aliases that equal the
+old or new name as a slug (or every alias when none does).
+
 ## Actors and clients
 
 Every event records who wrote it and through which client.

@@ -1,6 +1,6 @@
 [project]
 name = "xoot"
-version = "0.4.1"
+version = "1.0.0"
 description = "Local-only tracker for goals, batches, subtasks and backlog, for Claude."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -8,7 +8,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Kanan Systems" }]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.12",

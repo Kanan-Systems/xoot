@@ -4,8 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| 0.4.x | Yes |
-| Older | No |
+| 1.x | Yes |
+| Older (0.x) | No |
 
 ## Reporting a vulnerability
 
@@ -32,6 +32,12 @@ transport: that stack is installed and partly imported, but no server is
 started, no port is opened, and xoot makes no outbound network request. The
 one exception to "no port is opened" is `xoot dashboard`, below, which the
 user starts explicitly and which listens on 127.0.0.1 only.
+
+The server checks the database path at start, as every other entry point
+does on open: a data directory, database, WAL or SHM file that is a symlink,
+has another owner or grants any group or other permission is refused before
+anything is served, with exit code 3 and the same line `xoot dashboard`
+prints.
 
 Every MCP write is recorded as `claude/code` or `claude/chat`; no tool
 accepts an actor or a client. CLI admin commands write as `user/cli`.
@@ -85,9 +91,15 @@ files; the Claude Desktop snippet is only printed. Installing the Claude
 Code plugin asks first unless `--yes` is given.
 
 The installed versions match `uv.lock` (verified with uv 0.9.8). Its hashes
-are not guaranteed to be enforced: `uv tool install --constraints` does not
-promise to check them, and the tool's uv receipt keeps versions only, so the
-lock does not rule out a tampered file of a pinned version.
+are not enforced. This was tested in an isolated environment: with one
+package's sha256 changed in the exported constraints file, `uv tool install
+--constraints` installed without error, from a warm cache and from an empty
+one (so the package was downloaded). uv 0.9.8 has no `uv tool install`
+option that enforces hashes; neither `UV_REQUIRE_HASHES=1` nor passing the
+file with `--with-requirements` made it refuse. The tool's uv receipt keeps
+versions only. So the lock pins versions but does not rule out a tampered
+file of a pinned version; the downloads are as trustworthy as the index
+(PyPI over HTTPS).
 
 ## No telemetry
 

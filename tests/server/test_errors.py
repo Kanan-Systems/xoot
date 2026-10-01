@@ -174,11 +174,15 @@ def test_forced_failures_leak_nothing(corpus: Corpus, harness: Any) -> None:
 def test_store_errors_hide_the_path(
     db_path: Path, project: Project, harness: Any
 ) -> None:
-    """An unsafe database file is refused with a reason that names no path."""
+    """
+    A file made unsafe while the server runs is refused per call with a
+    reason that names no path (an unsafe path at start stops the server
+    before it serves: test_unsafe_startup).
+    """
     assert project.key_prefix == "xoot"
-    db_path.chmod(0o644)
 
     async def scenario(client: ClientSession) -> str:
+        db_path.chmod(0o644)
         return await harness.error(client, "projects_list")
 
     message = harness.run(scenario)

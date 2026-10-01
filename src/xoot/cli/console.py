@@ -74,7 +74,10 @@ class Console:
         refused rather than guessed at.
 
         Args:
-            - changes (Sequence[str]): one line per change, never content.
+            - changes (Sequence[str]): one line per change. A line may name
+              what changes (a key, a field, an alias, a project name, as a
+              rename shows old and new), never an item's or decision's
+              title or body.
             - yes (bool): --yes was given.
 
         Raises:

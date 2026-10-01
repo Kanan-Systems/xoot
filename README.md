@@ -16,7 +16,8 @@ dashboard.
 
 ![The Tree tab: goals, batches and subtasks, with backlog beside the work it sits on](docs/screenshots/tree.png)
 
-Status: 0.4.1, alpha.
+Status: 1.0.0, the first public release. Changes per release:
+[CHANGELOG.md](CHANGELOG.md).
 
 ## How the pieces fit
 
@@ -40,8 +41,7 @@ outbound network requests, and the dashboard listens on 127.0.0.1 only.
 
 ## Requirements
 
-- Linux, or Windows with WSL. The package declares Linux only and CI runs
-  on Ubuntu; macOS and native Windows are not tested.
+- Linux and Windows with WSL are supported and tested. macOS is untested.
 - [uv](https://docs.astral.sh/uv/), and Python 3.12. `install.sh` uses the
   version in `.python-version` (3.12); CI also tests 3.13. No Node: the
   dashboard ships prebuilt.
@@ -80,6 +80,12 @@ pins=$(mktemp)
 uv export --quiet --frozen --no-dev --no-emit-project --format requirements-txt -o "$pins"
 uv tool install --reinstall --python "$(cat .python-version)" --constraints "$pins" .; rm -f "$pins"
 ```
+
+The exported file carries the sha256 hashes from `uv.lock`, but `uv tool
+install` (tested with uv 0.9.8) does not check them: it pins versions only.
+A constraints file with a changed hash still installs, and uv 0.9.8 has no
+`uv tool install` option that enforces them. The versions are pinned; the
+downloads are only as trustworthy as the index (PyPI over HTTPS).
 
 ## Quick start
 
@@ -230,9 +236,17 @@ goal-1                        goal     open (open)      CSV export
     goal-1/batch-1/backlog-1  backlog  open (open)      Handle BOM
 ```
 
+```text
+$ xoot backlog --project csv          # read-only; --all adds closed, --at KEY narrows
+on goal-1 (goal backlog)
+  goal-1/backlog-1  open (open)  Document the format  (found on goal-1)
+on goal-1/batch-1 (batch backlog)
+  goal-1/batch-1/backlog-1  open (open)  Handle BOM  (found on goal-1/batch-1/subtask-1)
+```
+
 ```sh
 xoot project list                                     # every project and the database in use
-xoot project rename csv --name "CSV toolkit" --yes    # never the prefix
+xoot project rename --project csv --name "CSV toolkit" --yes   # never the prefix
 xoot workflow export --project csv -o workflow.toml   # the state names, as TOML
 xoot redact goal-1/batch-1/backlog-1 body --project csv   # clears a field and its history
 xoot db stats                                         # schema version, sizes, row counts
@@ -241,9 +255,14 @@ xoot db stats                                         # schema version, sizes, r
 `--db PATH` and `--json` go before the command or after the action: `xoot
 --json project list` and `xoot project list --json` work, `xoot project
 --json list` is a usage error (exit 2). Commands that remove or rewrite data
-ask y/N, and need `--yes` without a terminal. Exit codes: 0 ok, 1 refused,
-2 usage, 3 database (or dashboard port) unavailable. Full reference:
-[docs/cli.md](docs/cli.md).
+ask y/N, and need `--yes` without a terminal; answering anything but y
+exits 1. Exit codes: 0 ok, 1 refused, 2 usage, 3 database (or dashboard
+port) unavailable. Full reference: [docs/cli.md](docs/cli.md).
+
+Aliases are kept when a project's name changes or is redacted; remove one
+that spells the old name with `xoot project remove-alias ALIAS --project
+PREFIX`. After `xoot redact <prefix> name`, a warning lists those aliases
+with the command for each; none is removed for you.
 
 ## Dashboard
 
@@ -429,10 +448,12 @@ recorded in the installed package metadata and in `package-lock.json`:
 | uvicorn | BSD-3-Clause | react-dom | MIT |
 | | | react-router-dom (React Router) | MIT |
 
-Transitive packages are pinned in `uv.lock` and
-`dashboard/package-lock.json`. `package-lock.json` also records each
-package's license, but `uv.lock` does not: for the Python packages, read
-the installed package metadata.
+Every package xoot ships or runs, transitive ones included, is listed with
+its version, license, copyright line and full license text in
+[THIRD_PARTY_NOTICES.md](src/xoot/THIRD_PARTY_NOTICES.md), which also ships
+inside the installed package. It is generated from `uv.lock`,
+`dashboard/package-lock.json` and the installed license files by
+`scripts/gen_notices.py`.
 
 ## Development
 

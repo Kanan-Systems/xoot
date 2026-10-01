@@ -4,6 +4,7 @@ import { B1, B2, G1, G1_BACKLOG, G2, item, S3 } from '../test/fixtures.ts';
 import {
   dragReducer,
   IDLE,
+  planChanged,
   sameKeys,
   subtreeKeys,
   type DragEvent,
@@ -99,5 +100,35 @@ describe('the auto-confirm key check', () => {
     expect(sameKeys([change(B2), change(S3), change(B1)], [B2, S3])).toBe(false);
     expect(sameKeys([change(B2)], [B2, S3])).toBe(false);
     expect(sameKeys([change(B2), change(B2)], [B2, S3])).toBe(false);
+  });
+});
+
+describe('what changed in a plan', () => {
+  const change = (key: string) => ({ key });
+  const titles = new Map([
+    [B2, 'Writer'],
+    [S3, 'Rows'],
+  ]);
+
+  it('says nothing when the plan is what was confirmed', () => {
+    expect(planChanged([change(S3), change(B2)], [B2, S3], titles)).toBeNull();
+  });
+
+  it('names added and removed items by title, else by key', () => {
+    expect(
+      planChanged([change(B2), change('goal-1/batch-2/subtask-9')], [B2, S3], titles),
+    ).toBe(
+      'The plan changed since you confirmed it: now also moves ' +
+        '“goal-1/batch-2/subtask-9”; no longer moves “Rows”.',
+    );
+    expect(planChanged([change(B2)], [B2, S3], titles)).toBe(
+      'The plan changed since you confirmed it: no longer moves “Rows”.',
+    );
+  });
+
+  it('still says so when only a repeat differs', () => {
+    expect(planChanged([change(B2), change(B2)], [B2], titles)).toBe(
+      'The plan changed since you confirmed it: the items it moves differ.',
+    );
   });
 });

@@ -33,6 +33,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     try:
         args = build_parser().parse_args(argv)
+        # A command's own usage rule that argparse cannot express.
+        refine = getattr(args, "refine", None)
+        if refine is not None:
+            refine(args)
     except SystemExit as exc:
         # argparse exits 0 after --help and 2 on a usage error.
         return exit_codes.USAGE if exc.code not in (0, None) else exit_codes.OK

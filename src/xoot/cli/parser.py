@@ -15,18 +15,14 @@ from xoot.cli.commands import (
     db,
     init,
     paste,
-    project,
     redact,
     workflow,
 )
+from xoot.cli.parser_options import confirm, global_options, select
+from xoot.cli.parser_project import add_backlog, add_project
 from xoot.dashboard.ports import DEFAULT_PORT
 from xoot.models.event.redactable_field import RedactableField
 from xoot.models.item.tree_query import MAX_DEPTH
-
-PROJECT_HELP = (
-    "project alias or key prefix (default: the project whose path contains "
-    "the working directory)"
-)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,17 +33,18 @@ def build_parser() -> argparse.ArgumentParser:
         - parser (argparse.ArgumentParser): parses into a namespace whose
           handler field is the command to run.
     """
-    common = _global_options(argparse.SUPPRESS)
+    common = global_options(argparse.SUPPRESS)
     parser = argparse.ArgumentParser(
         prog="xoot",
         description="Local tracker for goals, batches and subtasks.",
-        parents=[_global_options(None)],
+        parents=[global_options(None)],
     )
     parser.add_argument("--version", action="version", version=f"xoot {__version__}")
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
     _init(commands, common)
-    _project(commands, common)
+    add_project(commands, common)
     _views(commands, common)
+    add_backlog(commands, common)
     _workflow(commands, common)
     _redact(commands, common)
     _paste(commands, common)
@@ -88,24 +85,6 @@ def _port(text: str) -> int:
     return value
 
 
-def _global_options(default: object) -> argparse.ArgumentParser:
-    options = argparse.ArgumentParser(add_help=False)
-    group = options.add_argument_group("global options")
-    group.add_argument(
-        "--db",
-        metavar="PATH",
-        default=default,
-        help="database file (default: $XDG_DATA_HOME/xoot/xoot.db)",
-    )
-    group.add_argument(
-        "--json",
-        action="store_true",
-        default=False if default is None else default,
-        help="print results as JSON",
-    )
-    return options
-
-
 def _init(
     commands: argparse._SubParsersAction, common: argparse.ArgumentParser
 ) -> None:
@@ -133,57 +112,16 @@ def _init(
     command.set_defaults(handler=init.run_init)
 
 
-def _project(
-    commands: argparse._SubParsersAction, common: argparse.ArgumentParser
-) -> None:
-    group = commands.add_parser(
-        "project",
-        help="list, show and rename projects; add or remove aliases and paths",
-    )
-    actions = group.add_subparsers(dest="action", required=True, metavar="ACTION")
-    listing = actions.add_parser("list", parents=[common], help="list every project")
-    listing.set_defaults(handler=project.run_list)
-    show = actions.add_parser("show", parents=[common], help="show one project")
-    _select(show)
-    show.set_defaults(handler=project.run_show)
-    for name, target, metavar, handler, confirmed in (
-        ("add-alias", "alias", "ALIAS", project.run_add_alias, False),
-        ("remove-alias", "alias", "ALIAS", project.run_remove_alias, True),
-        ("add-path", "path", "PATH", project.run_add_path, False),
-        ("remove-path", "path", "PATH", project.run_remove_path, True),
-    ):
-        verb = "remove" if confirmed else "add"
-        action = actions.add_parser(
-            name, parents=[common], help=f"{verb} a project {target}"
-        )
-        action.add_argument(target, metavar=metavar)
-        _select(action)
-        if confirmed:
-            _confirm(action)
-        action.set_defaults(handler=handler)
-    rename = actions.add_parser(
-        "rename", parents=[common], help="rename a project (never its key prefix)"
-    )
-    rename.add_argument(
-        "project", metavar="PROJECT", help="project alias or key prefix"
-    )
-    group = rename.add_argument_group("rename")
-    group.add_argument("--name", help="the new display name")
-    group.add_argument("--alias", help="an alias to add, e.g. the new name as a slug")
-    _confirm(rename)
-    rename.set_defaults(handler=project.run_rename)
-
-
 def _views(
     commands: argparse._SubParsersAction, common: argparse.ArgumentParser
 ) -> None:
     brief_command = commands.add_parser(
         "brief", parents=[common], help="summarize a project"
     )
-    _select(brief_command)
+    select(brief_command)
     brief_command.set_defaults(handler=brief.run_brief)
     tree = commands.add_parser("tree", parents=[common], help="show the item tree")
-    _select(tree)
+    select(tree)
     group = tree.add_argument_group("tree")
     group.add_argument(
         "--root", metavar="KEY", help="item key to start from (or <prefix>:<key>)"
@@ -209,7 +147,7 @@ def _workflow(
     export = actions.add_parser(
         "export", parents=[common], help="print or write the active workflow as TOML"
     )
-    _select(export)
+    select(export)
     export.add_argument("-o", "--output", metavar="FILE", help="write to FILE")
     export.set_defaults(handler=workflow.run_export)
     imported = actions.add_parser(
@@ -218,7 +156,7 @@ def _workflow(
     imported.add_argument(
         "file", metavar="FILE", help="a TOML workflow, at most 64 KiB"
     )
-    _select(imported)
+    select(imported)
     mapping = imported.add_argument_group("state mapping")
     mapping.add_argument(
         "--map",
@@ -228,7 +166,7 @@ def _workflow(
         metavar="KIND:OLD=NEW",
         help="move items of KIND in removed state OLD to NEW; may be repeated",
     )
-    _confirm(imported)
+    confirm(imported)
     imported.set_defaults(handler=workflow.run_import)
 
 
@@ -247,8 +185,8 @@ def _redact(
     command.add_argument(
         "field", metavar="FIELD", choices=[f.value for f in RedactableField]
     )
-    _select(command)
-    _confirm(command)
+    select(command)
+    confirm(command)
     command.set_defaults(handler=redact.run_redact)
 
 
@@ -262,7 +200,7 @@ def _paste(
     brief_command = actions.add_parser(
         "brief", parents=[common], help="print the markdown brief to paste into a chat"
     )
-    _select(brief_command)
+    select(brief_command)
     brief_command.set_defaults(handler=paste.run_brief)
     applied = actions.add_parser(
         "apply", parents=[common], help="preview, confirm and apply one xoot block"
@@ -292,18 +230,6 @@ def _db(commands: argparse._SubParsersAction, common: argparse.ArgumentParser) -
         "vacuum", parents=[common], help="rebuild the file without free pages"
     )
     vacuum.set_defaults(handler=db.run_vacuum)
-
-
-def _select(command: argparse.ArgumentParser) -> None:
-    group = command.add_argument_group("project selection")
-    group.add_argument("--project", metavar="NAME", help=PROJECT_HELP)
-
-
-def _confirm(command: argparse.ArgumentParser) -> None:
-    group = command.add_argument_group("confirmation")
-    group.add_argument(
-        "--yes", action="store_true", help="apply without asking (needed without a TTY)"
-    )
 
 
 def _depth(text: str) -> int:

@@ -59,6 +59,10 @@ the message below, unless `--yes` is given:
 
 No other command takes `--yes`.
 
+Declining a prompt (any answer but `y` or `yes`) writes nothing and exits 1,
+the code of any refusal, with `error: ConfirmationError: aborted; nothing was
+written`.
+
 ### Output and exit codes
 
 Results go to stdout. Errors, warnings, plans and prompts go to stderr.
@@ -68,7 +72,7 @@ Results go to stdout. Errors, warnings, plans and prompts go to stderr.
 | 0 | Success |
 | 1 | Refused: invalid input or a rule the tracker enforces |
 | 2 | Usage error (as argparse reports it) |
-| 3 | The database could not be used: an unsafe path, a failed open, a busy database, or a redaction whose purge did not complete; also `xoot dashboard` when its port cannot be bound |
+| 3 | The database could not be used: an unsafe path, a failed open, a busy database, stored data this version cannot read, or a redaction whose purge did not complete; also `xoot dashboard` when its port cannot be bound |
 
 Every command opens the database first, and creates and migrates it if
 needed, even one that only reads.
@@ -107,7 +111,7 @@ a letter; no dashes` (exit 1).
 | `remove-alias ALIAS` | Remove an alias | `--project`, `--yes` |
 | `add-path PATH` | Add a directory | `--project` |
 | `remove-path PATH` | Remove a directory | `--project`, `--yes` |
-| `rename PROJECT` | Change the display name and/or add an alias; never the prefix | `--name NAME`, `--alias ALIAS` (one), `--yes` |
+| `rename [PROJECT]` | Change the display name and/or add an alias; never the prefix. Name the project once: as `PROJECT` or with `--project` | `--project`, `--name NAME`, `--alias ALIAS` (one), `--yes` |
 
 ```sh
 $ xoot project list
@@ -115,12 +119,21 @@ database: /home/you/.local/share/xoot/xoot.db
 PREFIX  NAME      ALIASES   PATHS
 csv     CSV tool  csv-tool  /home/you/code/csvtool
 
-$ xoot project rename csv --name "CSV toolkit" --alias csv-toolkit --yes
+$ xoot project rename --project csv --name "CSV toolkit" --alias csv-toolkit --yes
 project: csv
 name: CSV toolkit
 aliases: csv-tool, csv-toolkit
 paths: /home/you/code/csvtool
 ```
+
+`xoot project rename csv --name "CSV toolkit"` does the same. Naming the
+project both ways with different names, or not at all, is a usage error
+(exit 2) before the database is opened: `xoot project rename: error: name
+the project once: PROJECT or --project`.
+
+Aliases are kept when a project's name changes or is redacted; remove one
+that spells the old name with `xoot project remove-alias ALIAS --project
+PREFIX`.
 
 ### `xoot brief`
 
@@ -151,6 +164,32 @@ goal-1                        goal     open (open)      CSV export
 The state column shows `state (category)`. If `--depth` or the item limit
 hides items, stderr says `warning: the tree was truncated by --depth or the
 item limit`.
+
+### `xoot backlog`
+
+List backlog items, read-only, grouped by what they sit on: the project
+backlog first, then each goal's and batch's own, as the MCP tool
+`backlog_list` orders them, at most 100 (a warning on stderr says when more
+were hidden). Done and dropped items are hidden unless `--all` is given.
+
+| Flag | Meaning |
+|---|---|
+| `--project NAME` | Project selection |
+| `--at KEY` | Only the backlog on this goal or batch (or `<prefix>:<key>`) |
+| `--all` | Include done and dropped backlog items |
+
+```text
+$ xoot backlog --project csv --all
+on goal-1 (goal backlog)
+  goal-1/backlog-1  open (open)  Document the format  (found on goal-1)
+  goal-1/backlog-2  dropped (dropped)  Old idea  (found on goal-1)
+on goal-1/batch-1 (batch backlog)
+  goal-1/batch-1/backlog-1  open (open)  Handle BOM  (found on goal-1/batch-1/subtask-1)
+```
+
+With `--json` the output has the shape `backlog_list` returns. An `--at`
+key that names nothing is `error: NotFoundError: ...` (exit 1); an empty
+list prints `(no backlog)`.
 
 ### `xoot workflow ACTION`
 
@@ -183,6 +222,17 @@ redact the body of item goal-1/batch-1/backlog-1
 the record and its history are rewritten; this cannot be undone
 Proceed? [y/N] y
 redacted body of item goal-1/batch-1/backlog-1, now version 2; 1 event rewritten
+```
+
+Redacting a project name keeps its aliases. A warning on stderr lists each
+alias that equals the old or the new name as a slug (every alias when none
+does), with the command to remove it; nothing is removed for you:
+
+```text
+$ xoot redact csv name --yes
+redacted name of project csv; 2 events rewritten
+warning: Aliases are kept when a project's name changes or is redacted; remove one that spells the old name with `xoot project remove-alias ALIAS --project PREFIX`.
+warning: alias csv-toolkit: xoot project remove-alias csv-toolkit --project csv
 ```
 
 ### `xoot paste ACTION`
@@ -238,4 +288,11 @@ See [Dashboard](../README.md#dashboard).
 
 The MCP server, started by the client, never by hand. It speaks MCP over
 stdio and takes `--db PATH`, `--version` and `--help` only. It logs the
-database path it uses to stderr once at start.
+database path it uses to stderr once at start. An unsafe database path is
+refused at start, with the line and exit code (3) `xoot dashboard` gives,
+before anything is served or created:
+
+```text
+$ xoot-mcp --db /home/you/shared/xoot.db
+error: UnsafePathError: refusing to open /home/you/shared: it grants group or other permissions (mode 0750)
+```

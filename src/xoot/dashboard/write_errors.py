@@ -22,6 +22,7 @@ from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
 from xoot.dashboard.api_error import ApiError
+from xoot.dashboard.requests.project_rename_request import ProjectRenameRequest
 from xoot.dashboard.schemas.write_error_output import WriteErrorOutput
 from xoot.exceptions.confirm_token_error import ConfirmTokenError
 from xoot.exceptions.cross_project_error import CrossProjectError
@@ -36,13 +37,16 @@ from xoot.exceptions.stored_data_error import StoredDataError
 from xoot.exceptions.update_path_error import UpdatePathError
 from xoot.exceptions.version_conflict_error import VersionConflictError
 from xoot.exceptions.xoot_error import XootError
-from xoot.server.errors import PUBLIC_NAMES, safe_message
+from xoot.server.errors import KNOWN_FIELDS, PUBLIC_NAMES, safe_message
 
 NOT_FOUND = 404
 CONFLICT = 409
 UNPROCESSABLE = 422
 INTERNAL = 500
 UNAVAILABLE = 503
+# The tools' field names plus the rename body's (name, alias): schema names,
+# never caller text, so a refusal can say which field it was.
+_FIELDS = KNOWN_FIELDS | frozenset(ProjectRenameRequest.model_fields)
 
 _CONFLICTS: tuple[type[XootError], ...] = (
     ConfirmTokenError, DuplicateError, IntegrityViolationError, StaleWriteError,
@@ -65,7 +69,7 @@ def write_error(exc: XootError | ValidationError) -> ApiError:
     if isinstance(exc, UpdatePathError):
         # Fixed text only, as the MCP tool already shows it.
         return ApiError(UNPROCESSABLE, "UpdatePathError", str(exc), {})
-    name, _, reason = safe_message(exc).partition(": ")
+    name, _, reason = safe_message(exc, _FIELDS).partition(": ")
     return ApiError(_status(exc), name, reason, _details(exc))
 
 

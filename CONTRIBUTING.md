@@ -69,6 +69,21 @@ committed, and each is checked for drift:
    and fails on any difference from the committed
    `src/xoot/dashboard/static/`.
 
+### Third-party notices
+
+`src/xoot/THIRD_PARTY_NOTICES.md` ships inside the package and is generated,
+never edited by hand. After any change to `uv.lock` or
+`dashboard/package-lock.json` (with `uv sync` and `npm ci` done, since it
+reads the installed license files), regenerate it:
+
+```sh
+python3 scripts/gen_notices.py           # writes the file
+python3 scripts/gen_notices.py --check   # exits 1 when it is stale
+```
+
+The generator uses the standard library only. A pytest test fails when the
+packages and versions in the file differ from the lockfiles.
+
 ## Migrations are frozen
 
 The schema lives in `src/xoot/store/migrations/`. It starts at the 0.3
@@ -90,9 +105,12 @@ commit.
 
 Tags and commits are the maintainer's.
 
-1. Bump the version in `pyproject.toml` and in
-   `plugin/.claude-plugin/plugin.json`; they must match (a test checks).
-2. `uv lock`, so the lockfile records the new version.
+1. Bump the version in `pyproject.toml`, `plugin/.claude-plugin/plugin.json`,
+   the README status line and a new top entry in `CHANGELOG.md`. Every
+   release updates `CHANGELOG.md` (Keep a Changelog: Added, Changed, Fixed,
+   Removed). A version sync test fails unless all four name the same version.
+2. `uv lock`, so the lockfile records the new version, then
+   `uv sync --inexact --frozen` and `python3 scripts/gen_notices.py --check`.
    The build backend is pinned below a ceiling (`uv_build>=0.9.8,<0.10.0`
    in `[build-system]`). Before a release, check that the ceiling still
    admits the uv release CI and `install.sh` use; raising it is its own

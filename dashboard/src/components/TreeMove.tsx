@@ -4,7 +4,8 @@
 // single request the server applies directly. A move with children returns
 // the server's plan; when that plan moves exactly the items (by key, not by
 // count) that were under it at the drop, it is applied without asking
-// again, otherwise it is shown. A drop or an arming that cannot go ahead
+// again, otherwise it is shown, saying which items it now adds or no longer
+// moves. A drop or an arming that cannot go ahead
 // says why instead of being dropped silently, and arming another node
 // dismisses a failed move.
 import { useEffect, useReducer, useRef } from 'react';
@@ -15,6 +16,7 @@ import type { TwoPhase } from '../hooks/useTwoPhase.ts';
 import {
   dragReducer,
   IDLE,
+  planChanged,
   sameKeys,
   subtreeKeys,
   type DragState,
@@ -132,7 +134,10 @@ export function useTreeMove(
       const { item, parent, keys } = pending;
       void move.start(
         { key: item.key, parent, expected_version: item.version },
-        { autoConfirm: (plan) => sameKeys(plan.changes, keys) },
+        {
+          autoConfirm: (plan) => sameKeys(plan.changes, keys),
+          explain: (plan) => planChanged(plan.changes, keys, titles),
+        },
       );
     },
     cancel: () => {

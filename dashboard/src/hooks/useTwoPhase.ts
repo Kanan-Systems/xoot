@@ -36,6 +36,8 @@ export type Flow<Req> =
 export interface StartOptions {
   // True when a returned plan is exactly what the user already confirmed.
   autoConfirm?: (plan: SubtreeOutput) => boolean;
+  // Why a plan that is not auto-confirmed asks again, shown as its notice.
+  explain?: (plan: SubtreeOutput) => string | null;
 }
 
 export interface TwoPhase<Req> {
@@ -67,7 +69,7 @@ export function useTwoPhase<Req, Res extends TwoPhaseResult>(
         request,
         token: result.confirm_token,
         plan: result.plan,
-        notice,
+        notice: options.explain?.(result.plan) ?? notice,
       };
       if (options.autoConfirm?.(result.plan) === true) {
         await apply(shown);

@@ -107,7 +107,11 @@ databases:
 - Claude Code with the plugin: the plugin passes no `--db`, so start Claude
   Code from a shell where `XDG_DATA_HOME` is set.
 
-The server logs the database path it uses to stderr once at start.
+The server logs the database path it uses to stderr once at start. If that
+path is unsafe (a symlink, another owner, or group or other permissions on
+the directory or the files), the server exits at start with exit code 3 and
+`error: UnsafePathError: ...` in the client's server log, the line `xoot
+dashboard` prints, instead of failing each tool call.
 
 ## Measured facts
 

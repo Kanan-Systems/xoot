@@ -224,17 +224,3 @@ def rebase_key(key: str, old_root: str, new_root: str) -> str:
     if not key.startswith(old_root + SEPARATOR):
         raise ValueError("the key is not below the moved root")
     return new_root + key[len(old_root) :]
-
-
-def qualify(prefix: str, key: str) -> str:
-    """
-    Qualify a key with its project prefix.
-
-    Args:
-        - prefix (str): the project key prefix.
-        - key (str): the unqualified key.
-
-    Returns:
-        - key (str): "<prefix>:<key>".
-    """
-    return f"{prefix}{QUALIFIER}{key}"

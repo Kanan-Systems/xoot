@@ -17,6 +17,14 @@ from xoot.services.project_resolver import resolve_project
 from xoot.services.project_scope import key_qualifier
 from xoot.store.store import Store
 
+# Shown by `project rename --help`, after a redacted project name and in the
+# README, word for word.
+ALIAS_HINT = (
+    "Aliases are kept when a project's name changes or is redacted; remove one "
+    "that spells the old name with `xoot project remove-alias ALIAS --project "
+    "PREFIX`."
+)
+
 USER = Actor(kind=ActorKind.USER, client=Client.CLI)
 # Every CLI write is the user's, through the cli client.
 WRITE = WriteContext(actor=USER)

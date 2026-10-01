@@ -77,3 +77,28 @@ export function sameKeys(
     [...planned].every((key) => confirmed.has(key))
   );
 }
+
+export const PLAN_CHANGED = 'The plan changed since you confirmed it';
+
+// What a plan moves that was not confirmed, and the reverse, named by title
+// (by key when the tree does not know it); null when nothing changed.
+export function planChanged(
+  changes: readonly { key: string }[],
+  keys: readonly string[],
+  titles: ReadonlyMap<string, string>,
+): string | null {
+  if (sameKeys(changes, keys)) {
+    return null;
+  }
+  const planned = new Set(changes.map((change) => change.key));
+  const confirmed = new Set(keys);
+  const name = (key: string) => `“${titles.get(key) ?? key}”`;
+  const added = [...planned].filter((key) => !confirmed.has(key)).map(name);
+  const removed = [...confirmed].filter((key) => !planned.has(key)).map(name);
+  const parts = [
+    ...(added.length > 0 ? [`now also moves ${added.join(', ')}`] : []),
+    ...(removed.length > 0 ? [`no longer moves ${removed.join(', ')}`] : []),
+  ];
+  const what = parts.length > 0 ? parts.join('; ') : 'the items it moves differ';
+  return `${PLAN_CHANGED}: ${what}.`;
+}

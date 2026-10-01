@@ -10,7 +10,6 @@ from xoot.utils.keys import (
     is_key,
     parse_decision_key,
     parse_item_key,
-    qualify,
     rebase_key,
     split_qualified,
 )
@@ -114,14 +113,13 @@ def test_malformed_qualifiers_are_refused(text: str) -> None:
 
 
 def test_builders_follow_the_grammar() -> None:
-    """child_key, decision_key and qualify build keys the parsers accept."""
+    """child_key and decision_key build keys the parsers accept, qualified too."""
     batch = child_key("goal-1", "batch", 2)
     assert batch == "goal-1/batch-2"
     assert child_key(None, "goal", 3) == "goal-3"
     assert child_key(None, "backlog", 1) == "backlog-1"
     assert decision_key(batch, 4) == "goal-1/batch-2/decision-4"
-    assert qualify("xoot", batch) == "xoot:goal-1/batch-2"
-    for key in (batch, decision_key(batch, 4), qualify("xoot", batch)):
+    for key in (batch, decision_key(batch, 4), f"xoot:{batch}"):
         assert is_key(key)
 
 

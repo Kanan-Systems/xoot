@@ -7,6 +7,7 @@ from pydantic import Field
 
 from xoot.models.item.tree_query import MAX_DEPTH, MAX_ITEMS, TreeQuery
 from xoot.repositories.item import item_db
+from xoot.server.backlog_listing import backlog_output
 from xoot.server.db_call import run_db
 from xoot.server.key_book import KeyBook
 from xoot.server.render import (
@@ -14,18 +15,15 @@ from xoot.server.render import (
     decision_summary,
     event_entry,
     item_detail,
-    item_summary,
     tree_entries,
 )
 from xoot.server.resolution import item_by_key, optional_item_id, resolve_project
 from xoot.server.roots import root_paths
 from xoot.server.schemas.arguments import ItemKey, OptionalItemKey, ProjectAlias
-from xoot.server.schemas.backlog_entry import BacklogEntry
 from xoot.server.schemas.backlog_output import BacklogOutput
 from xoot.server.schemas.item_get_output import ItemGetOutput
 from xoot.server.schemas.tree_output import TreeOutput
 from xoot.server.tool_meta import READ, RESOLUTION, describe
-from xoot.services.backlog_reads import backlog_items, backlog_level
 from xoot.services.decision_reads import owned_decisions
 from xoot.services.history_service import recent_events
 from xoot.services.tree_service import tree_in
@@ -34,7 +32,6 @@ from xoot.store.store import Store
 RECENT_EVENTS = 10
 CHILDREN_MAX = 25
 DECISIONS_MAX = 25
-BACKLOG_MAX = 100
 
 
 # One parameter per tool argument: the SDK derives the input schema from it.
@@ -149,30 +146,15 @@ async def backlog_list(
         - include_closed (bool): include done and dropped items.
 
     Returns:
-        - output (BacklogOutput): up to BACKLOG_MAX items and a truncated flag.
+        - output (BacklogOutput): up to 100 items and a truncated flag.
     """
     roots = await root_paths(ctx, project)
 
     def work(store: Store) -> BacklogOutput:
         found, resolved_by = resolve_project(store, project, roots, [at])
         with store.read() as conn:
-            book = KeyBook(conn)
             target = None if at is None else item_by_key(conn, found, at)
-            items = backlog_items(conn, found.id, target, include_closed)
-            return BacklogOutput(
-                project=found.key_prefix,
-                resolved_by=resolved_by,
-                at=None if target is None else target.key,
-                items=[
-                    BacklogEntry(
-                        **item_summary(book, item).model_dump(),
-                        level=backlog_level(item),
-                        found_on=book.item_key(item.found_on_item_id),
-                    )
-                    for item in items[:BACKLOG_MAX]
-                ],
-                truncated=len(items) > BACKLOG_MAX,
-            )
+            return backlog_output(conn, found, resolved_by, target, include_closed)
 
     return await run_db(ctx, work)
 

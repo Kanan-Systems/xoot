@@ -115,18 +115,22 @@ def not_found_message(key: str) -> str:
     return f"not found: {key if is_key(key) else 'malformed key'}"
 
 
-def safe_message(exc: XootError | ValidationError) -> str:
+def safe_message(
+    exc: XootError | ValidationError, known: frozenset[str] = KNOWN_FIELDS
+) -> str:
     """
     Describe a domain or validation error without leaking its details.
 
     Args:
         - exc (XootError | ValidationError): the error to describe.
+        - known (frozenset[str]): field names a validation error may show;
+          any other location part is masked.
 
     Returns:
         - message (str): "<ClassName>: <reason>".
     """
     if isinstance(exc, ValidationError):
-        return f"ValidationError: invalid arguments: {_locations(exc)}"
+        return f"ValidationError: invalid arguments: {_locations(exc, known)}"
     if isinstance(exc, VersionConflictError):
         return _conflict_message(exc)
     name = type(exc).__name__
@@ -153,11 +157,11 @@ def _conflict_message(exc: VersionConflictError) -> str:
     )
 
 
-def _locations(exc: ValidationError) -> str:
+def _locations(exc: ValidationError, known: frozenset[str]) -> str:
     rendered = set()
     for error in exc.errors():
         parts = [
-            part if isinstance(part, str) and part in KNOWN_FIELDS else "*"
+            part if isinstance(part, str) and part in known else "*"
             for part in error["loc"]
         ]
         rendered.add(f"{'.'.join(parts) or '*'} ({error['type']})")

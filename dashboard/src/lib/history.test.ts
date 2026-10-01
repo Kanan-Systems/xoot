@@ -71,6 +71,59 @@ describe('historyLine', () => {
   });
 });
 
+describe('historyLine for moves and versions', () => {
+  const titles = new Map([
+    ['goal-2/batch-1', 'Writer'],
+    ['goal-1/batch-2', 'Reader'],
+  ]);
+
+  it('never shows a version line', () => {
+    expect(
+      historyLine(
+        event({
+          changed: ['title', 'version'],
+          before: { title: 'a', version: 1 },
+          after: { title: 'b', version: 2 },
+        }),
+      ),
+    ).toBe('claude · code · 2026-09-28 10:15 · title: a → b');
+    expect(
+      historyLine(
+        event({ changed: ['version'], before: { version: 1 }, after: { version: 2 } }),
+      ),
+    ).toBe('claude · code · 2026-09-28 10:15 · update');
+  });
+
+  it('names the target of an item carried along, from its keys', () => {
+    expect(
+      historyLine(
+        event({
+          changed: ['key', 'version'],
+          before: { key: 'goal-1/batch-2/subtask-1', version: 3 },
+          after: { key: 'goal-2/batch-1/subtask-1', version: 4 },
+        }),
+        titles,
+      ),
+    ).toBe('claude · code · 2026-09-28 10:15 · moved from Reader to Writer');
+    expect(
+      historyLine(
+        event({
+          changed: ['key'],
+          before: null,
+          after: { key: 'goal-2/batch-1/subtask-4' },
+        }),
+        titles,
+      ),
+    ).toBe('claude · code · 2026-09-28 10:15 · moved to Writer');
+  });
+
+  it('says a bare "moved" only when nothing names the target', () => {
+    expect(historyLine(event({ changed: ['number'], before: {}, after: {} }))).toBe(
+      'claude · code · 2026-09-28 10:15 · moved',
+    );
+  });
+});
+
 describe('completionState', () => {
   it('says what blocks a goal or batch', () => {
     expect(completionState(detail({}), [], 2)).toBe(

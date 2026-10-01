@@ -7,6 +7,8 @@ import { NO_TITLES, type Titles } from './titles.ts';
 // A move rewrites these together; the user sees one "moved" part, never the
 // raw key, parent and number values.
 const MOVE_FIELDS: ReadonlySet<string> = new Set(['key', 'parent', 'number']);
+// Bookkeeping every write bumps; a line about it says nothing to the user.
+const HIDDEN_FIELDS: ReadonlySet<string> = new Set(['version']);
 
 function value(raw: unknown): string {
   if (raw === null || raw === undefined) {
@@ -22,13 +24,26 @@ function where(parent: unknown, titles: Titles): string {
   return titles.get(parent) ?? parent;
 }
 
+// Where one side of a move was: its parent, else the parent its key names
+// (an item carried along records only its key); undefined when unknown.
+function side(values: Record<string, unknown>, titles: Titles): string | undefined {
+  if ('parent' in values) {
+    return where(values.parent, titles);
+  }
+  if (typeof values.key !== 'string') {
+    return undefined;
+  }
+  const cut = values.key.lastIndexOf('/');
+  return where(cut < 0 ? null : values.key.slice(0, cut), titles);
+}
+
 function moved(event: EventEntry, titles: Titles): string {
-  const before = event.before ?? {};
-  const after = event.after ?? {};
-  if (!('parent' in before) && !('parent' in after)) {
+  const from = side(event.before ?? {}, titles);
+  const to = side(event.after ?? {}, titles);
+  if (to === undefined) {
     return 'moved';
   }
-  return `moved from ${where(before.parent, titles)} to ${where(after.parent, titles)}`;
+  return from === undefined ? `moved to ${to}` : `moved from ${from} to ${to}`;
 }
 
 function change(event: EventEntry, titles: Titles): string {
@@ -38,8 +53,9 @@ function change(event: EventEntry, titles: Titles): string {
   if (event.action === 'redact') {
     return 'redacted';
   }
-  const others = event.changed.filter((field) => !MOVE_FIELDS.has(field));
-  const moves = others.length < event.changed.length ? [moved(event, titles)] : [];
+  const shown = event.changed.filter((field) => !HIDDEN_FIELDS.has(field));
+  const others = shown.filter((field) => !MOVE_FIELDS.has(field));
+  const moves = others.length < shown.length ? [moved(event, titles)] : [];
   const parts = moves.concat(
     others.map((field) => {
       const before = event.before ?? {};
