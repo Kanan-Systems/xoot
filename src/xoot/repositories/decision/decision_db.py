@@ -11,6 +11,7 @@ from xoot.exceptions.stale_write_error import StaleWriteError
 from xoot.models.decision.decision import Decision
 from xoot.models.decision.decision_status import DecisionStatus
 from xoot.models.decision.new_decision import NewDecision
+from xoot.repositories.stored_row import from_row
 
 _SELECT = (
     "SELECT decision.id, decision.project_id, decision.owner_item_id, "
@@ -58,7 +59,7 @@ def get(conn: sqlite3.Connection, decision_id: int) -> Decision | None:
         - decision (Decision | None): the row, or None.
     """
     row = conn.execute(f"{_SELECT} WHERE decision.id = ?", (decision_id,)).fetchone()
-    return None if row is None else Decision.model_validate(dict(row))
+    return None if row is None else from_row(Decision, "decision", row)
 
 
 def get_by_owner(
@@ -79,7 +80,7 @@ def get_by_owner(
         f"{_SELECT} WHERE decision.owner_item_id = ? AND decision.number = ?",
         (owner_item_id, number),
     ).fetchone()
-    return None if row is None else Decision.model_validate(dict(row))
+    return None if row is None else from_row(Decision, "decision", row)
 
 
 def list_recent(
@@ -106,7 +107,7 @@ def list_recent(
         "AND (? IS NULL OR decision.status = ?) ORDER BY decision.id DESC LIMIT ?",
         (project_id, value, value, limit),
     ).fetchall()
-    return [Decision.model_validate(dict(row)) for row in rows]
+    return [from_row(Decision, "decision", row) for row in rows]
 
 
 def list_for_owner(
@@ -128,7 +129,7 @@ def list_for_owner(
         "ORDER BY decision.number DESC LIMIT ?",
         (owner_item_id, limit),
     ).fetchall()
-    return [Decision.model_validate(dict(row)) for row in rows]
+    return [from_row(Decision, "decision", row) for row in rows]
 
 
 def update(conn: sqlite3.Connection, decision: Decision, expected_version: int) -> None:

@@ -24,6 +24,7 @@ from xoot.exceptions.project_resolution_error import ProjectResolutionError
 from xoot.exceptions.redaction_error import RedactionError
 from xoot.exceptions.schema_version_error import SchemaVersionError
 from xoot.exceptions.store_open_error import StoreOpenError
+from xoot.exceptions.stored_data_error import StoredDataError
 from xoot.exceptions.unsafe_path_error import UnsafePathError
 from xoot.exceptions.update_path_error import UpdatePathError
 from xoot.exceptions.workflow_file_error import WorkflowFileError
@@ -36,8 +37,8 @@ LOC_MAX = 64
 _DETAILED: tuple[type[XootError], ...] = (
     ConfirmationError, DatabaseBusyError, DuplicateError, NotFoundError,
     PasteError, ProjectResolutionError, RedactionError, SchemaVersionError,
-    StoreOpenError, UnsafePathError, UpdatePathError, WorkflowFileError,
-    WorkflowMappingError,
+    StoreOpenError, StoredDataError, UnsafePathError, UpdatePathError,
+    WorkflowFileError, WorkflowMappingError,
 )  # fmt: skip
 _BUSY_CODES = ("SQLITE_BUSY", "SQLITE_LOCKED")
 
@@ -73,14 +74,14 @@ def exit_code(exc: XootError | ValidationError) -> int:
         - exc (XootError | ValidationError): the error.
 
     Returns:
-        - code (int): UNAVAILABLE for an unsafe path or a busy database,
-          ERROR otherwise.
+        - code (int): UNAVAILABLE for an unsafe path, a busy database or
+          stored data this code cannot read, ERROR otherwise.
     """
     if isinstance(exc, PasteOpError) and isinstance(
         exc.cause, (XootError, ValidationError)
     ):
         return exit_code(exc.cause)
-    if isinstance(exc, (UnsafePathError, DatabaseBusyError)):
+    if isinstance(exc, (UnsafePathError, DatabaseBusyError, StoredDataError)):
         return exit_codes.UNAVAILABLE
     if isinstance(exc, DatabaseAccessError):
         name = exc.sqlite_errorname or ""

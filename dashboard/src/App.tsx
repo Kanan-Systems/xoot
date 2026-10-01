@@ -1,6 +1,7 @@
 // Routes and the query client. Each view is its own route under the
 // project; the drawer, goal, focus and filters are query parameters on top
-// of it, so nested keys never become path segments.
+// of it, so nested keys never become path segments. The project segment is
+// a key prefix or an alias that redirects to it (ProjectGate).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 
@@ -8,7 +9,7 @@ import { PARAM } from './lib/search.ts';
 import { BacklogPage } from './pages/BacklogPage.tsx';
 import { DecisionsPage } from './pages/DecisionsPage.tsx';
 import { HomePage } from './pages/HomePage.tsx';
-import { ProjectPage } from './pages/ProjectPage.tsx';
+import { ProjectGate } from './pages/ProjectGate.tsx';
 import { TreePage } from './pages/TreePage.tsx';
 
 export function createQueryClient(): QueryClient {
@@ -32,7 +33,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
-      <Route path="/:project" element={<ProjectPage />}>
+      <Route path="/:project" element={<ProjectGate />}>
         <Route index element={<Navigate to="tree" replace />} />
         <Route path="tree" element={<TreePage />} />
         <Route path="backlog" element={<BacklogPage />} />

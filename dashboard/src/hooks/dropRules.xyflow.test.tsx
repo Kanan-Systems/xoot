@@ -16,9 +16,8 @@ import {
 } from '../test/flowHarness.tsx';
 
 const B3 = 'goal-1/batch-3';
-const B4 = 'goal-1/batch-4';
 
-// B1 and B3 are 32px apart; B4 is collapsed.
+// B1 and B3 are 32px apart. Collapsed and hidden nodes: dropCollapsed.
 const NODES = [
   flowItem(G1, 'goal', null, { x: -400, y: 0 }),
   flowItem(G2, 'goal', null, { x: -400, y: 300 }),
@@ -26,7 +25,6 @@ const NODES = [
   flowItem(B3, 'batch', G1, { x: 0, y: 160 }),
   flowItem(B2, 'batch', G1, { x: 0, y: 600 }),
   flowItem(S3, 'subtask', B2, { x: 400, y: 600 }),
-  flowItem(B4, 'batch', G1, { x: 0, y: 900 }, true),
 ];
 
 const SUBTASK = item(S3, 'subtask', B2);
@@ -89,12 +87,6 @@ describe.each(VIEWPORTS)('drop rules at %o', (viewport) => {
 
   it('refuses a node of the wrong kind', async () => {
     const mounted = await drop({ x: -400, y: 0 });
-    expect(mounted.onDrop).not.toHaveBeenCalled();
-    expect(mounted.drag().message).toBe(NO_TARGET);
-  });
-
-  it('refuses a collapsed batch', async () => {
-    const mounted = await drop({ x: 0, y: 900 });
     expect(mounted.onDrop).not.toHaveBeenCalled();
     expect(mounted.drag().message).toBe(NO_TARGET);
   });

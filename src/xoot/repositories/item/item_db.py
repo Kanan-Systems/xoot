@@ -15,6 +15,7 @@ from xoot.exceptions.stale_write_error import StaleWriteError
 from xoot.models.item.item import Item
 from xoot.models.item.item_kind import ItemKind
 from xoot.models.item.new_item import NewItem
+from xoot.repositories.stored_row import from_row
 
 type Counter = Literal[
     "next_child_number", "next_backlog_number", "next_decision_number"
@@ -68,7 +69,7 @@ def insert(conn: sqlite3.Connection, new: NewItem) -> Item:
         f":awaiting_decision_id, 1, :created_at, :created_at) RETURNING {_COLUMNS}",
         params,
     ).fetchone()
-    return Item.model_validate(dict(row))
+    return from_row(Item, "item", row)
 
 
 def get(conn: sqlite3.Connection, item_id: int) -> Item | None:
@@ -85,7 +86,7 @@ def get(conn: sqlite3.Connection, item_id: int) -> Item | None:
     row = conn.execute(
         f"SELECT {_COLUMNS} FROM item WHERE id = ?", (item_id,)
     ).fetchone()
-    return None if row is None else Item.model_validate(dict(row))
+    return None if row is None else from_row(Item, "item", row)
 
 
 def get_by_key(conn: sqlite3.Connection, project_id: int, key: str) -> Item | None:
@@ -104,7 +105,7 @@ def get_by_key(conn: sqlite3.Connection, project_id: int, key: str) -> Item | No
         f"SELECT {_COLUMNS} FROM item WHERE project_id = ? AND key = ?",
         (project_id, key),
     ).fetchone()
-    return None if row is None else Item.model_validate(dict(row))
+    return None if row is None else from_row(Item, "item", row)
 
 
 def update(conn: sqlite3.Connection, item: Item, expected_version: int) -> None:
@@ -186,7 +187,7 @@ def list_for_project(conn: sqlite3.Connection, project_id: int) -> list[Item]:
         f"SELECT {_COLUMNS} FROM item WHERE project_id = ? ORDER BY id",
         (project_id,),
     ).fetchall()
-    return [Item.model_validate(dict(row)) for row in rows]
+    return [from_row(Item, "item", row) for row in rows]
 
 
 def list_roots(conn: sqlite3.Connection, project_id: int) -> list[Item]:
@@ -205,7 +206,7 @@ def list_roots(conn: sqlite3.Connection, project_id: int) -> list[Item]:
         "ORDER BY kind = 'backlog', number",
         (project_id,),
     ).fetchall()
-    return [Item.model_validate(dict(row)) for row in rows]
+    return [from_row(Item, "item", row) for row in rows]
 
 
 def list_children(
@@ -232,7 +233,7 @@ def list_children(
         "ORDER BY parent_id, kind = 'backlog', number",
         (project_id, *parent_ids),
     ).fetchall()
-    return [Item.model_validate(dict(row)) for row in rows]
+    return [from_row(Item, "item", row) for row in rows]
 
 
 def list_children_of_kind(
@@ -254,7 +255,7 @@ def list_children_of_kind(
         "ORDER BY number",
         (parent_id, kind.value),
     ).fetchall()
-    return [Item.model_validate(dict(row)) for row in rows]
+    return [from_row(Item, "item", row) for row in rows]
 
 
 def list_project_backlog(conn: sqlite3.Connection, project_id: int) -> list[Item]:
@@ -273,7 +274,7 @@ def list_project_backlog(conn: sqlite3.Connection, project_id: int) -> list[Item
         "AND kind = 'backlog' ORDER BY number",
         (project_id,),
     ).fetchall()
-    return [Item.model_validate(dict(row)) for row in rows]
+    return [from_row(Item, "item", row) for row in rows]
 
 
 def list_descendants(conn: sqlite3.Connection, root_id: int) -> list[Item]:
@@ -296,7 +297,7 @@ def list_descendants(conn: sqlite3.Connection, root_id: int) -> list[Item]:
         "ORDER BY below.depth, item.id",
         (root_id,),
     ).fetchall()
-    return [Item.model_validate(dict(row)) for row in rows]
+    return [from_row(Item, "item", row) for row in rows]
 
 
 def _parent_kind(conn: sqlite3.Connection, parent_id: int | None) -> str | None:

@@ -4,6 +4,7 @@ import sqlite3
 from collections.abc import Sequence
 
 from xoot.models.project.project_path import ProjectPath
+from xoot.repositories.stored_row import from_row
 
 
 def insert(conn: sqlite3.Connection, path: str, project_id: int) -> ProjectPath:
@@ -39,7 +40,7 @@ def get(conn: sqlite3.Connection, path: str) -> ProjectPath | None:
     row = conn.execute(
         "SELECT path, project_id FROM project_path WHERE path = ?", (path,)
     ).fetchone()
-    return None if row is None else ProjectPath.model_validate(dict(row))
+    return None if row is None else from_row(ProjectPath, "project_path", row)
 
 
 def longest_of(
@@ -67,7 +68,7 @@ def longest_of(
         "ORDER BY length(path) DESC LIMIT 1",
         tuple(candidates),
     ).fetchone()
-    return None if row is None else ProjectPath.model_validate(dict(row))
+    return None if row is None else from_row(ProjectPath, "project_path", row)
 
 
 def list_for_project(conn: sqlite3.Connection, project_id: int) -> list[str]:

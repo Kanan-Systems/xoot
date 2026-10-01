@@ -5,6 +5,7 @@ from datetime import datetime
 
 from xoot.models.fields import format_timestamp
 from xoot.models.project.project import Project
+from xoot.repositories.stored_row import from_row
 
 _COLUMNS = (
     "id, key_prefix, name, next_goal_number, next_backlog_number, "
@@ -32,7 +33,7 @@ def insert(
         f"RETURNING {_COLUMNS}",
         (key_prefix, name, format_timestamp(created_at)),
     ).fetchone()
-    return Project.model_validate(dict(row))
+    return from_row(Project, "project", row)
 
 
 def get(conn: sqlite3.Connection, project_id: int) -> Project | None:
@@ -49,7 +50,7 @@ def get(conn: sqlite3.Connection, project_id: int) -> Project | None:
     row = conn.execute(
         f"SELECT {_COLUMNS} FROM project WHERE id = ?", (project_id,)
     ).fetchone()
-    return None if row is None else Project.model_validate(dict(row))
+    return None if row is None else from_row(Project, "project", row)
 
 
 def get_by_prefix(conn: sqlite3.Connection, key_prefix: str) -> Project | None:
@@ -66,7 +67,7 @@ def get_by_prefix(conn: sqlite3.Connection, key_prefix: str) -> Project | None:
     row = conn.execute(
         f"SELECT {_COLUMNS} FROM project WHERE key_prefix = ?", (key_prefix,)
     ).fetchone()
-    return None if row is None else Project.model_validate(dict(row))
+    return None if row is None else from_row(Project, "project", row)
 
 
 def list_all(conn: sqlite3.Connection) -> list[Project]:
@@ -82,7 +83,7 @@ def list_all(conn: sqlite3.Connection) -> list[Project]:
     rows = conn.execute(
         f"SELECT {_COLUMNS} FROM project ORDER BY key_prefix"
     ).fetchall()
-    return [Project.model_validate(dict(row)) for row in rows]
+    return [from_row(Project, "project", row) for row in rows]
 
 
 def set_active_workflow(
@@ -103,7 +104,7 @@ def set_active_workflow(
         f"UPDATE project SET active_workflow_id = ? WHERE id = ? RETURNING {_COLUMNS}",
         (workflow_id, project_id),
     ).fetchone()
-    return Project.model_validate(dict(row))
+    return from_row(Project, "project", row)
 
 
 def set_name(conn: sqlite3.Connection, project_id: int, name: str) -> Project:
@@ -122,7 +123,7 @@ def set_name(conn: sqlite3.Connection, project_id: int, name: str) -> Project:
         f"UPDATE project SET name = ? WHERE id = ? RETURNING {_COLUMNS}",
         (name, project_id),
     ).fetchone()
-    return Project.model_validate(dict(row))
+    return from_row(Project, "project", row)
 
 
 def allocate_goal_number(conn: sqlite3.Connection, project_id: int) -> int:

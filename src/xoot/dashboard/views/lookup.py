@@ -1,4 +1,10 @@
-"""Public keys and prefixes from a URL, resolved to rows or a 404."""
+"""
+Public keys and project names from a URL, resolved to rows or a 404.
+
+A URL's project segment is a key prefix or an alias, resolved by the same
+rule as the MCP project argument (prefix first, then alias; the two share
+one namespace, so they never collide).
+"""
 
 import sqlite3
 from collections.abc import Callable
@@ -9,26 +15,27 @@ from xoot.models.decision.decision import Decision
 from xoot.models.item.item import Item
 from xoot.models.project.project import Project
 from xoot.services import key_resolver
+from xoot.services.project_resolver import by_name
 
 
 def project_of(conn: sqlite3.Connection, prefix: str) -> Project:
     """
-    Resolve a URL's project prefix.
+    Resolve a URL's project segment: a key prefix or an alias.
 
     Args:
         - conn (sqlite3.Connection): a connection inside a read transaction.
-        - prefix (str): the prefix from the path.
+        - prefix (str): the prefix or alias from the path.
 
     Returns:
         - project (Project): the project.
 
     Raises:
-        - ApiError: 404, the prefix names no project.
+        - ApiError: 404, the segment names no project.
     """
-    try:
-        return key_resolver.project_by_key(conn, prefix)
-    except NotFoundError as exc:
-        raise not_found(prefix) from exc
+    found = by_name(conn, prefix)
+    if found is None:
+        raise not_found(prefix)
+    return found[0]
 
 
 def item_of(conn: sqlite3.Connection, project: Project, key: str) -> Item:

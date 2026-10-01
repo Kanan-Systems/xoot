@@ -27,8 +27,10 @@ MORE = (SHIPPED + 2, "CREATE TABLE more (x INTEGER) STRICT;")
 
 
 def _with(monkeypatch: pytest.MonkeyPatch, *extra: tuple[int, str]) -> None:
+    """Ship extra migrations, and support them, as a future release would."""
     shipped = load_migrations()
     monkeypatch.setattr(migrator, "load_migrations", lambda: [*shipped, *extra])
+    monkeypatch.setattr(migrator, "SCHEMA_VERSION", extra[-1][0])
 
 
 def _projects(path: Path) -> list[str]:
@@ -133,9 +135,12 @@ def test_foreign_key_check_names_the_tables(tmp_path: Path) -> None:
         conn.close()
 
 
-def test_migration_leaving_dangling_rows_rolls_back(db_path: Path) -> None:
+def test_migration_leaving_dangling_rows_rolls_back(
+    db_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A table rebuild that breaks a reference never commits."""
     Store.open(db_path).close()
+    monkeypatch.setattr(migrator, "SCHEMA_VERSION", SHIPPED + 1)
     rebuild = (
         SHIPPED + 1,
         "PRAGMA defer_foreign_keys = ON;"

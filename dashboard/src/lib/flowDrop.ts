@@ -46,7 +46,6 @@ function placed(flow: FlowView, node: ItemFlowNode, position?: Point): Placed {
   return {
     item: node.data.item,
     rect: rectOf(node, flow.getInternalNode(node.id), position),
-    folded: node.data.fold?.collapsed === true,
   };
 }
 

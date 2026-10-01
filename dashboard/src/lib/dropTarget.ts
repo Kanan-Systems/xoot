@@ -2,8 +2,10 @@
 // inside it, or when the dragged node covers a real share of it: xyflow's
 // own intersection test counts a node that merely touches the dragged one,
 // so a drop in the gap between nodes would graze a neighbour. Of several,
-// one under the pointer wins, else the one overlapped most. Every rectangle
-// and the pointer must be in flow coordinates (see flowDrop.ts).
+// one under the pointer wins, else the one overlapped most. A collapsed goal
+// or batch is drawn, so it is a target: only its children are hidden, and
+// nodes that are not drawn are never candidates. Every rectangle and the
+// pointer must be in flow coordinates (see flowDrop.ts).
 import type { ItemSummary } from '../api/types.gen.ts';
 import { parentKindOf } from './itemRules.ts';
 
@@ -22,8 +24,6 @@ export interface Point {
 export interface Placed {
   item: ItemSummary;
   rect: Rect;
-  // A collapsed node hides its children, so nothing is dropped into it.
-  folded?: boolean;
 }
 
 export type DropResult = { ok: true; parent: string } | { ok: false; reason: string };
@@ -93,10 +93,10 @@ export function decideDrop(
   }
   let winner: Judged | null = null;
   const judged: Judged[] = [];
-  for (const { item, rect, folded = false } of candidates) {
+  for (const { item, rect } of candidates) {
     const overlap = overlapArea(dragged.rect, rect);
     const pointerInside = pointer !== null && contains(rect, pointer);
-    const allowed = item.kind === want && item.key !== dragged.item.key && !folded;
+    const allowed = item.kind === want && item.key !== dragged.item.key;
     const matches = allowed && (pointerInside || enough(dragged.rect, rect, overlap));
     const one = {
       key: item.key,

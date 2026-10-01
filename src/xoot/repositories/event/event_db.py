@@ -15,6 +15,7 @@ from xoot.models.event.entity_type import EntityType
 from xoot.models.event.event import Event
 from xoot.models.event.new_event import NewEvent
 from xoot.models.fields import format_timestamp
+from xoot.repositories.stored_row import from_row
 
 _COLUMNS = (
     "id, project_id, entity_type, entity_id, action, actor_kind, client, "
@@ -166,4 +167,4 @@ def _to_event(row: sqlite3.Row) -> Event:
     for column in ("before", "after"):
         if values[column] is not None:
             values[column] = json.loads(values[column])
-    return Event.model_validate(values)
+    return from_row(Event, "event", values)

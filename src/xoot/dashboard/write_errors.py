@@ -12,6 +12,7 @@ alias.
        expired, another client, plan changed), or a record changed mid-write
   422  invalid input, or a domain rule refused the write (hierarchy,
        workflow, open children, plan size, backlog rules)
+  500  stored data could not be read (an older xoot process, usually)
   503  the database could not serve
 """
 
@@ -31,6 +32,7 @@ from xoot.exceptions.open_children_error import OpenChildrenError
 from xoot.exceptions.plan_size_error import PlanSizeError
 from xoot.exceptions.stale_write_error import StaleWriteError
 from xoot.exceptions.store_error import StoreError
+from xoot.exceptions.stored_data_error import StoredDataError
 from xoot.exceptions.update_path_error import UpdatePathError
 from xoot.exceptions.version_conflict_error import VersionConflictError
 from xoot.exceptions.xoot_error import XootError
@@ -39,6 +41,7 @@ from xoot.server.errors import PUBLIC_NAMES, safe_message
 NOT_FOUND = 404
 CONFLICT = 409
 UNPROCESSABLE = 422
+INTERNAL = 500
 UNAVAILABLE = 503
 
 _CONFLICTS: tuple[type[XootError], ...] = (
@@ -95,6 +98,8 @@ def _status(exc: XootError | ValidationError) -> int:
         return NOT_FOUND
     if isinstance(exc, _CONFLICTS):
         return CONFLICT
+    if isinstance(exc, StoredDataError):
+        return INTERNAL
     if isinstance(exc, StoreError):
         return UNAVAILABLE
     return UNPROCESSABLE

@@ -7,6 +7,7 @@ from xoot.exceptions.stale_write_error import StaleWriteError
 from xoot.models.confirm.confirm_token import ConfirmToken
 from xoot.models.confirm.new_confirm_token import NewConfirmToken
 from xoot.models.fields import format_timestamp
+from xoot.repositories.stored_row import from_row
 
 _COLUMNS = (
     "id, token_sha256, project_id, tool, args_sha256, plan_sha256, actor_kind, "
@@ -32,7 +33,7 @@ def insert(conn: sqlite3.Connection, new: NewConfirmToken) -> ConfirmToken:
         f":expires_at) RETURNING {_COLUMNS}",
         new.model_dump(mode="json"),
     ).fetchone()
-    return ConfirmToken.model_validate(dict(row))
+    return from_row(ConfirmToken, "confirm_token", row)
 
 
 def get_by_hash(conn: sqlite3.Connection, token_sha256: str) -> ConfirmToken | None:
@@ -50,7 +51,7 @@ def get_by_hash(conn: sqlite3.Connection, token_sha256: str) -> ConfirmToken | N
         f"SELECT {_COLUMNS} FROM confirm_token WHERE token_sha256 = ?",
         (token_sha256,),
     ).fetchone()
-    return None if row is None else ConfirmToken.model_validate(dict(row))
+    return None if row is None else from_row(ConfirmToken, "confirm_token", row)
 
 
 def mark_used(conn: sqlite3.Connection, token_id: int, used_at: datetime) -> None:

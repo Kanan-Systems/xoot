@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 from xoot.models.store.db_stats import DbStats
-from xoot.store.migrator import latest_version
+from xoot.store.migrator import SCHEMA_VERSION
 from xoot.store.store import Store
 
 
@@ -53,7 +53,7 @@ def db_stats(store: Store) -> DbStats:
         wal_bytes=_size(store.path.with_name(store.path.name + "-wal")),
         rows=rows,
         schema_version=schema_version,
-        known_schema_version=latest_version(),
+        known_schema_version=SCHEMA_VERSION,
     )
 
 

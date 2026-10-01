@@ -26,6 +26,7 @@ from xoot.exceptions.schema_version_error import SchemaVersionError
 from xoot.exceptions.stale_write_error import StaleWriteError
 from xoot.exceptions.state_error import StateError
 from xoot.exceptions.store_error import StoreError
+from xoot.exceptions.stored_data_error import StoredDataError
 from xoot.exceptions.unsafe_path_error import UnsafePathError
 from xoot.exceptions.version_conflict_error import VersionConflictError
 from xoot.exceptions.xoot_error import XootError
@@ -89,10 +90,12 @@ _REASONS: dict[type[XootError], str] = {
     UnsafePathError: "the database path failed the ownership and permission checks",
     SchemaVersionError: "the database was written by a newer xoot",
 }
-# Errors whose messages are fixed text plus stored keys or prefixes only.
+# Errors whose messages are fixed text plus stored keys or prefixes only;
+# StoredDataError adds a table and column name and a stored value it shows
+# only when token-like (repositories/stored_row.py).
 _DETAILED: tuple[type[XootError], ...] = (
     BacklogError, ConfirmTokenError, DecisionError, LegacyDatabaseError,
-    OpenChildrenError, PlanSizeError, QualifierError,
+    OpenChildrenError, PlanSizeError, QualifierError, StoredDataError,
 )  # fmt: skip
 
 

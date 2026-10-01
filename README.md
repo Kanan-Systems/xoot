@@ -16,7 +16,7 @@ dashboard.
 
 ![The Tree tab: goals, batches and subtasks, with backlog beside the work it sits on](docs/screenshots/tree.png)
 
-Status: 0.4.0, alpha.
+Status: 0.4.1, alpha.
 
 ## How the pieces fit
 
@@ -334,6 +334,31 @@ What you still do by hand:
 **Upgrade:** check out the new tag, run `./install.sh` again, then restart
 the clients (a running server keeps the code it started with).
 
+A server started before the install keeps running the old code against the
+newly migrated database, and its tool calls fail (see
+[Troubleshooting](#troubleshooting)). After every upgrade, make sure none is
+left:
+
+1. Quit Claude Desktop completely: end it in Task Manager, because closing
+   the window leaves it, and the servers it started inside WSL, running.
+   Exit every Claude Code session as well.
+2. List the servers still running, then compare each one's start time
+   with the install time (the time `install.sh` wrote the `xoot-mcp`
+   entry point). A server that started before the install is stale:
+
+   ```sh
+   pgrep -af xoot-mcp
+   ps -o pid,lstart,args -p <pid>
+   stat -c '%y' "$(command -v xoot-mcp)"
+   ```
+
+3. Stop them all with `pkill -f xoot-mcp`. It also stops the server of
+   any Claude Code session that is still open; restart that session
+   afterwards.
+4. Start the clients again. `pgrep -af xoot-mcp` now lists only servers
+   started after the install, and `xoot-mcp --version` prints the version
+   they run.
+
 **Migration:** 0.4.0 migrates an existing database to schema version 3 and
 first copies it to `xoot.db.pre-v3` beside it (mode 0600; only the newest
 such copy is kept). There is no downgrade without that copy: an older xoot
@@ -384,6 +409,7 @@ delete `$XDG_DATA_HOME/xoot/` (default `~/.local/share/xoot/`) or your
 | xoot tools missing in Claude Code with the plugin | `xoot-mcp` is not on the PATH Claude Code started with | Add `uv tool dir --bin` to PATH and restart Claude Code |
 | Claude and the CLI show different projects | `XDG_DATA_HOME` reached one and not the other, so they use different files | Compare `projects_list` with `xoot project list` (both name the database); pass `--db` (see [Clients](docs/clients.md#environment)) |
 | A client behaves like the old version after an upgrade | The running server still has the old code loaded | Restart Claude Code; fully quit and restart Desktop |
+| xoot tools fail with an error mentioning an enum / stored data after an upgrade (`ValidationError: invalid arguments: * (enum)` from 0.4.0 and older; `StoredDataError: stored data could not be read: ...` or `database schema version N is newer than supported M` from 0.4.1) | A server started before the install still runs the old code and cannot read what the new version wrote | Stop the stale servers as in [Upgrade](#upgrade-uninstall-data-and-backups): quit Desktop completely, `pgrep -af xoot-mcp`, `pkill -f xoot-mcp`, then restart the clients |
 | Desktop tool calls fail with `project not resolved; pass project=<alias or prefix>, one of: ...` | Desktop's working directory is no project's directory | Pass the project; `projects_list` shows the choices |
 | `this database was created by xoot 0.2 or earlier; ...` | A 0.2 database | Move the file aside, then run `xoot init` again |
 | A dragged node in the dashboard tree snaps back where it should move | The drop found no target in this browser | Run `localStorage.setItem('xoot:debug', 'drag')` in the browser console and drop again: each drop logs the node, pointer, viewport, candidates and decision to the console, and nothing leaves the page |

@@ -3,6 +3,7 @@
 import sqlite3
 
 from xoot.models.project.project_alias import ProjectAlias
+from xoot.repositories.stored_row import from_row
 
 
 def insert(conn: sqlite3.Connection, alias: str, project_id: int) -> ProjectAlias:
@@ -38,7 +39,7 @@ def get(conn: sqlite3.Connection, alias: str) -> ProjectAlias | None:
     row = conn.execute(
         "SELECT alias, project_id FROM project_alias WHERE alias = ?", (alias,)
     ).fetchone()
-    return None if row is None else ProjectAlias.model_validate(dict(row))
+    return None if row is None else from_row(ProjectAlias, "project_alias", row)
 
 
 def list_all(conn: sqlite3.Connection) -> list[ProjectAlias]:
@@ -54,7 +55,7 @@ def list_all(conn: sqlite3.Connection) -> list[ProjectAlias]:
     rows = conn.execute(
         "SELECT alias, project_id FROM project_alias ORDER BY alias"
     ).fetchall()
-    return [ProjectAlias.model_validate(dict(row)) for row in rows]
+    return [from_row(ProjectAlias, "project_alias", row) for row in rows]
 
 
 def list_for_project(conn: sqlite3.Connection, project_id: int) -> list[str]:

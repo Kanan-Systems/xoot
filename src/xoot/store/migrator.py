@@ -10,6 +10,10 @@ at once all succeed) and passes a foreign-key check before it commits.
 Before an existing database takes a pending migration it is backed up, under
 that same lock and after the re-read, so only the process that migrates
 writes the copy.
+The newest version this code supports is the SCHEMA_VERSION constant, never
+the files found on disk: an upgrade replaces those files under a process
+that is still running, which must then refuse the newer database instead of
+reading it with its old models.
 SQLite failures surface as MigrationFailedError, never as raw sqlite3 errors.
 """
 
@@ -30,6 +34,8 @@ from xoot.store.transaction import write_transaction
 MIGRATIONS_PACKAGE = "xoot.store.migrations"
 # The first version the shipped set holds; version 1 was xoot 0.2's schema.
 BASELINE_VERSION = 2
+# Bump together with each new migration file; a test keeps the two in step.
+SCHEMA_VERSION = 3
 LEGACY_TABLE = "session"
 _NAME = re.compile(r"^(\d{4})_[a-z0-9_]+\.sql$")
 
@@ -55,7 +61,10 @@ def load_migrations() -> list[tuple[int, str]]:
 
 def latest_version() -> int:
     """
-    The newest schema version the shipped migrations reach.
+    The newest schema version the migration files on disk reach.
+
+    Only for checking the files against SCHEMA_VERSION; the open-time check
+    never uses it.
 
     Returns:
         - version (int): the highest migration number, 0 when none ship.
@@ -177,6 +186,7 @@ def migrate(
     A database already at the baseline or later is backed up once, inside
     the transaction of its first pending migration, when db_path is given.
     A fresh database (version 0) has nothing to lose and is not backed up.
+    Migrations above SCHEMA_VERSION are never applied.
 
     Args:
         - conn (sqlite3.Connection): an autocommit connection.
@@ -190,7 +200,7 @@ def migrate(
 
     Raises:
         - LegacyDatabaseError: the database holds the 0.2 schema.
-        - SchemaVersionError: the database is newer than the known set.
+        - SchemaVersionError: the database is newer than SCHEMA_VERSION.
         - MigrationError: the shipped files are malformed.
         - ForeignKeyCheckError: a migration left dangling references; it
           was rolled back.
@@ -198,8 +208,12 @@ def migrate(
           rolled back.
         - OSError: the backup file could not be written.
     """
-    ordered = load_migrations() if migrations is None else list(migrations)
-    known = ordered[-1][0] if ordered else 0
+    known = SCHEMA_VERSION
+    ordered = [
+        (version, sql)
+        for version, sql in (load_migrations() if migrations is None else migrations)
+        if version <= known
+    ]
     applying: int | None = None
     try:
         if is_legacy(conn):

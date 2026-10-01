@@ -1,6 +1,6 @@
 [project]
 name = "xoot"
-version = "0.4.0"
+version = "0.4.1"
 description = "Local-only tracker for goals, batches, subtasks and backlog, for Claude."
 readme = "README.md"
 requires-python = ">=3.12"

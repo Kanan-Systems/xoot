@@ -8,6 +8,7 @@ from typing import Any
 from xoot.models.fields import format_timestamp
 from xoot.models.workflow.workflow import Workflow
 from xoot.models.workflow.workflow_definition import WorkflowDefinition
+from xoot.repositories.stored_row import from_row
 
 _COLUMNS = "id, project_id, version, definition, created_at"
 
@@ -83,4 +84,4 @@ def next_version(conn: sqlite3.Connection, project_id: int) -> int:
 def _to_workflow(row: sqlite3.Row) -> Workflow:
     values: dict[str, Any] = dict(row)
     values["definition"] = json.loads(values["definition"])
-    return Workflow.model_validate(values)
+    return from_row(Workflow, "workflow", values)

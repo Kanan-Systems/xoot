@@ -5,6 +5,7 @@ the user's real data), standard actors, registered projects and factories.
 
 import multiprocessing
 import os
+import sqlite3
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,7 @@ from xoot.repositories.event import event_db
 from xoot.services.backlog_service import capture
 from xoot.services.item_service import create_item, update_item
 from xoot.services.project_service import register_project
+from xoot.store.migrator import SCHEMA_VERSION
 from xoot.store.store import Store
 
 WORKER_TIMEOUT_S = 180
@@ -41,6 +43,52 @@ type SpawnWorkers = Callable[
 def fixture_db_path(tmp_path: Path) -> Path:
     """A database path inside the test's private tmp directory."""
     return tmp_path / "data" / "xoot.db"
+
+
+@pytest.fixture(name="newer_database")
+def fixture_newer_database(db_path: Path) -> Callable[[], int]:
+    """Factory: create the test database, then stamp it one schema version
+    past SCHEMA_VERSION, as a newer xoot would leave it. Returns that version."""
+
+    def stamp() -> int:
+        if not db_path.exists():
+            Store.open(db_path).close()
+        newer = SCHEMA_VERSION + 1
+        raw = sqlite3.connect(db_path)
+        try:
+            # PRAGMA takes no bound parameters; newer is an int.
+            raw.execute(f"PRAGMA user_version = {newer}")
+        finally:
+            raw.close()
+        return newer
+
+    return stamp
+
+
+@pytest.fixture(name="foreign_event")
+def fixture_foreign_event(db_path: Path) -> Callable[[Item], int]:
+    """Factory: append an event on an item whose client this code does not
+    know, as a newer xoot would write it. The CHECK constraint is bypassed
+    on a raw connection of the test database only. Returns the event id."""
+
+    def plant(item: Item) -> int:
+        raw = sqlite3.connect(db_path, autocommit=True)
+        try:
+            raw.execute("PRAGMA ignore_check_constraints = ON")
+            row = raw.execute(
+                "INSERT INTO event (project_id, entity_type, entity_id, action, "
+                "actor_kind, client, before, after, created_at) "
+                "SELECT project_id, entity_type, entity_id, action, actor_kind, "
+                "'telepathy', before, after, created_at FROM event "
+                "WHERE entity_type = 'item' AND entity_id = ? ORDER BY id LIMIT 1 "
+                "RETURNING id",
+                (item.id,),
+            ).fetchone()
+        finally:
+            raw.close()
+        return int(row[0])
+
+    return plant
 
 
 @pytest.fixture(name="open_umask")

@@ -13,12 +13,14 @@ from xoot.dashboard.schemas.error_output import ErrorOutput
 from xoot.exceptions.cross_project_error import CrossProjectError
 from xoot.exceptions.not_found_error import NotFoundError
 from xoot.exceptions.store_error import StoreError
+from xoot.exceptions.stored_data_error import StoredDataError
 from xoot.exceptions.xoot_error import XootError
 from xoot.server.errors import safe_message
 from xoot.utils.keys import PREFIX_KEY, is_key
 
 NOT_FOUND = 404
 BAD_REQUEST = 400
+INTERNAL = 500
 UNAVAILABLE = 503
 
 
@@ -30,12 +32,15 @@ def from_exception(exc: XootError | ValidationError) -> ApiError:
         - exc (XootError | ValidationError): the error.
 
     Returns:
-        - error (ApiError): 404 for a missing or foreign record, 503 for a
-          database that cannot serve, 400 otherwise.
+        - error (ApiError): 404 for a missing or foreign record, 500 for
+          stored data this code cannot read, 503 for a database that cannot
+          serve, 400 otherwise.
     """
     name, _, reason = safe_message(exc).partition(": ")
     if isinstance(exc, (NotFoundError, CrossProjectError)):
         status = NOT_FOUND
+    elif isinstance(exc, StoredDataError):
+        status = INTERNAL
     elif isinstance(exc, StoreError):
         status = UNAVAILABLE
     else:
