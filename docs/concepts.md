@@ -162,7 +162,7 @@ Every event records who wrote it and through which client.
 | Actor | Meaning |
 |---|---|
 | `claude` | Claude, through an MCP client or paste mode. |
-| `user` | The user, through the CLI. |
+| `user` | The user, through the CLI or the dashboard. |
 | `system` | xoot itself, as a consequence of another write (completion, reopening, workflow remaps). |
 
 | Client | Where the write came from |
@@ -170,6 +170,7 @@ Every event records who wrote it and through which client.
 | `code` | An MCP client whose reported name contains `claude-code`. |
 | `chat` | Any other MCP client. |
 | `cli` | The `xoot` command. |
+| `dashboard` | `xoot dashboard`, in the browser (actor `user`). |
 | `paste` | `xoot paste apply`, confirmed by the user at the terminal. |
 
 The MCP client is mapped per call from what it reported at initialization.

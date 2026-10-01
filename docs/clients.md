@@ -73,8 +73,9 @@ What to expect:
 
 ## Browser (no MCP)
 
-Chats without MCP use paste mode (see the
-[README](../README.md#paste-mode)):
+Chats without MCP, such as claude.ai in a browser, use paste mode (block
+format, limits and the full steps:
+[Claude in the browser](../README.md#claude-in-the-browser-paste-mode)):
 
 1. `xoot paste brief --project NAME` and paste the brief into the chat.
 2. Copy Claude's reply with the copy button under the whole message. A code
@@ -82,6 +83,7 @@ Chats without MCP use paste mode (see the
    parses.
 3. `xoot paste apply reply.md`, or on WSL the `xpaste` alias, which reads
    the Windows clipboard.
+4. Paste the `xoot-receipt` block it prints back into the chat.
 
 ## Environment
 

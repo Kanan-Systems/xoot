@@ -72,12 +72,13 @@ committed, and each is checked for drift:
 ## Migrations are frozen
 
 The schema lives in `src/xoot/store/migrations/`. It starts at the 0.3
-baseline, `0002_goal_baseline.sql`: a fresh database ends at schema version
-2. A database at version 1, or holding the 0.2 `session` table, is refused
-unchanged (xoot 0.2 data is not migrated).
+baseline, `0002_goal_baseline.sql`, and `0003_dashboard_writes.sql`
+follows it: a fresh database ends at schema version 3. A database at
+version 1, or holding the 0.2 `session` table, is refused unchanged (xoot
+0.2 data is not migrated).
 
 A migration that has been committed is never edited. Every schema change is
-a new migration file (`0003_...`), so every existing database upgrades
+a new migration file (`0004_...` next), so every existing database upgrades
 along the same path. Before an existing database takes a pending migration,
 the store copies it with SQLite's backup API to `xoot.db.pre-v<target>`
 (mode 0600; only the newest copy is kept). Foreign keys stay on during

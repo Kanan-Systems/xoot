@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| 0.2.x | Yes |
+| 0.4.x | Yes |
+| Older | No |
 
 ## Reporting a vulnerability
 
@@ -28,11 +29,13 @@ The server speaks MCP over stdio only. The `mcp` SDK it depends on also ships
 an HTTP transport, so installing xoot pulls in starlette, uvicorn, PyJWT,
 cryptography and the SDK's HTTP client. xoot only ever starts the stdio
 transport: that stack is installed and partly imported, but no server is
-started, no port is opened, and xoot makes no network request. The one
-exception is `xoot dashboard`, below, which the user starts explicitly.
+started, no port is opened, and xoot makes no outbound network request. The
+one exception to "no port is opened" is `xoot dashboard`, below, which the
+user starts explicitly and which listens on 127.0.0.1 only.
 
 Every MCP write is recorded as `claude/code` or `claude/chat`; no tool
 accepts an actor or a client. CLI admin commands write as `user/cli`.
+The dashboard writes as `user/dashboard`.
 `xoot paste apply` writes as `claude/paste`: Claude authored the block and
 the user confirmed its plan at the terminal. Changes xoot makes on its own
 (goals and batches completing or reopening, workflow remaps) are recorded
@@ -88,5 +91,6 @@ lock does not rule out a tampered file of a pinned version.
 
 ## No telemetry
 
-xoot collects no telemetry and makes no network requests. Adoption is
-judged only from public GitHub signals.
+xoot collects no telemetry and makes no outbound network requests; the
+only listening socket is the dashboard's, on 127.0.0.1. Adoption is judged
+only from public GitHub signals.
